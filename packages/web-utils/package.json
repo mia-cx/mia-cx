@@ -1,0 +1,46 @@
+{
+  "name": "@mia-cx/web-utils",
+  "version": "0.0.1",
+  "description": "",
+  "keywords": [],
+  "license": "MIT",
+  "author": "mia-cx",
+  "type": "module",
+  "exports": {
+    "./*": {
+      "require": "./dist/*.cjs",
+      "import": "./dist/*.js",
+      "types": "./dist/*.d.?(c)ts"
+    }
+  },
+  "main": "./index.js",
+  "files": [
+    "./dist/**/*.?(d.)?([cm])[jt]s?(on?([c5]))",
+    "./src/**/*.json?([c5])",
+    "./types/**/*.ts"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "format": "prettier --write . --ignore-path ../../.*ignore",
+    "lint": "prettier --check . --ignore-path ../../.*ignore && eslint .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@nanostores/persistent": "^0.10.2"
+  },
+  "devDependencies": {
+    "@mia-cx/config": "workspace:^",
+    "@mia-cx/utils": "workspace:^",
+    "@microsoft/api-extractor": "^7.47.0",
+    "eslint": "^8.57.0",
+    "nanostores": "^0.11.3",
+    "prettier": "^3.3.2",
+    "terser": "^5.31.1",
+    "tsup": "^8.1.0",
+    "typescript": "^5.5.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

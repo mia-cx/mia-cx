@@ -81,6 +81,63 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1)
 
+  apps/patch.cx:
+    devDependencies:
+      '@mia-cx/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@playwright/test':
+        specifier: ^1.44.1
+        version: 1.44.1
+      '@sveltejs/adapter-auto':
+        specifier: ^3.2.2
+        version: 3.2.2(@sveltejs/kit@2.5.17(@sveltejs/vite-plugin-svelte@3.1.1(svelte@5.0.0-next.166)(vite@5.3.1(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1)))(svelte@5.0.0-next.166)(vite@5.3.1(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1)))
+      '@sveltejs/kit':
+        specifier: ^2.5.17
+        version: 2.5.17(@sveltejs/vite-plugin-svelte@3.1.1(svelte@5.0.0-next.166)(vite@5.3.1(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1)))(svelte@5.0.0-next.166)(vite@5.3.1(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1))
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^3.1.1
+        version: 3.1.1(svelte@5.0.0-next.166)(vite@5.3.1(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1))
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^7.13.1
+        version: 7.13.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2)
+      '@typescript-eslint/parser':
+        specifier: ^7.13.1
+        version: 7.13.1(eslint@8.57.0)(typescript@5.5.2)
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.0
+      eslint-config-prettier:
+        specifier: ^9.1.0
+        version: 9.1.0(eslint@8.57.0)
+      eslint-plugin-svelte:
+        specifier: ^2.40.0
+        version: 2.40.0(eslint@8.57.0)(svelte@5.0.0-next.166)
+      prettier:
+        specifier: ^3.3.2
+        version: 3.3.2
+      prettier-plugin-svelte:
+        specifier: ^3.2.5
+        version: 3.2.5(prettier@3.3.2)(svelte@5.0.0-next.166)
+      svelte:
+        specifier: 5.0.0-next.166
+        version: 5.0.0-next.166
+      svelte-check:
+        specifier: ^3.8.1
+        version: 3.8.1(@babel/core@7.24.7)(postcss-load-config@4.0.2(postcss@8.4.38))(postcss@8.4.38)(sass@1.77.6)(svelte@5.0.0-next.166)
+      tslib:
+        specifier: ^2.6.3
+        version: 2.6.3
+      typescript:
+        specifier: ^5.5.2
+        version: 5.5.2
+      vite:
+        specifier: ^5.3.1
+        version: 5.3.1(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1)
+      vitest:
+        specifier: ^1.6.0
+        version: 1.6.0(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1)
+
   packages/config:
     dependencies:
       '@prettier/plugin-xml':
@@ -97,7 +154,7 @@ importers:
         version: 7.13.1(eslint@8.57.0)(typescript@5.5.2)
       '@vercel/style-guide':
         specifier: ^6.0.0
-        version: 6.0.0(eslint@8.57.0)(prettier@3.3.2)(typescript@5.5.2)(vitest@1.6.0(@types/node@20.14.8)(terser@5.31.1))
+        version: 6.0.0(eslint@8.57.0)(prettier@3.3.2)(typescript@5.5.2)(vitest@1.6.0(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1))
       eslint-config-prettier:
         specifier: ^9.1.0
         version: 9.1.0(eslint@8.57.0)
@@ -270,6 +327,64 @@ importers:
       vite:
         specifier: ^5.3.1
         version: 5.3.1(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1)
+
+  packages/utils:
+    devDependencies:
+      '@mia-cx/config':
+        specifier: workspace:^1.0.1
+        version: link:../config
+      '@microsoft/api-extractor':
+        specifier: ^7.47.0
+        version: 7.47.0(@types/node@20.14.8)
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.0
+      prettier:
+        specifier: ^3.3.2
+        version: 3.3.2
+      terser:
+        specifier: ^5.31.1
+        version: 5.31.1
+      tsup:
+        specifier: ^8.1.0
+        version: 8.1.0(@microsoft/api-extractor@7.47.0(@types/node@20.14.8))(postcss@8.4.38)(typescript@5.5.2)
+      typescript:
+        specifier: ^5.5.2
+        version: 5.5.2
+
+  packages/web-utils:
+    dependencies:
+      '@nanostores/persistent':
+        specifier: ^0.10.2
+        version: 0.10.2(nanostores@0.11.3)
+    devDependencies:
+      '@mia-cx/config':
+        specifier: workspace:^
+        version: link:../config
+      '@mia-cx/utils':
+        specifier: workspace:^
+        version: link:../utils
+      '@microsoft/api-extractor':
+        specifier: ^7.47.0
+        version: 7.47.0(@types/node@20.14.8)
+      eslint:
+        specifier: ^8.57.0
+        version: 8.57.0
+      nanostores:
+        specifier: ^0.11.3
+        version: 0.11.3
+      prettier:
+        specifier: ^3.3.2
+        version: 3.3.2
+      terser:
+        specifier: ^5.31.1
+        version: 5.31.1
+      tsup:
+        specifier: ^8.1.0
+        version: 8.1.0(@microsoft/api-extractor@7.47.0(@types/node@20.14.8))(postcss@8.4.38)(typescript@5.5.2)
+      typescript:
+        specifier: ^5.5.2
+        version: 5.5.2
 
 packages:
 
@@ -945,6 +1060,12 @@ packages:
 
   '@microsoft/tsdoc@0.15.0':
     resolution: {integrity: sha512-HZpPoABogPvjeJOdzCOSJsXeL/SMCBgBZMVC3X3d7YYp2gf31MfxhUoYUNwf1ERPJOnQc0wkFn9trqI6ZEdZuA==}
+
+  '@nanostores/persistent@0.10.2':
+    resolution: {integrity: sha512-BEndnLhRC+yP7gXTESepBbSj8XNl8OXK9hu4xAgKC7MWJHKXnEqJMqY47LUyHxK6vYgFnisyHmqq+vq8AUFyIg==}
+    engines: {node: ^18.0.0 || >=20.0.0}
+    peerDependencies:
+      nanostores: ^0.9.0 || ^0.10.0 || ^0.11.0
 
   '@netflix/nerror@1.1.3':
     resolution: {integrity: sha512-b+MGNyP9/LXkapreJzNUzcvuzZslj/RGgdVVJ16P2wSlYatfLycPObImqVJSmNAdyeShvNeM/pl3sVZsObFueg==}
@@ -3003,6 +3124,10 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
+  nanostores@0.11.3:
+    resolution: {integrity: sha512-TUes3xKIX33re4QzdxwZ6tdbodjmn3tWXCEc1uokiEmo14sI1EaGYNs2k3bU2pyyGNmBqFGAVl6jAGWd06AVIg==}
+    engines: {node: ^18.0.0 || >=20.0.0}
+
   natural-compare@1.4.0:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
 
@@ -4878,6 +5003,10 @@ snapshots:
 
   '@microsoft/tsdoc@0.15.0': {}
 
+  '@nanostores/persistent@0.10.2(nanostores@0.11.3)':
+    dependencies:
+      nanostores: 0.11.3
+
   '@netflix/nerror@1.1.3':
     dependencies:
       assert-plus: 1.0.0
@@ -5366,7 +5495,7 @@ snapshots:
 
   '@ungap/structured-clone@1.2.0': {}
 
-  '@vercel/style-guide@6.0.0(eslint@8.57.0)(prettier@3.3.2)(typescript@5.5.2)(vitest@1.6.0(@types/node@20.14.8)(terser@5.31.1))':
+  '@vercel/style-guide@6.0.0(eslint@8.57.0)(prettier@3.3.2)(typescript@5.5.2)(vitest@1.6.0(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1))':
     dependencies:
       '@babel/core': 7.24.7
       '@babel/eslint-parser': 7.24.5(@babel/core@7.24.7)(eslint@8.57.0)
@@ -5374,10 +5503,10 @@ snapshots:
       '@typescript-eslint/eslint-plugin': 7.13.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2)
       '@typescript-eslint/parser': 7.13.1(eslint@8.57.0)(typescript@5.5.2)
       eslint-config-prettier: 9.1.0(eslint@8.57.0)
-      eslint-import-resolver-alias: 1.1.2(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0))
+      eslint-import-resolver-alias: 1.1.2(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-import-resolver-typescript@3.6.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0))
       eslint-import-resolver-typescript: 3.6.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0))(eslint@8.57.0)
       eslint-plugin-eslint-comments: 3.2.0(eslint@8.57.0)
-      eslint-plugin-import: 2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-import-resolver-typescript@3.6.1)(eslint@8.57.0)
+      eslint-plugin-import: 2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-import-resolver-typescript@3.6.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
       eslint-plugin-jest: 27.9.0(@typescript-eslint/eslint-plugin@7.13.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2)
       eslint-plugin-jsx-a11y: 6.8.0(eslint@8.57.0)
       eslint-plugin-playwright: 1.6.2(eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@7.13.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)
@@ -5386,7 +5515,7 @@ snapshots:
       eslint-plugin-testing-library: 6.2.2(eslint@8.57.0)(typescript@5.5.2)
       eslint-plugin-tsdoc: 0.2.17
       eslint-plugin-unicorn: 51.0.1(eslint@8.57.0)
-      eslint-plugin-vitest: 0.3.26(@typescript-eslint/eslint-plugin@7.13.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2)(vitest@1.6.0(@types/node@20.14.8)(terser@5.31.1))
+      eslint-plugin-vitest: 0.3.26(@typescript-eslint/eslint-plugin@7.13.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2)(vitest@1.6.0(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1))
       prettier-plugin-packagejson: 2.5.0(prettier@3.3.2)
     optionalDependencies:
       eslint: 8.57.0
@@ -6098,9 +6227,9 @@ snapshots:
     dependencies:
       eslint: 8.57.0
 
-  eslint-import-resolver-alias@1.1.2(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)):
+  eslint-import-resolver-alias@1.1.2(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-import-resolver-typescript@3.6.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)):
     dependencies:
-      eslint-plugin-import: 2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-import-resolver-typescript@3.6.1)(eslint@8.57.0)
+      eslint-plugin-import: 2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-import-resolver-typescript@3.6.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
 
   eslint-import-resolver-node@0.3.9:
     dependencies:
@@ -6116,7 +6245,7 @@ snapshots:
       enhanced-resolve: 5.16.1
       eslint: 8.57.0
       eslint-module-utils: 2.8.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.6.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
-      eslint-plugin-import: 2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-import-resolver-typescript@3.6.1)(eslint@8.57.0)
+      eslint-plugin-import: 2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-import-resolver-typescript@3.6.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0)
       fast-glob: 3.3.2
       get-tsconfig: 4.7.5
       is-core-module: 2.13.1
@@ -6164,7 +6293,7 @@ snapshots:
       eslint: 8.57.0
       ignore: 5.3.1
 
-  eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-import-resolver-typescript@3.6.1)(eslint@8.57.0):
+  eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-import-resolver-typescript@3.6.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint-plugin-import@2.29.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0))(eslint@8.57.0))(eslint@8.57.0):
     dependencies:
       array-includes: 3.1.8
       array.prototype.findlastindex: 1.2.5
@@ -6347,7 +6476,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-vitest@0.3.26(@typescript-eslint/eslint-plugin@7.13.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2)(vitest@1.6.0(@types/node@20.14.8)(terser@5.31.1)):
+  eslint-plugin-vitest@0.3.26(@typescript-eslint/eslint-plugin@7.13.1(@typescript-eslint/parser@7.13.1(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2))(eslint@8.57.0)(typescript@5.5.2)(vitest@1.6.0(@types/node@20.14.8)(sass@1.77.6)(terser@5.31.1)):
     dependencies:
       '@typescript-eslint/utils': 7.13.1(eslint@8.57.0)(typescript@5.5.2)
       eslint: 8.57.0
@@ -7437,6 +7566,8 @@ snapshots:
       thenify-all: 1.6.0
 
   nanoid@3.3.7: {}
+
+  nanostores@0.11.3: {}
 
   natural-compare@1.4.0: {}
 

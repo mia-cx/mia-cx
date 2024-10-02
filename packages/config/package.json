@@ -1,6 +1,6 @@
 {
   "name": "@mia-cx/config",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "keywords": [],
   "license": "MIT",
@@ -59,7 +59,7 @@
     "dev": "tsup --watch",
     "format": "prettier --write . --ignore-path ../../.*ignore",
     "lint": "prettier --check . --ignore-path ../../.*ignore && eslint .",
-    "prepare": "pnpm run build",
+    "prepublishOnly": "pnpm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
