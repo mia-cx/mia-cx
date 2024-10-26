@@ -33,7 +33,7 @@
     "@mia-cx/config": "workspace:^",
     "@mia-cx/utils": "workspace:^",
     "@microsoft/api-extractor": "^7.47.0",
-    "eslint": "^8.57.0",
+    "eslint": "^9.13.0",
     "nanostores": "^0.11.3",
     "prettier": "^3.3.2",
     "terser": "^5.31.1",
