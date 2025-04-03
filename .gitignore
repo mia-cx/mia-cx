@@ -1,49 +1,49 @@
 # OS generated files
-**/.DS_Store
-**/Thumbs.db
-**/.trash
-**/*.pem
+.DS_Store
+Thumbs.db
+.trash
+*.pem
 
 # Logs
-**/logs
-**/*.log*
+logs
+*.log*
 
 # Dependency directories
-**/node_modules
+node_modules
 
 # TypeScript cache
-**/*.tsbuildinfo
+*.tsbuildinfo
 
 # dotenv environment variable files
-**/.local
-**/.*.local
+.local
+.*.local
 
-**/.vars
-**/.*.vars
+.vars
+.*.vars
 
 # Output files
-**/.dist
-**/dist
-**/.svelte-kit
-**/svelte-kit
-**/.tsup
-**/tsup
-**/.build
-**/build
-**/.out
-**/out
+.dist
+dist
+.svelte-kit
+svelte-kit
+.tsup
+tsup
+.build
+build
+.out
+out
 
 # Test files
-**/coverage
+coverage
 
 # turbo
-**/.turbo
+.turbo
 
 # vercel
-**/.vercel
+.vercel
 
 # vite
-**/.vite
-**/vite.config.{ts,js}.timestamp-*
+.vite
+vite.config.{ts,js}.timestamp-*
 
 apps/example
