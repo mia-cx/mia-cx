@@ -28,9 +28,9 @@
 						icon="lucide:arrow-up-right"
 						class="opacity-50 group-hover:opacity-100 -ml-1"
 					/>
-				</a>, or send a text message to
-				<a class="group" href="tel:+31640362794">
-					+31 6 40 36 27 94
+				</a>, or send a WhatsApp message to
+				<a class="group" href="https://wa.me/message/K6JIESWVSFVBN1">
+					‪+31 31 72 250 05‬
 					<iconify-icon
 						icon="lucide:arrow-up-right"
 						class="opacity-50 group-hover:opacity-100 -ml-1"
