@@ -12,11 +12,11 @@ charset = utf-8
 # Always insert a final newline
 insert_final_newline = true
 # Default to tab-style indentation
-indent_style = tab
+indent_style = space
 # Default to 4 space indentation
 indent_size = 4
 # Display tabs as 8 spaces
-tab_width = 8
+tab_width = 4
 # Trim trailing whitespace
 trim_trailing_whitespace = true
 
@@ -24,7 +24,10 @@ trim_trailing_whitespace = true
 # https://prettier.io/docs/en/configuration.html
 #
 # Maximum line length
-max_line_length = 80
+max_line_length = 120
+
+[*.{?([cm])[jt]s,[jt]sx}]
+tab_width = 4
 
 # json files
 [*.{json,jsonc,json5,prettierrc}]

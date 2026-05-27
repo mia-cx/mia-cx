@@ -3,10 +3,10 @@ import { type Config } from "prettier";
 const overridableDefaults: Config = {
 	endOfLine: "lf",
 
-	printWidth: 80,
+	printWidth: 120,
 	tabWidth: 4,
 
-	useTabs: true,
+	useTabs: false,
 };
 
 const base: Config = {
@@ -85,8 +85,8 @@ const base: Config = {
 				// "*.{c{s,offee?(.md)},litcoffee}",
 			],
 			options: {
-				tabWidth: 8,
-				useTabs: true,
+				tabWidth: 4,
+				useTabs: false,
 			},
 		},
 	],

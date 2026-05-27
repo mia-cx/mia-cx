@@ -1,5 +1,13 @@
 packages:
-  - "apps/**/*"
-  - "packages/**/*"
-  - "config/*"
-  - "!**/node_modules/**"
+  - apps/**/*
+  - packages/**/*
+  - config/*
+  - '!**/node_modules/**'
+
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - '@sveltejs/kit'
+  - esbuild
+  - sharp
+  - svelte-preprocess
+  - workerd
