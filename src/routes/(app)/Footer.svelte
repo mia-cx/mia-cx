@@ -60,11 +60,11 @@
 						<a
 							class="group flex items-center gap-2"
 							target="_blank"
-							href="mailto:contact@mia.cx"
+							href="mailto:hello@mia.cx"
 						>
 							<iconify-icon class="text-6xl md:text-2xl" icon="lucide:mail" />
 							<span class="text-base hidden lg:inline">
-								contact@mia.cx
+								hello@mia.cx
 								<iconify-icon
 									icon="lucide:arrow-up-right"
 									class="opacity-50 group-hover:opacity-100"
@@ -97,8 +97,8 @@
 					</a>
 				</li>
 				<li>
-					<a class="group inline-flex items-center gap-2 hover:gap-3" href="/about">
-						About
+					<a class="group inline-flex items-center gap-2 hover:gap-3" href="/blog">
+						Blog
 						<iconify-icon
 							icon="lucide:arrow-right"
 							class="translate-y-[10%] opacity-50 group-hover:opacity-100"
@@ -114,6 +114,18 @@
 						/>
 					</a>
 				</li>
+				<li>
+					<a
+						class="group inline-flex items-center gap-2 hover:gap-3"
+						href="https://ffm.bio/patch"
+					>
+						Music
+						<iconify-icon
+							icon="lucide:arrow-up-right"
+							class="translate-y-[10%] opacity-50 group-hover:opacity-100"
+						/>
+					</a>
+				</li>
 			</ul>
 		</section>
 
@@ -121,8 +133,8 @@
 			<h2>Support</h2>
 			<p>
 				mia.cx<br />
-				<a class="group" href="mailto:contact@mia.cx">
-					contact@mia.cx
+				<a class="group" href="mailto:hello@mia.cx">
+					hello@mia.cx
 					<iconify-icon
 						icon="lucide:arrow-up-right"
 						class="opacity-50 group-hover:opacity-100"
