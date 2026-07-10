@@ -70,6 +70,16 @@ fn noise(p: vec2f) -> f32 {
     return mix(mix(hash(i),hash(i+vec2f(1,0)),s.x),mix(hash(i+vec2f(0,1)),hash(i+vec2f(1)),s.x),s.y);
 }
 fn n2(p: vec2f) -> vec2f { return vec2f(noise(p),noise(p+vec2f(17.7,43.2))); }
+fn hash3(p: vec3f) -> f32 { return fract(sin(dot(p,vec3f(127.1,311.7,74.7)) + u.seed*19.19)*43758.5453); }
+fn noise3(p: vec3f) -> f32 {
+    let i=floor(p); let f=fract(p); let s=f*f*(3.-2.*f);
+    let z0=mix(mix(hash3(i),hash3(i+vec3f(1,0,0)),s.x),mix(hash3(i+vec3f(0,1,0)),hash3(i+vec3f(1,1,0)),s.x),s.y);
+    let z1=mix(mix(hash3(i+vec3f(0,0,1)),hash3(i+vec3f(1,0,1)),s.x),mix(hash3(i+vec3f(0,1,1)),hash3(i+vec3f(1,1,1)),s.x),s.y);
+    return mix(z0,z1,s.z);
+}
+fn noise3v(p: vec2f, z: f32) -> vec2f {
+    return vec2f(noise3(vec3f(p,z)),noise3(vec3f(p+vec2f(17.7,43.2),z+11.3)));
+}
 `;
 
 const baseShader =
@@ -79,11 +89,11 @@ const baseShader =
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
     let flow=mat2x2f(.89,.45,-.45,.89)*vec2f(q.x,q.y*u.flowStretch);
-    let drift=n2(flow*u.warpScale+vec2f(sin(t*.019),cos(t*.023))*.17)-.5;
+    let drift=noise3v(flow*u.warpScale,t*.11)-.5;
     let p=(flow+drift*u.warpStrength)*u.baseScale;
-    let primary=noise(p+vec2f(cos(t*.017),sin(t*.014))*.23);
-    let secondary=noise(p*u.secondaryScale+vec2f(13.7,-8.4)-drift*.41);
-    let tertiary=noise(p*u.secondaryScale*u.lacunarity+vec2f(-4.1,19.3)+drift*.23);
+    let primary=noise3(vec3f(p,t*.075));
+    let secondary=noise3(vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-drift*.41,t*.12+7.1));
+    let tertiary=noise3(vec3f(p*u.secondaryScale*u.lacunarity+vec2f(-4.1,19.3)+drift*.23,t*.18+19.7));
     let billow=1.-abs(primary*2.-1.);
     let ridged=pow(clamp(billow,0.,1.),u.ridgeSharpness);
     let shaped=mix(primary,ridged,u.ridgeMix);
@@ -102,8 +112,8 @@ const octaveShader =
     let old=textureSample(src,samp,uv).r;
     if(u.enabled<.5){return vec4f(vec3f(old),1.);}
     let k=pow(u.lacunarity,u.stage); let rate=.031+.013*u.stage;
-    let wobble=n2(q*(.72*k)+vec2f(sin(u.time*rate),cos(u.time*rate*.73))*.21)-.5;
-    let detail=noise((q+wobble*(.34/k))*k*1.65+vec2f(u.stage*13.1,u.seed*.07));
+    let wobble=noise3v(q*(.72*k),u.time*rate+u.stage*5.7)-.5;
+    let detail=noise3(vec3f((q+wobble*(.34/k))*k*1.65+vec2f(u.stage*13.1,u.seed*.07),u.time*rate*1.37+u.stage*9.1));
     let transition=pow(clamp(1.-abs(old-.5)*2.,0.,1.),u.edgeConcentration);
     let signed=(detail-.5)*(u.persistence/(1.+u.stage*.34))*transition;
     let nested=smoothstep(.34,.66,old+signed);
