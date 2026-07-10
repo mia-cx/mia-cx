@@ -2,16 +2,16 @@ export const STAGES = ['base', 'octave1', 'octave2', 'octave3', 'animation'] as 
 export type Stage = (typeof STAGES)[number];
 
 export const PARAMETER_SCHEMA = [
-    { key: 'baseScale', label: 'Blob size', min: 0.45, max: 2.5, step: 0.01, default: 1.42 },
-    { key: 'ribbonFrequency', label: 'Ribbon frequency', min: 0.2, max: 4, step: 0.01, default: 1.42 },
-    { key: 'ribbonAmplitude', label: 'Ribbon amplitude', min: 0, max: 0.8, step: 0.01, default: 0.25 },
-    { key: 'ribbonWidth', label: 'Ribbon width', min: 0.4, max: 4, step: 0.01, default: 1.68 },
+    { key: 'baseScale', label: 'Base scale', min: 0.45, max: 4, step: 0.01, default: 1.42 },
+    { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 0.72 },
+    { key: 'ridgeMix', label: 'Billow / ridge mix', min: 0, max: 1, step: 0.01, default: 0.34 },
+    { key: 'ridgeSharpness', label: 'Ridge sharpness', min: 0.4, max: 4, step: 0.01, default: 1.35 },
     { key: 'warpScale', label: 'Warp scale', min: 0.2, max: 2.5, step: 0.01, default: 0.78 },
     { key: 'warpStrength', label: 'Warp strength', min: 0, max: 1.5, step: 0.01, default: 0.62 },
-    { key: 'massThreshold', label: 'Mass threshold', min: 0.05, max: 0.9, step: 0.01, default: 0.43 },
-    { key: 'massSoftness', label: 'Mass softness', min: 0.02, max: 0.5, step: 0.01, default: 0.29 },
-    { key: 'voidScale', label: 'Void scale', min: 0.2, max: 2.5, step: 0.01, default: 0.96 },
-    { key: 'voidStrength', label: 'Void strength', min: 0, max: 1.2, step: 0.01, default: 0.55 },
+    { key: 'threshold', label: 'Threshold', min: 0.05, max: 0.95, step: 0.01, default: 0.48 },
+    { key: 'thresholdSoftness', label: 'Threshold softness', min: 0.01, max: 0.5, step: 0.01, default: 0.24 },
+    { key: 'secondaryScale', label: 'Secondary scale', min: 1.1, max: 5, step: 0.01, default: 2.08 },
+    { key: 'secondaryMix', label: 'Secondary mix', min: 0, max: 1, step: 0.01, default: 0.38 },
     { key: 'lacunarity', label: 'Octave frequency', min: 1.2, max: 3.5, step: 0.01, default: 2 },
     { key: 'persistence', label: 'Octave strength', min: 0, max: 0.9, step: 0.01, default: 0.42 },
     { key: 'edgeConcentration', label: 'Edge concentration', min: 0.2, max: 5, step: 0.01, default: 1.7 },
@@ -50,9 +50,9 @@ export function scaledSize(width: number, height: number, scale: number) {
 const common = /* wgsl */ `
 struct U {
  resolution: vec2f, time: f32, seed: f32, stage: f32, enabled: f32, sourceScale: f32, pad: f32,
- baseScale: f32, ribbonFrequency: f32, ribbonAmplitude: f32, ribbonWidth: f32,
- warpScale: f32, warpStrength: f32, massThreshold: f32, massSoftness: f32,
- voidScale: f32, voidStrength: f32, lacunarity: f32, persistence: f32,
+ baseScale: f32, flowStretch: f32, ridgeMix: f32, ridgeSharpness: f32,
+ warpScale: f32, warpStrength: f32, threshold: f32, thresholdSoftness: f32,
+ secondaryScale: f32, secondaryMix: f32, lacunarity: f32, persistence: f32,
  edgeConcentration: f32, recursiveMix: f32, finalSoftness: f32, finalContrast: f32,
  animationSpeed: f32, pad1: f32, pad2: f32, pad3: f32
 };
@@ -74,13 +74,17 @@ const baseShader =
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time*u.animationSpeed;
-    let bend=u.ribbonAmplitude*sin(q.x*u.ribbonFrequency + sin(t*.041)*1.8) + u.ribbonAmplitude*.68*sin(q.x*u.ribbonFrequency*2.-t*.027);
-    let ribbon=exp(-pow(abs(q.y-bend)*u.ribbonWidth,2.4));
-    let drift=n2(q*u.warpScale+vec2f(sin(t*.019),cos(t*.023))*.17)-.5;
-    let masses=noise((q+drift*u.warpStrength)*u.baseScale+vec2f(cos(t*.017),sin(t*.014))*.23);
-    let voids=noise(q*u.voidScale+vec2f(9.2,-4.7)-drift*u.warpStrength*.52);
-    var f=.62*ribbon+.72*smoothstep(u.massThreshold,u.massThreshold+u.massSoftness,masses)-u.voidStrength*smoothstep(.52,.78,voids);
-    f=smoothstep(.16,.88,f);
+    let flow=mat2x2f(.89,.45,-.45,.89)*vec2f(q.x,q.y*u.flowStretch);
+    let drift=n2(flow*u.warpScale+vec2f(sin(t*.019),cos(t*.023))*.17)-.5;
+    let p=(flow+drift*u.warpStrength)*u.baseScale;
+    let primary=noise(p+vec2f(cos(t*.017),sin(t*.014))*.23);
+    let secondary=noise(p*u.secondaryScale+vec2f(13.7,-8.4)-drift*.41);
+    let tertiary=noise(p*u.secondaryScale*u.lacunarity+vec2f(-4.1,19.3)+drift*.23);
+    let billow=1.-abs(primary*2.-1.);
+    let ridged=pow(clamp(billow,0.,1.),u.ridgeSharpness);
+    let shaped=mix(primary,ridged,u.ridgeMix);
+    let natural=shaped+(secondary-.5)*u.secondaryMix+(tertiary-.5)*u.secondaryMix*.35;
+    var f=smoothstep(u.threshold-u.thresholdSoftness,u.threshold+u.thresholdSoftness,natural);
     if(u.enabled<.5){f=.14;}
     return vec4f(vec3f(f),1.);
 }`;
