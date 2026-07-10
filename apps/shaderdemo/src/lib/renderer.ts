@@ -95,7 +95,8 @@ const baseShader =
     let centerDistance=pow(pow(centerPoint.x,u.centerRoundness)+pow(centerPoint.y,u.centerRoundness),1./u.centerRoundness);
     let centerFeather=u.centerSoftness*.5;
     let center=1.-smoothstep(1.-centerFeather,1.+centerFeather,centerDistance);
-    natural-=center*u.centerDarkness;
+    let centerAttenuation=exp2(-center*u.centerDarkness*4.);
+    natural*=centerAttenuation;
     let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
     var f=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
     return vec4f(vec3f(f),1.);
