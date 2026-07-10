@@ -44,6 +44,16 @@ test('projects page renders the handpicked public repositories', async ({ page }
 	for (const href of projects) {
 		await expect(page.locator(`a[href="${href}"]`)).toBeVisible();
 	}
+
+	const projectList = page.getByTestId('project-list');
+	await expect(projectList).not.toHaveClass(/grid|rounded/);
+	await expect(projectList.locator('li').first()).not.toHaveClass(/rounded/);
+	expect(
+		await projectList
+			.locator('li')
+			.nth(1)
+			.evaluate((item) => getComputedStyle(item).borderTopWidth)
+	).not.toBe('0px');
 });
 
 test('blog page renders an under-construction placeholder', async ({ page }) => {

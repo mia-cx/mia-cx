@@ -61,9 +61,9 @@
 		<h1>Projects</h1>
 		<p>A selection of public projects and experiments.</p>
 
-		<ul class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+		<ul class="mt-8 divide-y divide-current/20" data-testid="project-list">
 			{#each projects as project}
-				<li class="border border-current/20 rounded-xl p-6">
+				<li class="py-6 first:pt-0 last:pb-0">
 					<a
 						class="group inline-flex items-center gap-1 font-bold"
 						href={`https://github.com/${project.owner}/${project.name}`}
