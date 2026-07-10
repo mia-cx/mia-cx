@@ -61,7 +61,7 @@
 		<h1>Projects</h1>
 		<p>A selection of public projects and experiments.</p>
 
-		<ul class="mt-8 divide-y divide-current/20" data-testid="project-list">
+		<ul class="mt-8 divide-y" data-testid="project-list">
 			{#each projects as project}
 				<li class="py-6 first:pt-0 last:pb-0">
 					<a
@@ -83,3 +83,9 @@
 		</ul>
 	</div>
 </section>
+
+<style>
+	ul[data-testid='project-list'] > li + li {
+		border-color: color-mix(in srgb, currentColor 10%, transparent);
+	}
+</style>
