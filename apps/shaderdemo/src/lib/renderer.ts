@@ -19,11 +19,11 @@ export const PARAMETER_SCHEMA = [
     { key: 'finalSoftness', label: 'Final softness', min: 0, max: 1, step: 0.01, default: 1 },
     { key: 'finalContrast', label: 'Final contrast', min: 0.2, max: 3, step: 0.01, default: 1.54 },
     { key: 'animationSpeed', label: 'Animation speed', min: 0, max: 3, step: 0.01, default: 0.6 },
-    { key: 'centerDarkness', label: 'Center darkness', min: 0, max: 1.5, step: 0.01, default: 0.42 },
-    { key: 'centerWidth', label: 'Center width', min: 0.1, max: 2.5, step: 0.01, default: 0.72 },
-    { key: 'centerHeight', label: 'Center height', min: 0.1, max: 2.5, step: 0.01, default: 0.54 },
-    { key: 'centerRoundness', label: 'Center roundness', min: 2, max: 12, step: 0.1, default: 4 },
-    { key: 'centerSoftness', label: 'Center softness', min: 0.01, max: 1.5, step: 0.01, default: 0.72 },
+    { key: 'centerDarkness', label: 'Center darkness', min: 0, max: 1.5, step: 0.01, default: 0.93 },
+    { key: 'centerWidth', label: 'Center width', min: 0.1, max: 2.5, step: 0.01, default: 0.56 },
+    { key: 'centerHeight', label: 'Center height', min: 0.1, max: 2.5, step: 0.01, default: 0.47 },
+    { key: 'centerRoundness', label: 'Center roundness', min: 2, max: 12, step: 0.1, default: 5.2 },
+    { key: 'centerSoftness', label: 'Center softness', min: 0.01, max: 1.5, step: 0.01, default: 1.5 },
 ] as const;
 export type ParameterKey = (typeof PARAMETER_SCHEMA)[number]['key'];
 export type ShaderParameters = Record<ParameterKey, number>;

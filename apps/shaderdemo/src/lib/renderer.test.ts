@@ -38,11 +38,11 @@ describe('recursive field configuration', () => {
             expect(defaultParameters()[parameter.key]).toBe(parameter.default);
         }
         expect(defaultParameters()).toMatchObject({
-            centerDarkness: 0.42,
-            centerWidth: 0.72,
-            centerHeight: 0.54,
-            centerRoundness: 4,
-            centerSoftness: 0.72,
+            centerDarkness: 0.93,
+            centerWidth: 0.56,
+            centerHeight: 0.47,
+            centerRoundness: 5.2,
+            centerSoftness: 1.5,
         });
     });
 });
