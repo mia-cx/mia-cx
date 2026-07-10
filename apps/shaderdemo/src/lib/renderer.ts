@@ -100,10 +100,11 @@ const baseShader =
     let billow=1.-abs(primary*2.-1.);
     let ridged=pow(clamp(billow,0.,1.),u.ridgeSharpness);
     let shaped=mix(primary,ridged,u.ridgeMix);
-    let natural=shaped+(secondary-.5)*u.secondaryMix+(tertiary-.5)*u.secondaryMix*.35;
+    var natural=shaped+(secondary-.5)*u.secondaryMix+(tertiary-.5)*u.secondaryMix*.35;
     let center=1.-smoothstep(u.centerRadius,u.centerRadius+u.centerSoftness,length(q));
     natural-=center*u.centerDarkness;
-    var f=smoothstep(u.threshold-u.thresholdSoftness,u.threshold+u.thresholdSoftness,natural);
+    let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
+    var f=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
     if(u.enabled<.5){f=.14;}
     return vec4f(vec3f(f),1.);
 }`;
