@@ -1,8 +1,11 @@
 <script lang="ts">
 	import portrait from '$lib/assets/img/portrait.jpg?format=webp&w=320;480;640;720;900;1080;1200;1440;1600;1920;2560;3840&fit=inside&rotate=270&withoutEnlargement&as=srcset';
-
-	console.debug('portrait', portrait);
 </script>
+
+<svelte:head>
+	<title>Home | mia.cx</title>
+	<meta name="description" content="The personal website and portfolio of Mia Riezebos." />
+</svelte:head>
 
 <!-- Coming Soon -->
 <section id="coming-soon" class="justify-self-center">
@@ -22,15 +25,15 @@
 			<br />
 			<p>
 				If you have an inquiry or would like to get in touch, please email Mia Riezebos at
-				<a class="group" href="mailto:contact@mia.cx">
-					contact@mia.cx
+				<a class="group" href="mailto:hello@mia.cx">
+					hello@mia.cx
 					<iconify-icon
 						icon="lucide:arrow-up-right"
 						class="opacity-50 group-hover:opacity-100 -ml-1"
 					/>
 				</a>, or send a WhatsApp message to
 				<a class="group" href="https://wa.me/message/K6JIESWVSFVBN1">
-					‪+31 31 72 250 05‬
+					+31 31 72 250 05
 					<iconify-icon
 						icon="lucide:arrow-up-right"
 						class="opacity-50 group-hover:opacity-100 -ml-1"

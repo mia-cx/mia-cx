@@ -1,3 +1,9 @@
+<script lang="ts">
+	const currentYear = new Date().getFullYear();
+	const workPhone = '+31 31 72 250 05';
+	const workPhoneHref = `tel:${workPhone.replace(/\s/g, '')}`;
+</script>
+
 <footer class="py-8">
 	<div class="container grid grid-cols-1 md:grid-cols-4 items-start gap-4">
 		<section class="md:col-span-2 h-full flex flex-col justify-between">
@@ -20,6 +26,7 @@
 					<li>
 						<a
 							class="flex items-center hover:text-linkedin"
+							aria-label="LinkedIn"
 							target="_blank"
 							href="https://linkedin.com/company/miacx"
 						>
@@ -32,6 +39,7 @@
 					<li>
 						<a
 							class="flex items-center"
+							aria-label="GitHub"
 							target="_blank"
 							href="https://github.com/mia-cx"
 						>
@@ -44,6 +52,7 @@
 					<li>
 						<a
 							class="flex items-center hover:text-twitter"
+							aria-label="Twitter"
 							target="_blank"
 							href="https://twitter.com/patchstep"
 						>
@@ -60,11 +69,11 @@
 						<a
 							class="group flex items-center gap-2"
 							target="_blank"
-							href="mailto:contact@mia.cx"
+							href="mailto:hello@mia.cx"
 						>
 							<iconify-icon class="text-6xl md:text-2xl" icon="lucide:mail" />
 							<span class="text-base hidden lg:inline">
-								contact@mia.cx
+								hello@mia.cx
 								<iconify-icon
 									icon="lucide:arrow-up-right"
 									class="opacity-50 group-hover:opacity-100"
@@ -97,8 +106,8 @@
 					</a>
 				</li>
 				<li>
-					<a class="group inline-flex items-center gap-2 hover:gap-3" href="/about">
-						About
+					<a class="group inline-flex items-center gap-2 hover:gap-3" href="/blog">
+						Blog
 						<iconify-icon
 							icon="lucide:arrow-right"
 							class="translate-y-[10%] opacity-50 group-hover:opacity-100"
@@ -114,6 +123,18 @@
 						/>
 					</a>
 				</li>
+				<li>
+					<a
+						class="group inline-flex items-center gap-2 hover:gap-3"
+						href="https://ffm.bio/patch"
+					>
+						Music
+						<iconify-icon
+							icon="lucide:arrow-up-right"
+							class="translate-y-[10%] opacity-50 group-hover:opacity-100"
+						/>
+					</a>
+				</li>
 			</ul>
 		</section>
 
@@ -121,15 +142,15 @@
 			<h2>Support</h2>
 			<p>
 				mia.cx<br />
-				<a class="group" href="mailto:contact@mia.cx">
-					contact@mia.cx
+				<a class="group" href="mailto:hello@mia.cx">
+					hello@mia.cx
 					<iconify-icon
 						icon="lucide:arrow-up-right"
 						class="opacity-50 group-hover:opacity-100"
 					/>
 				</a><br />
-				<a class="group" href="tel:+31640362794">
-					+31 6 40 36 27 94
+				<a class="group" href={workPhoneHref}>
+					{workPhone}
 					<iconify-icon
 						icon="lucide:arrow-up-right"
 						class="opacity-50 group-hover:opacity-100"
@@ -140,7 +161,7 @@
 		<!-- credit -->
 
 		<div class="flex max-sm:flex-col md:col-span-4 gap-x-4 gap-y-2">
-			<span>© 2023 mia.cx</span>
+			<span>© {currentYear} mia.cx</span>
 		</div>
 	</div>
 </footer>
