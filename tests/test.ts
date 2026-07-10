@@ -62,3 +62,14 @@ test('contact page renders the existing contact methods', async ({ page }) => {
 		'@patchstep'
 	);
 });
+
+test('unknown routes use the shared layout and custom error page', async ({ page }) => {
+	const response = await page.goto('/this-page-does-not-exist');
+
+	expect(response?.status()).toBe(404);
+	await expect(page.getByRole('banner')).toBeVisible();
+	await expect(page.getByRole('main').getByRole('heading', { name: 'Page not found' })).toBeVisible();
+	await expect(page.getByRole('main').getByText('404', { exact: true })).toBeVisible();
+	await expect(page.getByRole('main').getByRole('link', { name: 'Go home' })).toHaveAttribute('href', '/');
+	await expect(page.getByRole('contentinfo')).toBeVisible();
+});
