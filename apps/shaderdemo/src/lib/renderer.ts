@@ -47,6 +47,10 @@ export function scaledSize(width: number, height: number, scale: number) {
     return { width: Math.max(1, Math.floor(width * scale)), height: Math.max(1, Math.floor(height * scale)) };
 }
 
+export function advanceSimulationTime(time: number, deltaSeconds: number, speed: number) {
+    return time + deltaSeconds * speed;
+}
+
 const common = /* wgsl */ `
 struct U {
  resolution: vec2f, time: f32, seed: f32, stage: f32, enabled: f32, sourceScale: f32, pad: f32,
@@ -73,7 +77,7 @@ const baseShader =
     /* wgsl */ `
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
-    let t=u.time*u.animationSpeed;
+    let t=u.time;
     let flow=mat2x2f(.89,.45,-.45,.89)*vec2f(q.x,q.y*u.flowStretch);
     let drift=n2(flow*u.warpScale+vec2f(sin(t*.019),cos(t*.023))*.17)-.5;
     let p=(flow+drift*u.warpStrength)*u.baseScale;
@@ -97,7 +101,7 @@ const octaveShader =
     let uv=pos.xy/u.resolution; var q=uv*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let old=textureSample(src,samp,uv).r;
     if(u.enabled<.5){return vec4f(vec3f(old),1.);}
-    let k=pow(u.lacunarity,u.stage); let rate=(.031+.013*u.stage)*u.animationSpeed;
+    let k=pow(u.lacunarity,u.stage); let rate=.031+.013*u.stage;
     let wobble=n2(q*(.72*k)+vec2f(sin(u.time*rate),cos(u.time*rate*.73))*.21)-.5;
     let detail=noise((q+wobble*(.34/k))*k*1.65+vec2f(u.stage*13.1,u.seed*.07));
     let transition=pow(clamp(1.-abs(old-.5)*2.,0.,1.),u.edgeConcentration);
@@ -236,7 +240,7 @@ export class AtmosphereRenderer {
         const animated = !this.paused && this.options.stages.animation;
         const dt = Math.min(0.1, Math.max(0, (now - this.lastTime) / 1000));
         this.lastTime = now;
-        if (animated) this.simTime += dt;
+        if (animated) this.simTime = advanceSimulationTime(this.simTime, dt, this.options.parameters.animationSpeed);
         if (this.invalid || animated) {
             this.render();
             this.invalid = false;
