@@ -63,13 +63,46 @@ test('contact page renders the existing contact methods', async ({ page }) => {
 	);
 });
 
+test('about redirects to the home page', async ({ page }) => {
+	await page.goto('/about');
+	await expect(page).toHaveURL('/');
+});
+
+test('pages expose concise titles and descriptions', async ({ page }) => {
+	const pages = [
+		['/', 'Home | mia.cx'],
+		['/projects', 'Projects | mia.cx'],
+		['/blog', 'Blog | mia.cx'],
+		['/contact', 'Contact | mia.cx']
+	];
+
+	for (const [route, title] of pages) {
+		await page.goto(route);
+		await expect(page).toHaveTitle(title);
+		await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /\S+/);
+	}
+});
+
+test('footer uses the work number and accessible social labels', async ({ page }) => {
+	await page.goto('/');
+	const footer = page.getByRole('contentinfo');
+	const workPhone = '+31 31 72 250 05';
+	const workPhoneHref = `tel:${workPhone.replace(/\s/g, '')}`;
+
+	await expect(footer.locator(`a[href="${workPhoneHref}"]`)).toContainText(workPhone);
+	await expect(footer.getByText('+31 6 40 36 27 94')).toHaveCount(0);
+	await expect(footer.getByText(`© ${new Date().getFullYear()} mia.cx`)).toBeVisible();
+	await expect(footer.getByRole('link', { name: 'LinkedIn' })).toBeVisible();
+	await expect(footer.getByRole('link', { name: 'GitHub' })).toBeVisible();
+	await expect(footer.getByRole('link', { name: 'Twitter' })).toBeVisible();
+});
+
 test('unknown routes use the shared layout and custom error page', async ({ page }) => {
 	const response = await page.goto('/this-page-does-not-exist');
 
 	expect(response?.status()).toBe(404);
 	await expect(page.getByRole('banner')).toBeVisible();
-	await expect(page.getByRole('main').getByRole('heading', { name: 'Page not found' })).toBeVisible();
-	await expect(page.getByRole('main').getByText('404', { exact: true })).toBeVisible();
+	await expect(page.getByRole('main').getByRole('heading', { name: '404: Page not found' })).toBeVisible();
 	await expect(page.getByRole('main').getByRole('link', { name: 'Go home' })).toHaveAttribute('href', '/');
 	await expect(page.getByRole('contentinfo')).toBeVisible();
 });

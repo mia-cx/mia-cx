@@ -51,6 +51,11 @@
 	];
 </script>
 
+<svelte:head>
+	<title>Projects | mia.cx</title>
+	<meta name="description" content="A selection of public projects and experiments by Mia Riezebos." />
+</svelte:head>
+
 <section class="container py-8 md:py-16">
 	<div class="max-w-4xl">
 		<h1>Projects</h1>

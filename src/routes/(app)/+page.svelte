@@ -2,6 +2,11 @@
 	import portrait from '$lib/assets/img/portrait.jpg?format=webp&w=320;480;640;720;900;1080;1200;1440;1600;1920;2560;3840&fit=inside&rotate=270&withoutEnlargement&as=srcset';
 </script>
 
+<svelte:head>
+	<title>Home | mia.cx</title>
+	<meta name="description" content="The personal website and portfolio of Mia Riezebos." />
+</svelte:head>
+
 <!-- Coming Soon -->
 <section id="coming-soon" class="justify-self-center">
 	<div

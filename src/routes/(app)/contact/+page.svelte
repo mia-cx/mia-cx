@@ -1,3 +1,8 @@
+<svelte:head>
+	<title>Contact | mia.cx</title>
+	<meta name="description" content="Contact details for Mia Riezebos." />
+</svelte:head>
+
 <section class="container py-8 md:py-16">
 	<div class="max-w-3xl">
 		<h1>Contact</h1>
