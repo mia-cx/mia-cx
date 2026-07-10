@@ -26,10 +26,10 @@ describe('field configuration', () => {
             expect(defaultParameters()[parameter.key]).toBe(parameter.default);
         }
         expect(defaultParameters()).toMatchObject({
-            centerDarkness: 0.86,
-            centerWidth: 1,
-            centerHeight: 1,
-            centerRoundness: 5.2,
+            centerDarkness: 0.57,
+            centerWidth: 0.83,
+            centerHeight: 0.83,
+            centerRoundness: 4,
             centerSoftness: 1.5,
         });
     });

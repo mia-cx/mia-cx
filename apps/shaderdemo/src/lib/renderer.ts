@@ -11,10 +11,10 @@ export const PARAMETER_SCHEMA = [
     { key: 'secondaryMix', label: 'Secondary mix', min: 0, max: 1, step: 0.01, default: 1 },
     { key: 'finalContrast', label: 'Final contrast', min: 0.2, max: 3, step: 0.01, default: 1.54 },
     { key: 'animationSpeed', label: 'Animation speed', min: 0, max: 3, step: 0.01, default: 0.6 },
-    { key: 'centerDarkness', label: 'Center darkness', min: 0, max: 1.5, step: 0.01, default: 0.86 },
-    { key: 'centerWidth', label: 'Center width', min: 0.1, max: 2.5, step: 0.01, default: 1 },
-    { key: 'centerHeight', label: 'Center height', min: 0.1, max: 2.5, step: 0.01, default: 1 },
-    { key: 'centerRoundness', label: 'Center roundness', min: 2, max: 12, step: 0.1, default: 5.2 },
+    { key: 'centerDarkness', label: 'Center darkness', min: 0, max: 1.5, step: 0.01, default: 0.57 },
+    { key: 'centerWidth', label: 'Center width', min: 0.1, max: 2.5, step: 0.01, default: 0.83 },
+    { key: 'centerHeight', label: 'Center height', min: 0.1, max: 2.5, step: 0.01, default: 0.83 },
+    { key: 'centerRoundness', label: 'Center roundness', min: 2, max: 12, step: 0.1, default: 4 },
     { key: 'centerSoftness', label: 'Center softness', min: 0.01, max: 1.5, step: 0.01, default: 1.5 },
 ] as const;
 export type ParameterKey = (typeof PARAMETER_SCHEMA)[number]['key'];
@@ -95,10 +95,10 @@ const baseShader =
     let centerDistance=pow(pow(centerPoint.x,u.centerRoundness)+pow(centerPoint.y,u.centerRoundness),1./u.centerRoundness);
     let centerFeather=u.centerSoftness*.5;
     let center=1.-smoothstep(1.-centerFeather,1.+centerFeather,centerDistance);
-    let centerAttenuation=exp2(-center*u.centerDarkness*4.);
-    natural*=centerAttenuation;
     let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
     var f=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
+    let centerAttenuation=exp2(-center*u.centerDarkness*4.);
+    f*=centerAttenuation;
     return vec4f(vec3f(f),1.);
 }`;
 
