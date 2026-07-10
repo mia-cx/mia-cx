@@ -18,7 +18,7 @@ export const PARAMETER_SCHEMA = [
     { key: 'recursiveMix', label: 'Recursive mix', min: 0, max: 1, step: 0.01, default: 0 },
     { key: 'finalSoftness', label: 'Final softness', min: 0, max: 1, step: 0.01, default: 1 },
     { key: 'finalContrast', label: 'Final contrast', min: 0.2, max: 3, step: 0.01, default: 1.54 },
-    { key: 'animationSpeed', label: 'Animation speed', min: 0, max: 3, step: 0.01, default: 3 },
+    { key: 'animationSpeed', label: 'Animation speed', min: 0, max: 3, step: 0.01, default: 0.6 },
 ] as const;
 export type ParameterKey = (typeof PARAMETER_SCHEMA)[number]['key'];
 export type ShaderParameters = Record<ParameterKey, number>;
