@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STAGES, defaultStages, renderSize, scaledSize } from './renderer';
+import { PARAMETER_SCHEMA, STAGES, defaultParameters, defaultStages, renderSize, scaledSize } from './renderer';
 
 describe('recursive field configuration', () => {
     it('exposes only the base, three octaves, and animation', () => {
@@ -13,5 +13,16 @@ describe('recursive field configuration', () => {
     it('keeps low-resolution render targets valid', () => {
         expect(scaledSize(1202, 901, 0.18)).toEqual({ width: 216, height: 162 });
         expect(scaledSize(0, 0, 0.18)).toEqual({ width: 1, height: 1 });
+    });
+    it('defines complete, valid slider defaults from one schema', () => {
+        expect(PARAMETER_SCHEMA).toHaveLength(17);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(PARAMETER_SCHEMA.length);
+        for (const parameter of PARAMETER_SCHEMA) {
+            expect(parameter.min).toBeLessThan(parameter.max);
+            expect(parameter.step).toBeGreaterThan(0);
+            expect(parameter.default).toBeGreaterThanOrEqual(parameter.min);
+            expect(parameter.default).toBeLessThanOrEqual(parameter.max);
+            expect(defaultParameters()[parameter.key]).toBe(parameter.default);
+        }
     });
 });

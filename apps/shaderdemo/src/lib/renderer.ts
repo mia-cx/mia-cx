@@ -1,11 +1,36 @@
 export const STAGES = ['base', 'octave1', 'octave2', 'octave3', 'animation'] as const;
 export type Stage = (typeof STAGES)[number];
 
+export const PARAMETER_SCHEMA = [
+    { key: 'baseScale', label: 'Blob size', min: 0.45, max: 2.5, step: 0.01, default: 1.42 },
+    { key: 'ribbonFrequency', label: 'Ribbon frequency', min: 0.2, max: 4, step: 0.01, default: 1.42 },
+    { key: 'ribbonAmplitude', label: 'Ribbon amplitude', min: 0, max: 0.8, step: 0.01, default: 0.25 },
+    { key: 'ribbonWidth', label: 'Ribbon width', min: 0.4, max: 4, step: 0.01, default: 1.68 },
+    { key: 'warpScale', label: 'Warp scale', min: 0.2, max: 2.5, step: 0.01, default: 0.78 },
+    { key: 'warpStrength', label: 'Warp strength', min: 0, max: 1.5, step: 0.01, default: 0.62 },
+    { key: 'massThreshold', label: 'Mass threshold', min: 0.05, max: 0.9, step: 0.01, default: 0.43 },
+    { key: 'massSoftness', label: 'Mass softness', min: 0.02, max: 0.5, step: 0.01, default: 0.29 },
+    { key: 'voidScale', label: 'Void scale', min: 0.2, max: 2.5, step: 0.01, default: 0.96 },
+    { key: 'voidStrength', label: 'Void strength', min: 0, max: 1.2, step: 0.01, default: 0.55 },
+    { key: 'lacunarity', label: 'Octave frequency', min: 1.2, max: 3.5, step: 0.01, default: 2 },
+    { key: 'persistence', label: 'Octave strength', min: 0, max: 0.9, step: 0.01, default: 0.42 },
+    { key: 'edgeConcentration', label: 'Edge concentration', min: 0.2, max: 5, step: 0.01, default: 1.7 },
+    { key: 'recursiveMix', label: 'Recursive mix', min: 0, max: 1, step: 0.01, default: 0.63 },
+    { key: 'finalSoftness', label: 'Final softness', min: 0, max: 1, step: 0.01, default: 0.58 },
+    { key: 'finalContrast', label: 'Final contrast', min: 0.2, max: 3, step: 0.01, default: 1.08 },
+    { key: 'animationSpeed', label: 'Animation speed', min: 0, max: 3, step: 0.01, default: 1 },
+] as const;
+export type ParameterKey = (typeof PARAMETER_SCHEMA)[number]['key'];
+export type ShaderParameters = Record<ParameterKey, number>;
+export const defaultParameters = (): ShaderParameters =>
+    Object.fromEntries(PARAMETER_SCHEMA.map(({ key, default: value }) => [key, value])) as ShaderParameters;
+
 export interface RenderOptions {
     stages: Record<Stage, boolean>;
     seed: number;
     dprCap: number;
     renderScale: number;
+    parameters: ShaderParameters;
 }
 
 export const defaultStages = (): Record<Stage, boolean> =>
@@ -23,7 +48,14 @@ export function scaledSize(width: number, height: number, scale: number) {
 }
 
 const common = /* wgsl */ `
-struct U { resolution: vec2f, time: f32, seed: f32, stage: f32, enabled: f32, sourceScale: f32, pad: f32 };
+struct U {
+ resolution: vec2f, time: f32, seed: f32, stage: f32, enabled: f32, sourceScale: f32, pad: f32,
+ baseScale: f32, ribbonFrequency: f32, ribbonAmplitude: f32, ribbonWidth: f32,
+ warpScale: f32, warpStrength: f32, massThreshold: f32, massSoftness: f32,
+ voidScale: f32, voidStrength: f32, lacunarity: f32, persistence: f32,
+ edgeConcentration: f32, recursiveMix: f32, finalSoftness: f32, finalContrast: f32,
+ animationSpeed: f32, pad1: f32, pad2: f32, pad3: f32
+};
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
     let p = array(vec2f(-1,-1), vec2f(3,-1), vec2f(-1,3)); return vec4f(p[i],0,1);
@@ -41,13 +73,13 @@ const baseShader =
     /* wgsl */ `
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
-    let t=u.time;
-    let bend=.25*sin(q.x*1.42 + sin(t*.041)*1.8) + .17*sin(q.x*2.85-t*.027);
-    let ribbon=exp(-pow(abs(q.y-bend)*1.68,2.4));
-    let drift=n2(q*.78+vec2f(sin(t*.019),cos(t*.023))*.17)-.5;
-    let masses=noise((q+drift*.62)*1.42+vec2f(cos(t*.017),sin(t*.014))*.23);
-    let voids=noise(q*.96+vec2f(9.2,-4.7)-drift*.32);
-    var f=.62*ribbon+.72*smoothstep(.43,.72,masses)-.55*smoothstep(.52,.78,voids);
+    let t=u.time*u.animationSpeed;
+    let bend=u.ribbonAmplitude*sin(q.x*u.ribbonFrequency + sin(t*.041)*1.8) + u.ribbonAmplitude*.68*sin(q.x*u.ribbonFrequency*2.-t*.027);
+    let ribbon=exp(-pow(abs(q.y-bend)*u.ribbonWidth,2.4));
+    let drift=n2(q*u.warpScale+vec2f(sin(t*.019),cos(t*.023))*.17)-.5;
+    let masses=noise((q+drift*u.warpStrength)*u.baseScale+vec2f(cos(t*.017),sin(t*.014))*.23);
+    let voids=noise(q*u.voidScale+vec2f(9.2,-4.7)-drift*u.warpStrength*.52);
+    var f=.62*ribbon+.72*smoothstep(u.massThreshold,u.massThreshold+u.massSoftness,masses)-u.voidStrength*smoothstep(.52,.78,voids);
     f=smoothstep(.16,.88,f);
     if(u.enabled<.5){f=.14;}
     return vec4f(vec3f(f),1.);
@@ -61,13 +93,13 @@ const octaveShader =
     let uv=pos.xy/u.resolution; var q=uv*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let old=textureSample(src,samp,uv).r;
     if(u.enabled<.5){return vec4f(vec3f(old),1.);}
-    let k=pow(2.,u.stage); let rate=.031+.013*u.stage;
+    let k=pow(u.lacunarity,u.stage); let rate=(.031+.013*u.stage)*u.animationSpeed;
     let wobble=n2(q*(.72*k)+vec2f(sin(u.time*rate),cos(u.time*rate*.73))*.21)-.5;
     let detail=noise((q+wobble*(.34/k))*k*1.65+vec2f(u.stage*13.1,u.seed*.07));
-    let transition=pow(clamp(1.-abs(old-.5)*2.,0.,1.),1.7);
-    let signed=(detail-.5)*(.42/(1.+u.stage*.34))*transition;
+    let transition=pow(clamp(1.-abs(old-.5)*2.,0.,1.),u.edgeConcentration);
+    let signed=(detail-.5)*(u.persistence/(1.+u.stage*.34))*transition;
     let nested=smoothstep(.34,.66,old+signed);
-    let soft=mix(old,nested,.55+.08*u.stage);
+    let soft=mix(old,nested,u.recursiveMix);
     return vec4f(vec3f(soft),1.);
 }`;
 
@@ -77,12 +109,13 @@ const displayShader =
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution; let px=1./u.resolution;
-    var f=textureSample(src,samp,uv).r*.42;
-    f+=textureSample(src,samp,uv+vec2f(px.x,0)).r*.145;
-    f+=textureSample(src,samp,uv-vec2f(px.x,0)).r*.145;
-    f+=textureSample(src,samp,uv+vec2f(0,px.y)).r*.145;
-    f+=textureSample(src,samp,uv-vec2f(0,px.y)).r*.145;
-    f=smoothstep(.09,.91,f); f=pow(f,1.08);
+    let side=u.finalSoftness*.25;
+    var f=textureSample(src,samp,uv).r*(1.-u.finalSoftness);
+    f+=textureSample(src,samp,uv+vec2f(px.x,0)).r*side;
+    f+=textureSample(src,samp,uv-vec2f(px.x,0)).r*side;
+    f+=textureSample(src,samp,uv+vec2f(0,px.y)).r*side;
+    f+=textureSample(src,samp,uv-vec2f(0,px.y)).r*side;
+    f=pow(clamp(f,0.,1.),u.finalContrast);
     return vec4f(vec3f(f),1.);
 }`;
 
@@ -140,7 +173,7 @@ export class AtmosphereRenderer {
             make(displayShader, format),
         ]);
         self.buffers = Array.from({ length: 5 }, () =>
-            self.device!.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+            self.device!.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
         );
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
         self.device.lost.then((info) => {
@@ -214,7 +247,7 @@ export class AtmosphereRenderer {
             s = this.sampler;
         if (!d || !c || buffers.length < 5 || !s || this.pipelines.length < 3 || this.textures.length < 4) return;
         const enc = d.createCommandEncoder();
-        const data = new Float32Array(8);
+        const data = new Float32Array(28);
         let passIndex = 0;
         const draw = (target: GPUTextureView, pipeline: GPURenderPipeline, source?: GPUTexture) => {
             const buffer = buffers[passIndex++];
@@ -241,6 +274,10 @@ export class AtmosphereRenderer {
             0,
             this.options.stages.base ? 1 : 0,
             1,
+            0,
+            ...PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
+            0,
+            0,
             0,
         ]);
         draw(this.textures[0].createView(), this.pipelines[0]);

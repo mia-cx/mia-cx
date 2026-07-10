@@ -1,10 +1,23 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { AtmosphereRenderer, STAGES, defaultStages, type RenderOptions } from '$lib/renderer';
+    import {
+        AtmosphereRenderer,
+        PARAMETER_SCHEMA,
+        STAGES,
+        defaultParameters,
+        defaultStages,
+        type RenderOptions,
+    } from '$lib/renderer';
 
     let canvas: HTMLCanvasElement;
     let renderer: AtmosphereRenderer | undefined;
-    let options: RenderOptions = { stages: defaultStages(), seed: 4.2, dprCap: 1.5, renderScale: 1 };
+    let options: RenderOptions = {
+        stages: defaultStages(),
+        seed: 4.2,
+        dprCap: 1.5,
+        renderScale: 1,
+        parameters: defaultParameters(),
+    };
     let paused = false;
     let controlsOpen = true;
     let ready = false;
@@ -18,7 +31,7 @@
     };
 
     function update() {
-        options = { ...options, stages: { ...options.stages } };
+        options = { ...options, stages: { ...options.stages }, parameters: { ...options.parameters } };
         renderer?.setOptions(options);
     }
     function togglePause() {
@@ -79,6 +92,22 @@
                 <i></i>
                 <button onclick={togglePause}>{paused ? 'Play' : 'Pause'}</button>
                 <button onclick={randomize}>New seed</button>
+                <div class="sliders">
+                    {#each PARAMETER_SCHEMA as parameter}
+                        <label class="parameter">
+                            <span>{parameter.label}</span><output>{options.parameters[parameter.key].toFixed(2)}</output
+                            >
+                            <input
+                                type="range"
+                                min={parameter.min}
+                                max={parameter.max}
+                                step={parameter.step}
+                                bind:value={options.parameters[parameter.key]}
+                                oninput={update}
+                            />
+                        </label>
+                    {/each}
+                </div>
             </div>
         {/if}
     </nav>
@@ -156,11 +185,15 @@
         font-size: 15px;
     }
     .controls {
-        display: flex;
+        display: grid;
+        grid-template-columns: repeat(5, auto);
         align-items: center;
         gap: 10px;
         padding: 5px 6px 5px 10px;
         border-radius: 2px;
+        width: min(290px, calc(100vw - 58px));
+        max-height: calc(100vh - 28px);
+        overflow-y: auto;
     }
     .controls label {
         display: flex;
@@ -168,7 +201,7 @@
         gap: 4px;
         cursor: pointer;
     }
-    .controls input {
+    .controls input[type='checkbox'] {
         appearance: none;
         width: 6px;
         height: 6px;
@@ -176,7 +209,7 @@
         border-radius: 50%;
         background: #555;
     }
-    .controls input:checked {
+    .controls input[type='checkbox']:checked {
         background: #fff;
         box-shadow: 0 0 5px #fff;
     }
@@ -190,6 +223,34 @@
         background: transparent;
         padding: 3px 5px;
         backdrop-filter: none;
+    }
+    .sliders {
+        grid-column: 1 / -1;
+        display: grid;
+        gap: 7px;
+        padding: 4px;
+        border-top: 1px solid #ffffff20;
+    }
+    .controls .parameter {
+        display: grid;
+        grid-template-columns: 1fr 40px;
+        gap: 2px 7px;
+        cursor: default;
+        letter-spacing: 0.03em;
+        text-transform: none;
+    }
+    .parameter output {
+        color: #aaa;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+    .parameter input[type='range'] {
+        grid-column: 1 / -1;
+        width: 100%;
+        height: 10px;
+        margin: 0;
+        accent-color: #ddd;
+        cursor: ew-resize;
     }
     .status {
         position: fixed;
