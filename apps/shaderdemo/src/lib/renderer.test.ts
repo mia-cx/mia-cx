@@ -28,7 +28,7 @@ describe('recursive field configuration', () => {
         expect(advanceSimulationTime(12, 0.5, 3)).toBe(13.5);
     });
     it('defines complete, valid slider defaults from one schema', () => {
-        expect(PARAMETER_SCHEMA).toHaveLength(20);
+        expect(PARAMETER_SCHEMA).toHaveLength(22);
         expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(PARAMETER_SCHEMA.length);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
@@ -39,7 +39,9 @@ describe('recursive field configuration', () => {
         }
         expect(defaultParameters()).toMatchObject({
             centerDarkness: 0.42,
-            centerRadius: 0.36,
+            centerWidth: 0.72,
+            centerHeight: 0.54,
+            centerRoundness: 4,
             centerSoftness: 0.72,
         });
     });

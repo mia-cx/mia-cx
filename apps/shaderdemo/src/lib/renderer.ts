@@ -20,7 +20,9 @@ export const PARAMETER_SCHEMA = [
     { key: 'finalContrast', label: 'Final contrast', min: 0.2, max: 3, step: 0.01, default: 1.54 },
     { key: 'animationSpeed', label: 'Animation speed', min: 0, max: 3, step: 0.01, default: 0.6 },
     { key: 'centerDarkness', label: 'Center darkness', min: 0, max: 1.5, step: 0.01, default: 0.42 },
-    { key: 'centerRadius', label: 'Center radius', min: 0, max: 1.5, step: 0.01, default: 0.36 },
+    { key: 'centerWidth', label: 'Center width', min: 0.1, max: 2.5, step: 0.01, default: 0.72 },
+    { key: 'centerHeight', label: 'Center height', min: 0.1, max: 2.5, step: 0.01, default: 0.54 },
+    { key: 'centerRoundness', label: 'Center roundness', min: 2, max: 12, step: 0.1, default: 4 },
     { key: 'centerSoftness', label: 'Center softness', min: 0.01, max: 1.5, step: 0.01, default: 0.72 },
 ] as const;
 export type ParameterKey = (typeof PARAMETER_SCHEMA)[number]['key'];
@@ -61,7 +63,8 @@ struct U {
  warpScale: f32, warpStrength: f32, threshold: f32, thresholdSoftness: f32,
  secondaryScale: f32, secondaryMix: f32, lacunarity: f32, persistence: f32,
  edgeConcentration: f32, recursiveMix: f32, finalSoftness: f32, finalContrast: f32,
- animationSpeed: f32, centerDarkness: f32, centerRadius: f32, centerSoftness: f32
+ animationSpeed: f32, centerDarkness: f32, centerWidth: f32, centerHeight: f32,
+ centerRoundness: f32, centerSoftness: f32, pad1: f32, pad2: f32
 };
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -101,7 +104,9 @@ const baseShader =
     let ridged=pow(clamp(billow,0.,1.),u.ridgeSharpness);
     let shaped=mix(primary,ridged,u.ridgeMix);
     var natural=shaped+(secondary-.5)*u.secondaryMix+(tertiary-.5)*u.secondaryMix*.35;
-    let center=1.-smoothstep(u.centerRadius,u.centerRadius+u.centerSoftness,length(q));
+    let centerPoint=abs(q/vec2f(u.centerWidth,u.centerHeight));
+    let centerDistance=pow(pow(centerPoint.x,u.centerRoundness)+pow(centerPoint.y,u.centerRoundness),1./u.centerRoundness);
+    let center=1.-smoothstep(1.,1.+u.centerSoftness,centerDistance);
     natural-=center*u.centerDarkness;
     let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
     var f=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
@@ -197,7 +202,7 @@ export class AtmosphereRenderer {
             make(displayShader, format),
         ]);
         self.buffers = Array.from({ length: 5 }, () =>
-            self.device!.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+            self.device!.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
         );
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
         self.device.lost.then((info) => {
@@ -271,7 +276,7 @@ export class AtmosphereRenderer {
             s = this.sampler;
         if (!d || !c || buffers.length < 5 || !s || this.pipelines.length < 3 || this.textures.length < 4) return;
         const enc = d.createCommandEncoder();
-        const data = new Float32Array(28);
+        const data = new Float32Array(32);
         let passIndex = 0;
         const draw = (target: GPUTextureView, pipeline: GPURenderPipeline, source?: GPUTexture) => {
             const buffer = buffers[passIndex++];
@@ -300,6 +305,8 @@ export class AtmosphereRenderer {
             1,
             0,
             ...PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
+            0,
+            0,
         ]);
         draw(this.textures[0].createView(), this.pipelines[0]);
         for (let i = 1; i < 4; i++) {
