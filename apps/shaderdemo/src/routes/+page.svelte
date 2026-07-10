@@ -6,6 +6,7 @@
         STAGES,
         defaultParameters,
         defaultStages,
+        type ParameterKey,
         type RenderOptions,
     } from '$lib/renderer';
 
@@ -22,6 +23,36 @@
     let controlsOpen = true;
     let ready = false;
     let status = 'Starting WebGPU…';
+    const parameterTabs = [
+        {
+            id: 'field',
+            label: 'Field',
+            keys: [
+                'baseScale',
+                'flowStretch',
+                'ridgeMix',
+                'ridgeSharpness',
+                'warpScale',
+                'warpStrength',
+                'threshold',
+                'thresholdSoftness',
+                'secondaryScale',
+                'secondaryMix',
+                'centerDarkness',
+                'centerRadius',
+                'centerSoftness',
+            ] satisfies ParameterKey[],
+        },
+        {
+            id: 'octaves',
+            label: 'Octaves',
+            keys: ['lacunarity', 'persistence', 'edgeConcentration', 'recursiveMix'] satisfies ParameterKey[],
+        },
+        { id: 'output', label: 'Output', keys: ['finalSoftness', 'finalContrast'] satisfies ParameterKey[] },
+        { id: 'motion', label: 'Motion', keys: ['animationSpeed'] satisfies ParameterKey[] },
+    ] as const;
+    let activeTab: (typeof parameterTabs)[number]['id'] = 'field';
+    $: selectedTab = parameterTabs.find((tab) => tab.id === activeTab) ?? parameterTabs[0];
     const labels: Record<(typeof STAGES)[number], string> = {
         base: 'Base',
         octave1: 'Broad',
@@ -41,6 +72,18 @@
     function randomize() {
         options.seed = Math.random() * 1000;
         update();
+    }
+    function selectAdjacentTab(event: KeyboardEvent, index: number) {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next =
+            event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? parameterTabs.length - 1
+                  : (index + (event.key === 'ArrowRight' ? 1 : -1) + parameterTabs.length) % parameterTabs.length;
+        activeTab = parameterTabs[next].id;
+        document.getElementById(`tab-${activeTab}`)?.focus();
     }
 
     onMount(() => {
@@ -92,21 +135,43 @@
                 <i></i>
                 <button onclick={togglePause}>{paused ? 'Play' : 'Pause'}</button>
                 <button onclick={randomize}>New seed</button>
-                <div class="sliders">
-                    {#each PARAMETER_SCHEMA as parameter}
-                        <label class="parameter">
-                            <span>{parameter.label}</span><output>{options.parameters[parameter.key].toFixed(2)}</output
+                <div class="parameters">
+                    <div class="tabs" role="tablist" aria-label="Parameter groups">
+                        {#each parameterTabs as tab, index}
+                            <button
+                                id="tab-{tab.id}"
+                                type="button"
+                                role="tab"
+                                aria-selected={activeTab === tab.id}
+                                aria-controls="panel-{tab.id}"
+                                tabindex={activeTab === tab.id ? 0 : -1}
+                                onclick={() => (activeTab = tab.id)}
+                                onkeydown={(event) => selectAdjacentTab(event, index)}>{tab.label}</button
                             >
-                            <input
-                                type="range"
-                                min={parameter.min}
-                                max={parameter.max}
-                                step={parameter.step}
-                                bind:value={options.parameters[parameter.key]}
-                                oninput={update}
-                            />
-                        </label>
-                    {/each}
+                        {/each}
+                    </div>
+                    <div
+                        class="sliders"
+                        id="panel-{selectedTab.id}"
+                        role="tabpanel"
+                        aria-labelledby="tab-{selectedTab.id}"
+                    >
+                        {#each PARAMETER_SCHEMA.filter( ({ key }) => selectedTab.keys.some((tabKey) => tabKey === key), ) as parameter}
+                            <label class="parameter">
+                                <span>{parameter.label}</span><output
+                                    >{options.parameters[parameter.key].toFixed(2)}</output
+                                >
+                                <input
+                                    type="range"
+                                    min={parameter.min}
+                                    max={parameter.max}
+                                    step={parameter.step}
+                                    bind:value={options.parameters[parameter.key]}
+                                    oninput={update}
+                                />
+                            </label>
+                        {/each}
+                    </div>
                 </div>
             </div>
         {/if}
@@ -224,12 +289,31 @@
         padding: 3px 5px;
         backdrop-filter: none;
     }
-    .sliders {
+    .parameters {
         grid-column: 1 / -1;
+        min-width: 0;
+        border-top: 1px solid #ffffff20;
+    }
+    .tabs {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 2px;
+        padding: 4px 0;
+    }
+    .controls .tabs button {
+        padding: 5px 2px;
+        color: #888;
+    }
+    .controls .tabs button[aria-selected='true'] {
+        background: #ffffff18;
+        color: #fff;
+    }
+    .sliders {
         display: grid;
         gap: 7px;
-        padding: 4px;
-        border-top: 1px solid #ffffff20;
+        max-height: min(52vh, 390px);
+        overflow-y: auto;
+        padding: 3px 4px 4px;
     }
     .controls .parameter {
         display: grid;

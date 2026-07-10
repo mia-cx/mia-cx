@@ -19,6 +19,9 @@ export const PARAMETER_SCHEMA = [
     { key: 'finalSoftness', label: 'Final softness', min: 0, max: 1, step: 0.01, default: 1 },
     { key: 'finalContrast', label: 'Final contrast', min: 0.2, max: 3, step: 0.01, default: 1.54 },
     { key: 'animationSpeed', label: 'Animation speed', min: 0, max: 3, step: 0.01, default: 0.6 },
+    { key: 'centerDarkness', label: 'Center darkness', min: 0, max: 1.5, step: 0.01, default: 0.42 },
+    { key: 'centerRadius', label: 'Center radius', min: 0, max: 1.5, step: 0.01, default: 0.36 },
+    { key: 'centerSoftness', label: 'Center softness', min: 0.01, max: 1.5, step: 0.01, default: 0.72 },
 ] as const;
 export type ParameterKey = (typeof PARAMETER_SCHEMA)[number]['key'];
 export type ShaderParameters = Record<ParameterKey, number>;
@@ -58,7 +61,7 @@ struct U {
  warpScale: f32, warpStrength: f32, threshold: f32, thresholdSoftness: f32,
  secondaryScale: f32, secondaryMix: f32, lacunarity: f32, persistence: f32,
  edgeConcentration: f32, recursiveMix: f32, finalSoftness: f32, finalContrast: f32,
- animationSpeed: f32, pad1: f32, pad2: f32, pad3: f32
+ animationSpeed: f32, centerDarkness: f32, centerRadius: f32, centerSoftness: f32
 };
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -98,6 +101,8 @@ const baseShader =
     let ridged=pow(clamp(billow,0.,1.),u.ridgeSharpness);
     let shaped=mix(primary,ridged,u.ridgeMix);
     let natural=shaped+(secondary-.5)*u.secondaryMix+(tertiary-.5)*u.secondaryMix*.35;
+    let center=1.-smoothstep(u.centerRadius,u.centerRadius+u.centerSoftness,length(q));
+    natural-=center*u.centerDarkness;
     var f=smoothstep(u.threshold-u.thresholdSoftness,u.threshold+u.thresholdSoftness,natural);
     if(u.enabled<.5){f=.14;}
     return vec4f(vec3f(f),1.);
@@ -294,9 +299,6 @@ export class AtmosphereRenderer {
             1,
             0,
             ...PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
-            0,
-            0,
-            0,
         ]);
         draw(this.textures[0].createView(), this.pipelines[0]);
         for (let i = 1; i < 4; i++) {
