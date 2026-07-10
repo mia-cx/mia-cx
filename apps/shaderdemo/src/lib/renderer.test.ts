@@ -26,7 +26,7 @@ describe('field configuration', () => {
             expect(defaultParameters()[parameter.key]).toBe(parameter.default);
         }
         expect(defaultParameters()).toMatchObject({
-            centerDarkness: 1,
+            centerDarkness: 0.65,
             centerWidth: 0.83,
             centerHeight: 0.83,
             centerRoundness: 4,
