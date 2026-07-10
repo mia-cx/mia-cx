@@ -2,10 +2,10 @@ import { expect, test } from '@playwright/test';
 
 const projects = [
 	'https://github.com/vesta-cx/vesta',
+	'https://github.com/mia-cx/maal',
+	'https://github.com/mia-cx/honeybot',
+	'https://github.com/mia-riezebos/patch',
 	'https://github.com/mia-cx/ditherette',
-	'https://github.com/mia-cx/rule-composer',
-	'https://github.com/mia-cx/drizzle-query-factory',
-	'https://github.com/mia-riezebos/lossless-url-compressor',
 	'https://github.com/mia-riezebos/novel-audio-codec-experiment'
 ];
 

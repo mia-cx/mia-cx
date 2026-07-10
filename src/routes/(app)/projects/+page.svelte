@@ -16,29 +16,29 @@
 		},
 		{
 			owner: 'mia-cx',
-			name: 'ditherette',
-			description: 'An in-browser image dithering and colour-conversion tool.',
+			name: 'maal',
+			description:
+				'A flexible meal-planning and household logistics app built around floating schedules, recipe imports, grocery demand, and capacity-aware planning.',
 			language: 'TypeScript'
 		},
 		{
 			owner: 'mia-cx',
-			name: 'rule-composer',
+			name: 'honeybot',
 			description:
-				'A command-line tool for writing AI coding-agent rules once and generating variants for multiple supported tools.',
-			language: 'TypeScript'
-		},
-		{
-			owner: 'mia-cx',
-			name: 'drizzle-query-factory',
-			description:
-				'A declarative, composable query-parameter parser that produces typed filtering, sorting, and pagination for Drizzle ORM.',
+				'A self-hosted Discord moderation bot that catches scam and spam raids using honeypots, repeat detection, evidence matching, AI classifiers, and moderator review.',
 			language: 'TypeScript'
 		},
 		{
 			owner: 'mia-riezebos',
-			name: 'lossless-url-compressor',
+			name: 'patch',
 			description:
-				'A work-in-progress specification and TypeScript proof of concept for deterministic, stateless, lossless URL compression.',
+				'A Discord harness for a locally hosted LLM designed as a conversational server character with her own voice, taste, boundaries, and timing.',
+			language: 'TypeScript'
+		},
+		{
+			owner: 'mia-cx',
+			name: 'ditherette',
+			description: 'An in-browser image dithering and colour-conversion tool.',
 			language: 'TypeScript'
 		},
 		{
