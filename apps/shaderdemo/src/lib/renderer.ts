@@ -1,6 +1,3 @@
-export const STAGES = ['base', 'octave1', 'octave2', 'octave3', 'animation'] as const;
-export type Stage = (typeof STAGES)[number];
-
 export const PARAMETER_SCHEMA = [
     { key: 'baseScale', label: 'Base scale', min: 0.45, max: 4, step: 0.01, default: 1.51 },
     { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 2.5 },
@@ -12,11 +9,6 @@ export const PARAMETER_SCHEMA = [
     { key: 'thresholdSoftness', label: 'Threshold softness', min: 0.01, max: 0.5, step: 0.01, default: 0.5 },
     { key: 'secondaryScale', label: 'Secondary scale', min: 1.1, max: 5, step: 0.01, default: 1.1 },
     { key: 'secondaryMix', label: 'Secondary mix', min: 0, max: 1, step: 0.01, default: 1 },
-    { key: 'lacunarity', label: 'Octave frequency', min: 1.2, max: 3.5, step: 0.01, default: 1.85 },
-    { key: 'persistence', label: 'Octave strength', min: 0, max: 0.9, step: 0.01, default: 0.62 },
-    { key: 'edgeConcentration', label: 'Edge concentration', min: 0.2, max: 5, step: 0.01, default: 3.06 },
-    { key: 'recursiveMix', label: 'Recursive mix', min: 0, max: 1, step: 0.01, default: 0 },
-    { key: 'finalSoftness', label: 'Final softness', min: 0, max: 1, step: 0.01, default: 1 },
     { key: 'finalContrast', label: 'Final contrast', min: 0.2, max: 3, step: 0.01, default: 1.54 },
     { key: 'animationSpeed', label: 'Animation speed', min: 0, max: 3, step: 0.01, default: 0.6 },
     { key: 'centerDarkness', label: 'Center darkness', min: 0, max: 1.5, step: 0.01, default: 0.93 },
@@ -31,15 +23,11 @@ export const defaultParameters = (): ShaderParameters =>
     Object.fromEntries(PARAMETER_SCHEMA.map(({ key, default: value }) => [key, value])) as ShaderParameters;
 
 export interface RenderOptions {
-    stages: Record<Stage, boolean>;
     seed: number;
     dprCap: number;
     renderScale: number;
     parameters: ShaderParameters;
 }
-
-export const defaultStages = (): Record<Stage, boolean> =>
-    Object.fromEntries(STAGES.map((stage) => [stage, true])) as Record<Stage, boolean>;
 
 export function renderSize(width: number, height: number, dpr: number, cap: number) {
     return {
@@ -58,13 +46,12 @@ export function advanceSimulationTime(time: number, deltaSeconds: number, speed:
 
 const common = /* wgsl */ `
 struct U {
- resolution: vec2f, time: f32, seed: f32, stage: f32, enabled: f32, sourceScale: f32, pad: f32,
+ resolution: vec2f, time: f32, seed: f32,
  baseScale: f32, flowStretch: f32, ridgeMix: f32, ridgeSharpness: f32,
  warpScale: f32, warpStrength: f32, threshold: f32, thresholdSoftness: f32,
- secondaryScale: f32, secondaryMix: f32, lacunarity: f32, persistence: f32,
- edgeConcentration: f32, recursiveMix: f32, finalSoftness: f32, finalContrast: f32,
- animationSpeed: f32, centerDarkness: f32, centerWidth: f32, centerHeight: f32,
- centerRoundness: f32, centerSoftness: f32, pad1: f32, pad2: f32
+ secondaryScale: f32, secondaryMix: f32, finalContrast: f32, animationSpeed: f32,
+ centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
+ centerSoftness: f32, pad1: f32, pad2: f32
 };
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -99,7 +86,7 @@ const baseShader =
     let p=(flow+drift*u.warpStrength)*u.baseScale;
     let primary=noise3(vec3f(p,t*.075));
     let secondary=noise3(vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-drift*.41,t*.12+7.1));
-    let tertiary=noise3(vec3f(p*u.secondaryScale*u.lacunarity+vec2f(-4.1,19.3)+drift*.23,t*.18+19.7));
+    let tertiary=noise3(vec3f(p*u.secondaryScale*1.85+vec2f(-4.1,19.3)+drift*.23,t*.18+19.7));
     let billow=1.-abs(primary*2.-1.);
     let ridged=pow(clamp(billow,0.,1.),u.ridgeSharpness);
     let shaped=mix(primary,ridged,u.ridgeMix);
@@ -110,26 +97,7 @@ const baseShader =
     natural-=center*u.centerDarkness;
     let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
     var f=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
-    if(u.enabled<.5){f=.14;}
     return vec4f(vec3f(f),1.);
-}`;
-
-const octaveShader =
-    common +
-    /* wgsl */ `
-@group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
-@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let uv=pos.xy/u.resolution; var q=uv*2.-1.; q.x*=u.resolution.x/u.resolution.y;
-    let old=textureSample(src,samp,uv).r;
-    if(u.enabled<.5){return vec4f(vec3f(old),1.);}
-    let k=pow(u.lacunarity,u.stage); let rate=.031+.013*u.stage;
-    let wobble=noise3v(q*(.72*k),u.time*rate+u.stage*5.7)-.5;
-    let detail=noise3(vec3f((q+wobble*(.34/k))*k*1.65+vec2f(u.stage*13.1,u.seed*.07),u.time*rate*1.37+u.stage*9.1));
-    let transition=pow(clamp(1.-abs(old-.5)*2.,0.,1.),u.edgeConcentration);
-    let signed=(detail-.5)*(u.persistence/(1.+u.stage*.34))*transition;
-    let nested=smoothstep(.34,.66,old+signed);
-    let soft=mix(old,nested,u.recursiveMix);
-    return vec4f(vec3f(soft),1.);
 }`;
 
 const displayShader =
@@ -137,14 +105,8 @@ const displayShader =
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let uv=pos.xy/u.resolution; let px=1./u.resolution;
-    let side=u.finalSoftness*.25;
-    var f=textureSample(src,samp,uv).r*(1.-u.finalSoftness);
-    f+=textureSample(src,samp,uv+vec2f(px.x,0)).r*side;
-    f+=textureSample(src,samp,uv-vec2f(px.x,0)).r*side;
-    f+=textureSample(src,samp,uv+vec2f(0,px.y)).r*side;
-    f+=textureSample(src,samp,uv-vec2f(0,px.y)).r*side;
-    f=pow(clamp(f,0.,1.),u.finalContrast);
+    let uv=pos.xy/u.resolution;
+    let f=pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast);
     return vec4f(vec3f(f),1.);
 }`;
 
@@ -196,13 +158,9 @@ export class AtmosphereRenderer {
                 fragment: { module, entryPoint: 'fs', targets: [{ format: target }] },
             });
         };
-        self.pipelines = await Promise.all([
-            make(baseShader, 'r16float'),
-            make(octaveShader, 'r16float'),
-            make(displayShader, format),
-        ]);
-        self.buffers = Array.from({ length: 5 }, () =>
-            self.device!.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+        self.pipelines = await Promise.all([make(baseShader, 'r16float'), make(displayShader, format)]);
+        self.buffers = Array.from({ length: 2 }, () =>
+            self.device!.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
         );
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
         self.device.lost.then((info) => {
@@ -227,15 +185,8 @@ export class AtmosphereRenderer {
         if (!this.device) return;
         this.textures.forEach((texture) => texture.destroy());
         const base = scaledSize(this.canvas.width, this.canvas.height, this.options.renderScale);
-        const scales = [0.18, 0.32, 0.55, 0.78];
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
-        this.textures = scales.map((scale) =>
-            this.device!.createTexture({
-                size: [Math.max(1, Math.floor(base.width * scale)), Math.max(1, Math.floor(base.height * scale))],
-                format: 'r16float',
-                usage,
-            }),
-        );
+        this.textures = [this.device.createTexture({ size: [base.width, base.height], format: 'r16float', usage })];
     }
     setOptions(options: RenderOptions) {
         const changed = this.options.renderScale !== options.renderScale;
@@ -258,7 +209,7 @@ export class AtmosphereRenderer {
     private tick = (now: number) => {
         this.rafId = 0;
         if (this.destroyed) return;
-        const animated = !this.paused && this.options.stages.animation;
+        const animated = !this.paused;
         const dt = Math.min(0.1, Math.max(0, (now - this.lastTime) / 1000));
         this.lastTime = now;
         if (animated) this.simTime = advanceSimulationTime(this.simTime, dt, this.options.parameters.animationSpeed);
@@ -274,9 +225,10 @@ export class AtmosphereRenderer {
             c = this.context,
             buffers = this.buffers,
             s = this.sampler;
-        if (!d || !c || buffers.length < 5 || !s || this.pipelines.length < 3 || this.textures.length < 4) return;
+        if (!d || !c || buffers.length < 2 || !s || this.pipelines.length < 2 || this.textures.length < 1) return;
         const enc = d.createCommandEncoder();
-        const data = new Float32Array(32);
+        // 21 floats padded to 24 (96 bytes) to satisfy WGSL's 16-byte uniform size alignment.
+        const data = new Float32Array(24);
         let passIndex = 0;
         const draw = (target: GPUTextureView, pipeline: GPURenderPipeline, source?: GPUTexture) => {
             const buffer = buffers[passIndex++];
@@ -300,25 +252,12 @@ export class AtmosphereRenderer {
             this.textures[0].height,
             this.simTime,
             this.options.seed,
-            0,
-            this.options.stages.base ? 1 : 0,
-            1,
-            0,
             ...PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
-            0,
-            0,
         ]);
         draw(this.textures[0].createView(), this.pipelines[0]);
-        for (let i = 1; i < 4; i++) {
-            data[0] = this.textures[i].width;
-            data[1] = this.textures[i].height;
-            data[4] = i;
-            data[5] = this.options.stages[`octave${i}` as Stage] ? 1 : 0;
-            draw(this.textures[i].createView(), this.pipelines[1], this.textures[i - 1]);
-        }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), this.pipelines[2], this.textures[3]);
+        draw(c.getCurrentTexture().createView(), this.pipelines[1], this.textures[0]);
         d.queue.submit([enc.finish()]);
     }
     destroy() {

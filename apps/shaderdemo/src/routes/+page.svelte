@@ -1,19 +1,10 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import {
-        AtmosphereRenderer,
-        PARAMETER_SCHEMA,
-        STAGES,
-        defaultParameters,
-        defaultStages,
-        type ParameterKey,
-        type RenderOptions,
-    } from '$lib/renderer';
+    import { AtmosphereRenderer, PARAMETER_SCHEMA, defaultParameters, type RenderOptions } from '$lib/renderer';
 
     let canvas: HTMLCanvasElement;
     let renderer: AtmosphereRenderer | undefined;
     let options: RenderOptions = {
-        stages: defaultStages(),
         seed: 4.2,
         dprCap: 1.5,
         renderScale: 1,
@@ -23,48 +14,12 @@
     let controlsOpen = true;
     let ready = false;
     let status = 'Starting WebGPU…';
-    const parameterTabs = [
-        {
-            id: 'field',
-            label: 'Field',
-            keys: [
-                'baseScale',
-                'flowStretch',
-                'ridgeMix',
-                'ridgeSharpness',
-                'warpScale',
-                'warpStrength',
-                'threshold',
-                'thresholdSoftness',
-                'secondaryScale',
-                'secondaryMix',
-                'centerDarkness',
-                'centerWidth',
-                'centerHeight',
-                'centerRoundness',
-                'centerSoftness',
-            ] satisfies ParameterKey[],
-        },
-        {
-            id: 'octaves',
-            label: 'Octaves',
-            keys: ['lacunarity', 'persistence', 'edgeConcentration', 'recursiveMix'] satisfies ParameterKey[],
-        },
-        { id: 'output', label: 'Output', keys: ['finalSoftness', 'finalContrast'] satisfies ParameterKey[] },
-        { id: 'motion', label: 'Motion', keys: ['animationSpeed'] satisfies ParameterKey[] },
-    ] as const;
-    let activeTab: (typeof parameterTabs)[number]['id'] = 'field';
-    $: selectedTab = parameterTabs.find((tab) => tab.id === activeTab) ?? parameterTabs[0];
-    const labels: Record<(typeof STAGES)[number], string> = {
-        base: 'Base',
-        octave1: 'Broad',
-        octave2: 'Middle',
-        octave3: 'Fine',
-        animation: 'Motion',
-    };
+    // Keep the tab model in place so later stages can add their own parameter panels.
+    const parameterTabs = [{ id: 'field', label: 'Field', parameters: PARAMETER_SCHEMA }] as const;
+    const selectedTab = parameterTabs[0];
 
     function update() {
-        options = { ...options, stages: { ...options.stages }, parameters: { ...options.parameters } };
+        options = { ...options, parameters: { ...options.parameters } };
         renderer?.setOptions(options);
     }
     function togglePause() {
@@ -75,26 +30,14 @@
         options.seed = Math.random() * 1000;
         update();
     }
-    function selectAdjacentTab(event: KeyboardEvent, index: number) {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-        event.preventDefault();
-        const next =
-            event.key === 'Home'
-                ? 0
-                : event.key === 'End'
-                  ? parameterTabs.length - 1
-                  : (index + (event.key === 'ArrowRight' ? 1 : -1) + parameterTabs.length) % parameterTabs.length;
-        activeTab = parameterTabs[next].id;
-        document.getElementById(`tab-${activeTab}`)?.focus();
-    }
-
     onMount(() => {
         let disposed = false;
-        if (matchMedia('(prefers-reduced-motion: reduce)').matches) options.stages.animation = false;
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) paused = true;
         AtmosphereRenderer.create(canvas, options)
             .then((instance) => {
                 if (disposed) return instance.destroy();
                 renderer = instance;
+                instance.setPaused(paused);
                 ready = true;
                 status = 'WebGPU';
                 instance.onLost = (message) => (status = message);
@@ -113,42 +56,32 @@
 </script>
 
 <svelte:head
-    ><title>Recursive Field — WebGPU</title><meta
+    ><title>Noise Field — WebGPU</title><meta
         name="description"
-        content="A monochrome recursive octave-noise study."
+        content="A monochrome domain-warped noise study."
     /></svelte:head
 >
 
 <main>
-    <canvas class:ready bind:this={canvas} aria-label="Animated monochrome recursive noise field"></canvas>
+    <canvas class:ready bind:this={canvas} aria-label="Animated monochrome noise field"></canvas>
     <nav aria-label="Study controls" data-disabled={!ready} inert={!ready}>
         <button class="reveal" onclick={() => (controlsOpen = !controlsOpen)} aria-expanded={controlsOpen}
             >{controlsOpen ? '×' : '+'}<span class="sr-only">{controlsOpen ? 'Hide' : 'Show'} controls</span></button
         >
         {#if controlsOpen}
             <div class="controls">
-                {#each STAGES as stage}
-                    <label
-                        ><input type="checkbox" bind:checked={options.stages[stage]} onchange={update} /><span
-                            >{labels[stage]}</span
-                        ></label
-                    >
-                {/each}
-                <i></i>
                 <button onclick={togglePause}>{paused ? 'Play' : 'Pause'}</button>
                 <button onclick={randomize}>New seed</button>
                 <div class="parameters">
                     <div class="tabs" role="tablist" aria-label="Parameter groups">
-                        {#each parameterTabs as tab, index}
+                        {#each parameterTabs as tab}
                             <button
                                 id="tab-{tab.id}"
                                 type="button"
                                 role="tab"
-                                aria-selected={activeTab === tab.id}
+                                aria-selected="true"
                                 aria-controls="panel-{tab.id}"
-                                tabindex={activeTab === tab.id ? 0 : -1}
-                                onclick={() => (activeTab = tab.id)}
-                                onkeydown={(event) => selectAdjacentTab(event, index)}>{tab.label}</button
+                                tabindex="0">{tab.label}</button
                             >
                         {/each}
                     </div>
@@ -158,7 +91,7 @@
                         role="tabpanel"
                         aria-labelledby="tab-{selectedTab.id}"
                     >
-                        {#each PARAMETER_SCHEMA.filter( ({ key }) => selectedTab.keys.some((tabKey) => tabKey === key), ) as parameter}
+                        {#each selectedTab.parameters as parameter}
                             <label class="parameter">
                                 <span>{parameter.label}</span><output
                                     >{options.parameters[parameter.key].toFixed(2)}</output
@@ -253,7 +186,7 @@
     }
     .controls {
         display: grid;
-        grid-template-columns: repeat(5, auto);
+        grid-template-columns: repeat(2, auto);
         align-items: center;
         gap: 10px;
         padding: 5px 6px 5px 10px;
@@ -268,23 +201,7 @@
         gap: 4px;
         cursor: pointer;
     }
-    .controls input[type='checkbox'] {
-        appearance: none;
-        width: 6px;
-        height: 6px;
-        margin: 0;
-        border-radius: 50%;
-        background: #555;
-    }
-    .controls input[type='checkbox']:checked {
-        background: #fff;
-        box-shadow: 0 0 5px #fff;
-    }
-    .controls i {
-        width: 1px;
-        height: 14px;
-        background: #ffffff30;
-    }
+
     .controls button {
         border: 0;
         background: transparent;
@@ -298,7 +215,7 @@
     }
     .tabs {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: 1fr;
         gap: 2px;
         padding: 4px 0;
     }
@@ -363,9 +280,6 @@
             max-width: calc(100vw - 58px);
             flex-wrap: wrap;
             justify-content: flex-end;
-        }
-        .controls i {
-            display: none;
         }
     }
 </style>

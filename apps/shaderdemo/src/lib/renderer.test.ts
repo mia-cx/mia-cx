@@ -1,19 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-    PARAMETER_SCHEMA,
-    STAGES,
-    advanceSimulationTime,
-    defaultParameters,
-    defaultStages,
-    renderSize,
-    scaledSize,
-} from './renderer';
+import { PARAMETER_SCHEMA, advanceSimulationTime, defaultParameters, renderSize, scaledSize } from './renderer';
 
-describe('recursive field configuration', () => {
-    it('exposes only the base, three octaves, and animation', () => {
-        expect(STAGES).toEqual(['base', 'octave1', 'octave2', 'octave3', 'animation']);
-        expect(defaultStages()).toEqual({ base: true, octave1: true, octave2: true, octave3: true, animation: true });
-    });
+describe('field configuration', () => {
     it('caps DPR and rounds down to stable physical dimensions', () => {
         expect(renderSize(801.9, 600.8, 3, 1.5)).toEqual({ width: 1202, height: 901 });
         expect(renderSize(0, 0, 2, 1)).toEqual({ width: 1, height: 1 });
@@ -28,7 +16,7 @@ describe('recursive field configuration', () => {
         expect(advanceSimulationTime(12, 0.5, 3)).toBe(13.5);
     });
     it('defines complete, valid slider defaults from one schema', () => {
-        expect(PARAMETER_SCHEMA).toHaveLength(22);
+        expect(PARAMETER_SCHEMA).toHaveLength(17);
         expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(PARAMETER_SCHEMA.length);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
