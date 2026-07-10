@@ -42,11 +42,11 @@ const baseShader =
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
-    let bend=.28*sin(q.x*1.15 + sin(t*.041)*1.8) + .19*sin(q.x*2.3-t*.027);
-    let ribbon=exp(-pow(abs(q.y-bend)*1.45,2.4));
-    let drift=n2(q*.63+vec2f(sin(t*.019),cos(t*.023))*.17)-.5;
-    let masses=noise((q+drift*.72)*1.08+vec2f(cos(t*.017),sin(t*.014))*.23);
-    let voids=noise(q*.72+vec2f(9.2,-4.7)-drift*.35);
+    let bend=.25*sin(q.x*1.42 + sin(t*.041)*1.8) + .17*sin(q.x*2.85-t*.027);
+    let ribbon=exp(-pow(abs(q.y-bend)*1.68,2.4));
+    let drift=n2(q*.78+vec2f(sin(t*.019),cos(t*.023))*.17)-.5;
+    let masses=noise((q+drift*.62)*1.42+vec2f(cos(t*.017),sin(t*.014))*.23);
+    let voids=noise(q*.96+vec2f(9.2,-4.7)-drift*.32);
     var f=.62*ribbon+.72*smoothstep(.43,.72,masses)-.55*smoothstep(.52,.78,voids);
     f=smoothstep(.16,.88,f);
     if(u.enabled<.5){f=.14;}
