@@ -85,7 +85,9 @@ describe('field configuration', () => {
             max: 16,
             default: 4,
         });
-        expect(POST_EFFECT_SHADER_SOURCE).toContain('let attenuation=1./(1.+p(106)*dot(rayOffset,rayOffset))');
+        expect(POST_EFFECT_SHADER_SOURCE).toContain(
+            'let travel=(uv-q)*vec2f(u.resolution.x/u.resolution.y,1.);let attenuation=1./(1.+p(106)*dot(travel,travel)*16.)',
+        );
         expect(POST_EFFECT_SHADER_SOURCE).toContain('*attenuation');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('for(var i=0u;i<128u;i++)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('center+(startUv-center)');
