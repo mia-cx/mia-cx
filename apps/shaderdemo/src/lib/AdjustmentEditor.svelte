@@ -47,7 +47,7 @@
             </select></label
         >
     {/if}
-    {#each descriptors as item}<label
+    {#each descriptors as item}<label class={`channel-${item}`}
             ><input
                 type="checkbox"
                 checked={channelMask.includes(item)}
@@ -104,14 +104,23 @@
         color: #aaa;
         text-transform: none;
     }
-    .channels label:nth-child(1) {
+    .channels .channel-r {
         color: #ff7777;
     }
-    .channels label:nth-child(2) {
+    .channels .channel-g {
         color: #77ff91;
     }
-    .channels label:nth-child(3) {
+    .channels .channel-b {
         color: #8298ff;
+    }
+    .channels .channel-h {
+        color: #ff77df;
+    }
+    .channels .channel-s {
+        color: #77eaff;
+    }
+    .channels .channel-l {
+        color: #fff28a;
     }
     .channels .mode {
         color: #aaa;
