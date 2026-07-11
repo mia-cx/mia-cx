@@ -363,9 +363,11 @@
                         {#if gpuRolling.perPass5s.length}
                             <details class="per-effect-timings">
                                 <summary>Per-effect timings</summary>
-                                {#each gpuRolling.perPass5s as pass}
-                                    <span>{pass.label} {number(pass.ms)}ms</span>
-                                {/each}
+                                <ul>
+                                    {#each gpuRolling.perPass5s as pass}
+                                        <li><span>{pass.label}</span><span>{number(pass.ms)}ms</span></li>
+                                    {/each}
+                                </ul>
                             </details>
                         {/if}
                     {:else}
@@ -705,6 +707,16 @@
     }
     .fps {
         line-height: 1.45;
+    }
+    .per-effect-timings ul {
+        margin: 4px 0 0;
+        padding: 0;
+        list-style: none;
+    }
+    .per-effect-timings li {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
     }
     nav {
         position: fixed;
