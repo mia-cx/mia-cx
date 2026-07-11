@@ -242,6 +242,10 @@ describe('field configuration', () => {
     });
     it('uses fast static scatter and frame-varying tile noise', () => {
         expect(OCTAVE_SHADER_SOURCE).toContain('fn avalanche(value: u32)');
+        expect(OCTAVE_SHADER_SOURCE).toContain(
+            '(coordinate.x*0x9e3779b9u) ^ (coordinate.y*0x85ebca6bu) ^ (u32(u.seed)*0xc2b2ae35u)',
+        );
+        expect(OCTAVE_SHADER_SOURCE).toContain('(u32(u.octaveIndex)*0x27d4eb2du) ^ (sampleIndex*0x165667b1u)');
         expect(OCTAVE_SHADER_SOURCE).toContain('array<vec2f,16>');
         expect(OCTAVE_SHADER_SOURCE).toContain('sampleIndex<4u');
         expect(OCTAVE_SHADER_SOURCE).toContain('mix(1.,4.,settings.z)');

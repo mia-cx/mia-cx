@@ -332,7 +332,7 @@ fn avalanche(value: u32) -> u32 {
 }
 fn tileHash(tile: vec2f, salt: u32) -> u32 {
     let coordinate=vec2u(tile);
-    return avalanche(coordinate.x*0x9e3779b9u ^ coordinate.y*0x85ebca6bu ^ u32(u.seed)*0xc2b2ae35u ^ salt);
+    return avalanche((coordinate.x*0x9e3779b9u) ^ (coordinate.y*0x85ebca6bu) ^ (u32(u.seed)*0xc2b2ae35u) ^ salt);
 }
 fn scatterOffset(tile: vec2f, sampleIndex: u32, distance: f32) -> vec2f {
     // Paint.NET Frosted Glass: one hash supplies an independent quantized direction and radius per sample.
@@ -342,7 +342,7 @@ fn scatterOffset(tile: vec2f, sampleIndex: u32, distance: f32) -> vec2f {
         vec2f(-1.,0.),vec2f(-.9238795,-.3826834),vec2f(-.7071068,-.7071068),vec2f(-.3826834,-.9238795),
         vec2f(0.,-1.),vec2f(.3826834,-.9238795),vec2f(.7071068,-.7071068),vec2f(.9238795,-.3826834)
     );
-    let bits=tileHash(tile,u32(u.octaveIndex)*0x27d4eb2du ^ sampleIndex*0x165667b1u);
+    let bits=tileHash(tile,(u32(u.octaveIndex)*0x27d4eb2du) ^ (sampleIndex*0x165667b1u));
     let radius=f32(bits>>8u)*(1./16777215.)*distance;
     return directions[bits&15u]*radius;
 }
@@ -376,7 +376,7 @@ fn scatterOffset(tile: vec2f, sampleIndex: u32, distance: f32) -> vec2f {
     // Literal noise is constant per effect-space tile, but independently salted for each rendered frame.
     var injected=scattered;
     if(settings.x!=0.) {
-        let noiseBits=tileHash(tile,u32(u.octaveIndex)*0x27d4eb2du ^ u32(u.frameIndex)*0x165667b1u ^ 0xa511e9b3u);
+        let noiseBits=tileHash(tile,(u32(u.octaveIndex)*0x27d4eb2du) ^ (u32(u.frameIndex)*0x165667b1u) ^ 0xa511e9b3u);
         let detail=f32(noiseBits)*(1./4294967295.)-.5;
         injected+=detail*settings.x;
     }
