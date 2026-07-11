@@ -93,7 +93,12 @@
             "filmGrainSize": 1,
             "godRaysBlendMode": 0,
             "bloomBlendMode": 0,
-            "glowBlendMode": 0
+            "glowBlendMode": 0,
+            "chromaticAberrationEnabled": 1,
+            "vignetteEnabled": 1,
+            "lensDistortionEnabled": 1,
+            "sharpenEnabled": 1,
+            "filmGrainEnabled": 1
         },
         "adjustments": [
             {

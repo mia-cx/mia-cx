@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fixture from './default-settings.json';
 import { newCurve } from './adjustments';
-import { defaultParameters, FIELD_PARAMETER_SCHEMA, PARAMETER_SCHEMA } from './renderer';
+import { defaultParameters, FIELD_PARAMETER_SCHEMA, PARAMETER_SCHEMA, POST_PARAMETER_SCHEMA } from './renderer';
 import {
     SETTINGS_STORAGE_KEY,
     defaultShaderSettings,
@@ -93,5 +93,16 @@ describe('tab-scoped settings reset', () => {
             version: fixture.version,
             settings: { ...fixture.settings, seed: 999 },
         });
+    });
+
+    it('resets and exports the appended post toggles as enabled', () => {
+        const keys = POST_PARAMETER_SCHEMA.slice(-5).map(({ key }) => key);
+        expect(keys.map((key) => defaultShaderSettings().parameters[key])).toEqual([1, 1, 1, 1, 1]);
+        const settings = tuned();
+        for (const key of keys) settings.parameters[key] = 0;
+        const reset = resetSettingsTab(settings, 'post');
+        expect(keys.map((key) => reset.parameters[key])).toEqual([1, 1, 1, 1, 1]);
+        const exported = JSON.parse(serializeShaderSettings(reset)) as { settings: SavedShaderSettings };
+        expect(keys.map((key) => exported.settings.parameters[key])).toEqual([1, 1, 1, 1, 1]);
     });
 });

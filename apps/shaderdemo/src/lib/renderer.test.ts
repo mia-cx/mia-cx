@@ -200,8 +200,8 @@ describe('field configuration', () => {
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
         expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(90);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(90);
+        expect(PARAMETER_SCHEMA).toHaveLength(95);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(95);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -311,7 +311,7 @@ describe('field configuration', () => {
         parameters.octave3Pixelate = 1;
         const data = packUniform([320, 180], 2, 9, parameters, 4, 73);
         expect(data).toHaveLength(UNIFORM_FLOATS);
-        expect(data.byteLength).toBe(384);
+        expect(data.byteLength).toBe(400);
         expect(Array.from(data.slice(12, 18))).toEqual(Array.from(new Float32Array([1, 0.45, -0.25, -1, 4, 2])));
         expect(data[29]).toBe(4);
         expect(data[30]).toBe(5);
@@ -492,5 +492,33 @@ describe('field configuration', () => {
     });
     it('can bypass the stage-one threshold to expose the raw field', () => {
         expect(BASE_SHADER_SOURCE).toContain('if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }');
+    });
+    it('appends and packs independent lens and camera toggles without moving existing post uniforms', () => {
+        const toggleKeys = [
+            'chromaticAberrationEnabled',
+            'vignetteEnabled',
+            'lensDistortionEnabled',
+            'sharpenEnabled',
+            'filmGrainEnabled',
+        ] as const;
+        expect(POST_PARAMETER_SCHEMA).toHaveLength(40);
+        expect(POST_PARAMETER_SCHEMA.slice(35).map(({ key }) => key)).toEqual(toggleKeys);
+        expect(POST_PARAMETER_SCHEMA.slice(35).every(({ default: value }) => value === 1)).toBe(true);
+        const parameters = defaultParameters();
+        toggleKeys.forEach((key, index) => (parameters[key] = index + 10));
+        const packed = packUniform([1, 1], 0, 0, parameters);
+        expect(packed).toHaveLength(100);
+        expect(Array.from(packed.slice(95, 100))).toEqual([10, 11, 12, 13, 14]);
+        expect(COMMON_SHADER_SOURCE).toContain('post: array<vec4f, 10>');
+    });
+    it('gates every lens and camera effect before its sampling or math', () => {
+        expect(DISPLAY_SHADER_SOURCE).toContain(
+            'let distortionEnabled=u.post[9].y>.5 && u.post[7].x!=0.; let dispersionEnabled=u.post[8].w>.5 && u.post[6].y!=0.;',
+        );
+        expect(DISPLAY_SHADER_SOURCE).toContain('if(distortionEnabled || dispersionEnabled)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('if(u.post[9].z>.5 && u.post[7].y!=0.)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('if(u.post[9].x>.5 && u.post[6].z!=0.)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('if(u.post[9].w>.5 && u.post[7].z!=0.)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('if(dispersionEnabled)');
     });
 });

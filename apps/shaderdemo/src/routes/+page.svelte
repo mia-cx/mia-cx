@@ -119,18 +119,11 @@
             keys: ['bloomThreshold', 'bloomKnee', 'bloomIntensity', 'bloomRadius', 'bloomBlendMode'],
         },
         { label: 'Glow', toggle: 'glowEnabled', keys: ['glowIntensity', 'glowHue', 'glowBlendMode'] },
-        {
-            label: 'Lens / camera',
-            keys: [
-                'lensDistortion',
-                'chromaticAberration',
-                'vignetteAmount',
-                'vignetteSoftness',
-                'sharpen',
-                'filmGrainAmount',
-                'filmGrainSize',
-            ],
-        },
+        { label: 'Chromatic aberration', toggle: 'chromaticAberrationEnabled', keys: ['chromaticAberration'] },
+        { label: 'Vignette', toggle: 'vignetteEnabled', keys: ['vignetteAmount', 'vignetteSoftness'] },
+        { label: 'Lens distortion', toggle: 'lensDistortionEnabled', keys: ['lensDistortion'] },
+        { label: 'Sharpen', toggle: 'sharpenEnabled', keys: ['sharpen'] },
+        { label: 'Film grain', toggle: 'filmGrainEnabled', keys: ['filmGrainAmount', 'filmGrainSize'] },
     ] as const;
 
     function tabKeydown(event: KeyboardEvent) {

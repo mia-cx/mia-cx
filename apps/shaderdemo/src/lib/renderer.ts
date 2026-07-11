@@ -157,6 +157,11 @@ export const POST_PARAMETER_SCHEMA = [
     { key: 'godRaysBlendMode', label: 'Blend mode', min: 0, max: 14, step: 1, default: 0 },
     { key: 'bloomBlendMode', label: 'Blend mode', min: 0, max: 14, step: 1, default: 0 },
     { key: 'glowBlendMode', label: 'Blend mode', min: 0, max: 14, step: 1, default: 0 },
+    { key: 'chromaticAberrationEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
+    { key: 'vignetteEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
+    { key: 'lensDistortionEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
+    { key: 'sharpenEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
+    { key: 'filmGrainEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
 ] as const;
 
 /** Numeric order is persisted; append only. */
@@ -238,7 +243,7 @@ export function fullResolutionPassSizes(width: number, height: number, renderSca
     return Array.from({ length: OCTAVE_COUNT + 1 }, () => ({ ...size }));
 }
 
-export const UNIFORM_FLOATS = 96;
+export const UNIFORM_FLOATS = 100;
 export function packUniform(
     resolution: [number, number],
     time: number,
@@ -310,7 +315,7 @@ struct U {
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
  centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32, frameIndex: f32,
  octaves: array<vec4f, 5>,
- blurRadii: array<vec4f, 2>, post: array<vec4f, 9>
+ blurRadii: array<vec4f, 2>, post: array<vec4f, 10>
 };
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -612,16 +617,16 @@ fn adjusted(v:f32)->vec3f { let f=clamp(v,0.,1.); if(u.blurRadii[1].w<=.5) { ret
 fn sourceValue(uv:vec2f)->f32 { return pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); }
 fn lensUv(centered:vec2f,coefficient:f32,fit:f32)->vec2f { return .5+centered*((1.+coefficient*dot(centered,centered))/fit)*.5; }
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f {
- let uv=pos.xy/u.resolution; let centered=uv*2.-1.; let distortion=u.post[7].x; let dispersion=u.post[6].y*.001;
- let redCoefficient=distortion-dispersion*.552535; let greenCoefficient=distortion; let blueCoefficient=distortion+dispersion;
- let fit=1.+2.*max(0.,max(redCoefficient,max(greenCoefficient,blueCoefficient))); let redUv=lensUv(centered,redCoefficient,fit); let greenUv=lensUv(centered,greenCoefficient,fit); let blueUv=lensUv(centered,blueCoefficient,fit);
- var f=sourceValue(greenUv); if(u.post[7].y!=0.) { let px=1./u.resolution; let n=sourceValue(greenUv+vec2f(px.x,0))+sourceValue(greenUv-vec2f(px.x,0))+sourceValue(greenUv+vec2f(0,px.y))+sourceValue(greenUv-vec2f(0,px.y)); f+=(f*4.-n)*u.post[7].y; }
- var rgb=adjusted(f); if(dispersion!=0.) { rgb=vec3f(adjusted(sourceValue(redUv)).r,rgb.g,adjusted(sourceValue(blueUv)).b); }
+ let uv=pos.xy/u.resolution; let centered=uv*2.-1.; var sampleUv=uv; var redUv=uv; var blueUv=uv;
+ let distortionEnabled=u.post[9].y>.5 && u.post[7].x!=0.; let dispersionEnabled=u.post[8].w>.5 && u.post[6].y!=0.;
+ if(distortionEnabled || dispersionEnabled) { let distortion=select(0.,u.post[7].x,distortionEnabled); let dispersion=select(0.,u.post[6].y*.001,dispersionEnabled); let redCoefficient=distortion-dispersion*.552535; let greenCoefficient=distortion; let blueCoefficient=distortion+dispersion; let fit=1.+2.*max(0.,max(redCoefficient,max(greenCoefficient,blueCoefficient))); sampleUv=lensUv(centered,greenCoefficient,fit); if(dispersionEnabled) { redUv=lensUv(centered,redCoefficient,fit); blueUv=lensUv(centered,blueCoefficient,fit); } }
+ var f=sourceValue(sampleUv); if(u.post[9].z>.5 && u.post[7].y!=0.) { let px=1./u.resolution; let n=sourceValue(sampleUv+vec2f(px.x,0))+sourceValue(sampleUv-vec2f(px.x,0))+sourceValue(sampleUv+vec2f(0,px.y))+sourceValue(sampleUv-vec2f(0,px.y)); f+=(f*4.-n)*u.post[7].y; }
+ var rgb=adjusted(f); if(dispersionEnabled) { rgb=vec3f(adjusted(sourceValue(redUv)).r,rgb.g,adjusted(sourceValue(blueUv)).b); }
  if(u.post[0].x>.5) { rgb*=exp2(u.post[0].y); let temp=(u.post[0].z-6500.)/2000.; rgb*=vec3f(1.+temp*.08,1.,1.-temp*.08); rgb+=vec3f(u.post[0].w*.25,u.post[0].w*.5,-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let l=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(l),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,l))+u.post[2].x*smoothstep(.5,1.,l); }
  if(u.post[2].y>.5 && u.post[2].z!=0. && u.post[2].w!=0.) { rgb=blendLayer(rgb,textureSample(godRays,samp,uv).rgb,u.post[8].x); }
  var bloomRgb=vec3f(0); if((u.post[4].y>.5 && u.post[5].x!=0.) || (u.post[5].z>.5 && u.post[5].w!=0.)) { bloomRgb=textureSample(bloom,samp,uv).rgb; }
  if(u.post[4].y>.5 && u.post[5].x!=0.) { rgb=blendLayer(rgb,bloomRgb*u.post[5].x,u.post[8].y); } if(u.post[5].z>.5 && u.post[5].w!=0.) { rgb=blendLayer(rgb,hueRotate(bloomRgb,u.post[6].x)*u.post[5].w,u.post[8].z); }
- if(u.post[6].z!=0.) { let edge=smoothstep(1.-u.post[6].w,1.,length(centered)*.707); rgb*=1.-edge*u.post[6].z; } if(u.post[7].z!=0.) { let grain=fract(sin(dot(floor(pos.xy/u.post[7].w),vec2f(12.9898,78.233))+u.frameIndex)*43758.5453)-.5; rgb+=grain*u.post[7].z; }
+ if(u.post[9].x>.5 && u.post[6].z!=0.) { let edge=smoothstep(1.-u.post[6].w,1.,length(centered)*.707); rgb*=1.-edge*u.post[6].z; } if(u.post[9].w>.5 && u.post[7].z!=0.) { let grain=fract(sin(dot(floor(pos.xy/u.post[7].w),vec2f(12.9898,78.233))+u.frameIndex)*43758.5453)-.5; rgb+=grain*u.post[7].z; }
  return vec4f(rgb,1.);
 }`;
 export const BLOOM_EXTRACT_SHADER_SOURCE =
