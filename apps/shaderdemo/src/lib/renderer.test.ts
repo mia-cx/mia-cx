@@ -85,17 +85,32 @@ describe('field configuration', () => {
             expect(parameter.default).toBeLessThanOrEqual(parameter.max);
             expect(defaultParameters()[parameter.key]).toBe(parameter.default);
         }
-        expect(defaultParameters().centerDarkness).toBe(0);
         expect(defaultParameters().thresholdEnabled).toBe(1);
         expect(defaultParameters()).toMatchObject({
-            baseBlendMode: 0,
+            fieldScale: 1007,
+            flowStretch: 2.5,
+            billowAmount: 1,
+            ridgeAmount: 2,
+            ridgeSharpness: 4,
+            baseBlendMode: 2,
+            warpScale: 0.2,
+            warpStrength: 0,
             secondaryEnabled: 1,
-            secondaryScale: 1.1,
-            secondaryCloudAmount: 0,
-            secondaryRibbonAmount: 0,
-            secondaryRibbonSharpness: 1.76,
-            secondaryBlendMode: 0,
-            secondaryRibbonBlendMode: 0,
+            secondaryScale: 0.45,
+            secondaryCloudAmount: -0.25,
+            secondaryRibbonAmount: -1,
+            secondaryRibbonSharpness: 4,
+            secondaryBlendMode: 2,
+            secondaryRibbonBlendMode: 2,
+            threshold: 0.5,
+            thresholdSoftness: 0.5,
+            finalContrast: 1.8,
+            centerDarkness: 0.6,
+            centerWidth: 0.75,
+            centerHeight: 0.85,
+            centerRoundness: 4.7,
+            centerSoftness: 1.5,
+            animationSpeed: 0.45,
         });
         for (const key of ['billowAmount', 'ridgeAmount', 'secondaryCloudAmount', 'secondaryRibbonAmount'] as const) {
             expect(FIELD_PARAMETER_SCHEMA.find((parameter) => parameter.key === key)?.min).toBe(-2);
@@ -132,11 +147,11 @@ describe('field configuration', () => {
         expect(normalized.parameters.secondaryScale).toBe(2);
         expect(Object.keys(normalized.parameters).some((key) => key.startsWith('tertiary'))).toBe(false);
     });
-    it('defaults old saved settings to Add and normalizes categorical modes', () => {
+    it('uses current defaults for missing saved settings and normalizes categorical modes', () => {
         const old = normalizeSavedSettings({ seed: 7, parameters: {} as ReturnType<typeof defaultParameters> });
-        expect(old.parameters.baseBlendMode).toBe(0);
-        expect(old.parameters.secondaryBlendMode).toBe(0);
-        expect(old.parameters.secondaryRibbonBlendMode).toBe(0);
+        expect(old.parameters.baseBlendMode).toBe(2);
+        expect(old.parameters.secondaryBlendMode).toBe(2);
+        expect(old.parameters.secondaryRibbonBlendMode).toBe(2);
 
         const parameters = defaultParameters();
         parameters.baseBlendMode = 1.6;
@@ -151,7 +166,7 @@ describe('field configuration', () => {
         const data = packUniform([320, 180], 2, 9, parameters, 4, 73);
         expect(data).toHaveLength(UNIFORM_FLOATS);
         expect(data.byteLength).toBe(240);
-        expect(Array.from(data.slice(12, 18))).toEqual(Array.from(new Float32Array([1, 1.1, 0, 0, 1.76, 0])));
+        expect(Array.from(data.slice(12, 18))).toEqual(Array.from(new Float32Array([1, 0.45, -0.25, -1, 4, 2])));
         expect(data[29]).toBe(4);
         expect(data[30]).toBe(5);
         expect(data[31]).toBe(73);
