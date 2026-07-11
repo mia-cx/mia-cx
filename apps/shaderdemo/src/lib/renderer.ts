@@ -1,5 +1,5 @@
 import { FrameTelemetry, type FrameRollingSummary } from './telemetry';
-import { composeAdjustmentLut, type Adjustment } from './adjustments';
+import { ADJUSTMENT_LUT_SIZE, composeAdjustmentLut, type Adjustment } from './adjustments';
 
 export const FIELD_PARAMETER_SCHEMA = [
     { key: 'fieldScale', label: 'Base field size', min: 32, max: 2048, step: 1, default: 1007 },
@@ -435,15 +435,19 @@ export const DISPLAY_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
-@group(0) @binding(3) var adjustmentLut: texture_2d<u32>;
+@group(0) @binding(3) var adjustmentLut: texture_2d<f32>;
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let density=textureSample(src,samp,uv).r;
     var f=pow(clamp(density,0.,1.),u.finalContrast);
     // Existing final contrast first; adjustment LUT is the new final stage.
     if(u.blurRadii[1].w>.5) {
-        let rgb=textureLoad(adjustmentLut,vec2i(i32(floor(f*255.+.5)),0),0).rgb;
-        return vec4f(vec3f(rgb)/255.,1.);
+        let position=clamp(f,0.,1.)*4095.;
+        let lo=i32(floor(position));
+        let hi=min(lo+1,4095);
+        let fraction=position-f32(lo);
+        let rgb=mix(textureLoad(adjustmentLut,vec2i(lo,0),0).rgb,textureLoad(adjustmentLut,vec2i(hi,0),0).rgb,fraction);
+        return vec4f(rgb,1.);
     }
     return vec4f(vec3f(f),1.);
 }`;
@@ -537,8 +541,8 @@ export class AtmosphereRenderer {
         );
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
         self.adjustmentTexture = self.device.createTexture({
-            size: [256, 1],
-            format: 'rgba8uint',
+            size: [ADJUSTMENT_LUT_SIZE, 1],
+            format: 'rgba16float',
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
         });
         self.adjustmentView = self.adjustmentTexture.createView();
@@ -599,9 +603,15 @@ export class AtmosphereRenderer {
         if (key === this.adjustmentsKey) return;
         this.adjustmentsKey = key;
         const lut = composeAdjustmentLut(this.options.adjustments);
-        const bytes = new ArrayBuffer(lut.byteLength);
-        new Uint8Array(bytes).set(lut);
-        this.device.queue.writeTexture({ texture: this.adjustmentTexture }, bytes, { bytesPerRow: 1024 }, [256, 1]);
+        // Copy into an ArrayBuffer-backed view (WebGPU deliberately rejects SharedArrayBuffer views).
+        const upload = new Uint16Array(new ArrayBuffer(lut.byteLength));
+        upload.set(lut);
+        this.device.queue.writeTexture(
+            { texture: this.adjustmentTexture },
+            upload,
+            { bytesPerRow: ADJUSTMENT_LUT_SIZE * 4 * 2 },
+            [ADJUSTMENT_LUT_SIZE, 1],
+        );
     }
     setPaused(value: boolean) {
         this.paused = value;

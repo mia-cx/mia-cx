@@ -28,12 +28,14 @@ import {
 import { defaultShaderSettings, normalizeSavedSettings } from './settings';
 
 describe('field configuration', () => {
-    it('does one exact integer adjustment lookup in the existing display shader', () => {
-        expect(DISPLAY_SHADER_SOURCE.match(/textureLoad\(adjustmentLut/g)).toHaveLength(1);
-        expect(DISPLAY_SHADER_SOURCE).toContain('texture_2d<u32>');
-        expect(DISPLAY_SHADER_SOURCE).toContain('.rgb;');
-        expect(DISPLAY_SHADER_SOURCE).toContain('vec3f(rgb)/255.');
-        expect(DISPLAY_SHADER_SOURCE).toContain('floor(f*255.+.5)');
+    it('linearly interpolates the high-depth adjustment LUT in the existing display shader', () => {
+        expect(DISPLAY_SHADER_SOURCE.match(/textureLoad\(adjustmentLut/g)).toHaveLength(2);
+        expect(DISPLAY_SHADER_SOURCE).toContain('texture_2d<f32>');
+        expect(DISPLAY_SHADER_SOURCE).toContain('position=clamp(f,0.,1.)*4095.');
+        expect(DISPLAY_SHADER_SOURCE).toContain('let hi=min(lo+1,4095)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('mix(textureLoad');
+        expect(DISPLAY_SHADER_SOURCE).not.toContain('f*255');
+        expect(DISPLAY_SHADER_SOURCE).not.toContain('/255.');
         expect(DISPLAY_SHADER_SOURCE).toContain('if(u.blurRadii[1].w>.5)');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('textureSample(adjustmentLut');
     });

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
     CHANNELS,
+    ADJUSTMENT_LUT_SIZE,
+    applyAdjustmentStackFloat,
+    applyHslAdjustmentFloat,
     applyHslAdjustment,
     applyCurveEdit,
     applyCurveEditToChannels,
@@ -14,6 +17,7 @@ import {
     newHslCurve,
     newHslAdjustment,
     newLevels,
+    normalizedFloatToHalf,
     rgbToHsl,
     sanitizeAdjustments,
     setCurveMode,
@@ -21,6 +25,13 @@ import {
     setLevelsChannelsValue,
     toggleChannelMask,
 } from './adjustments';
+
+const halfToFloat = (half: number) => {
+    const sign = half & 0x8000 ? -1 : 1;
+    const exponent = (half >>> 10) & 0x1f;
+    const fraction = half & 0x3ff;
+    return exponent === 0 ? sign * 2 ** -14 * (fraction / 1024) : sign * 2 ** (exponent - 15) * (1 + fraction / 1024);
+};
 
 describe('RGB Paint.NET adjustment semantics', () => {
     it('creates independent identity channels', () => {
@@ -81,7 +92,7 @@ describe('RGB Paint.NET adjustment semantics', () => {
             expect(a.channels.b).toEqual(identityLevels());
         }
     });
-    it('composes channels independently into interleaved RGBA with quantization', () => {
+    it('composes channels independently into an interleaved high-depth RGBA16F LUT', () => {
         const curve = newCurve();
         curve.channels.r = [
             { x: 0, y: 0 },
@@ -93,21 +104,25 @@ describe('RGB Paint.NET adjustment semantics', () => {
         ];
         const levels = newLevels();
         levels.channels.r.gamma = 2;
-        const lut = composeAdjustmentLut([curve, levels]),
-            i = 200 * 4;
-        expect(lut).toHaveLength(1024);
-        expect([...lut.slice(i, i + 4)]).toEqual([
-            Math.trunc(255 * (Math.trunc((200 * 128) / 255) / 255) ** 2),
-            200,
-            55,
-            255,
-        ]);
+        const lut = composeAdjustmentLut([curve, levels]);
+        expect(lut).toBeInstanceOf(Uint16Array);
+        expect(lut).toHaveLength(ADJUSTMENT_LUT_SIZE * 4);
+        const rgb = applyAdjustmentStackFloat([curve, levels], [200 / 255, 200 / 255, 200 / 255]);
+        expect(rgb[0]).toBeCloseTo((200 / 255) ** 2 * (128 / 255) ** 2, 6);
+        expect(rgb[1]).toBeCloseTo(200 / 255, 10);
+        expect(rgb[2]).toBeCloseTo(55 / 255, 10);
     });
     it('returns RGBA identity when all disabled', () => {
         const a = newCurve();
         a.enabled = false;
         const lut = composeAdjustmentLut([a]);
-        expect([...lut.slice(200 * 4, 200 * 4 + 4)]).toEqual([200, 200, 200, 255]);
+        const i = 200 * 4;
+        expect([...lut.slice(i, i + 4)].map(halfToFloat)).toEqual([
+            halfToFloat(normalizedFloatToHalf(200 / 4095)),
+            halfToFloat(normalizedFloatToHalf(200 / 4095)),
+            halfToFloat(normalizedFloatToHalf(200 / 4095)),
+            1,
+        ]);
     });
     it('pushes endpoints only in the edited channel and deep-copies that path', () => {
         const a = newLevels();
@@ -175,11 +190,12 @@ describe('RGB Paint.NET adjustment semantics', () => {
         green.forEach((value, index) => expect(value).toBeCloseTo([0, 1, 0][index]));
         blue.forEach((value, index) => expect(value).toBeCloseTo([0, 0, 1][index]));
     });
-    it('keeps every grayscale byte exact through an identity HSL curve', () => {
+    it('keeps endpoints and midpoint through an identity HSL curve', () => {
         const lut = composeAdjustmentLut([newHslCurve()]);
-        for (let value = 0; value < 256; value++) {
-            expect([...lut.slice(value * 4, value * 4 + 4)]).toEqual([value, value, value, 255]);
-        }
+        expect([...lut.slice(0, 4)]).toEqual([0, 0, 0, 0x3c00]);
+        expect([...lut.slice(-4)]).toEqual([0x3c00, 0x3c00, 0x3c00, 0x3c00]);
+        const middle = 2048 * 4;
+        expect(halfToFloat(lut[middle])).toBeCloseTo(2048 / 4095, 3);
     });
     it('interleaves RGB and HSL curves in literal stack order', () => {
         const rgb = newCurve();
@@ -196,10 +212,10 @@ describe('RGB Paint.NET adjustment semantics', () => {
             { x: 0, y: 85 },
             { x: 255, y: 85 },
         ];
-        const forward = composeAdjustmentLut([rgb, hsl]);
-        const reverse = composeAdjustmentLut([hsl, rgb]);
-        expect([...forward.slice(128 * 4, 128 * 4 + 4)]).toEqual([0, 128, 0, 255]);
-        expect([...reverse.slice(128 * 4, 128 * 4 + 4)]).toEqual([128, 0, 0, 255]);
+        const forward = applyAdjustmentStackFloat([rgb, hsl], [0.5, 0.5, 0.5]);
+        const reverse = applyAdjustmentStackFloat([hsl, rgb], [0.5, 0.5, 0.5]);
+        forward.forEach((value, index) => expect(value).toBeCloseTo([0, 0.5, 0][index], 12));
+        expect(reverse).toEqual([0.5, 0, 0]);
     });
     it('migrates legacy curves to RGB and sanitizes HSL channels independently', () => {
         const [legacy, hsl] = sanitizeAdjustments([
@@ -262,7 +278,25 @@ describe('RGB Paint.NET adjustment semantics', () => {
             { type: 'hsl', id: 'keep', enabled: false, hue: 999, saturation: -4, lightness: NaN },
         ]);
         expect(a).toMatchObject({ id: 'keep', enabled: false, hue: 180, saturation: 0, lightness: 0 });
-        const lut = composeAdjustmentLut([a]);
-        expect([...lut.slice(90 * 4, 90 * 4 + 4)]).toEqual([90, 90, 90, 255]);
+        expect(applyAdjustmentStackFloat([a], [0.12345, 0.12345, 0.12345])).toEqual([0.12345, 0.12345, 0.12345]);
+    });
+
+    it('encodes normalized floats as finite IEEE binary16 patterns', () => {
+        expect(normalizedFloatToHalf(0)).toBe(0x0000);
+        expect(normalizedFloatToHalf(1)).toBe(0x3c00);
+        expect(normalizedFloatToHalf(0.5)).toBe(0x3800);
+        expect(halfToFloat(normalizedFloatToHalf(0.12345))).toBeCloseTo(0.12345, 3);
+        expect(normalizedFloatToHalf(NaN)).toBe(0);
+    });
+
+    it('preserves sub-byte detail through hue rotation and neighboring LUT entries', () => {
+        const adjustment = { ...newHslAdjustment(), hue: 37, saturation: 143 };
+        const precise = applyHslAdjustmentFloat(adjustment, [0.12345, 0.45678, 0.78901]);
+        expect(precise.some((value) => Math.abs(value * 255 - Math.round(value * 255)) > 1e-4)).toBe(true);
+        const lut = composeAdjustmentLut([adjustment]);
+        const a = halfToFloat(lut[2000 * 4]);
+        const b = halfToFloat(lut[2001 * 4]);
+        expect(Math.abs(b - a)).toBeGreaterThan(0);
+        expect(Math.abs(b - a)).toBeLessThan(1 / 255);
     });
 });

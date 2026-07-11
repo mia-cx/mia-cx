@@ -1,5 +1,6 @@
 export const MAX_ADJUSTMENTS = 128;
 export const MAX_CURVE_POINTS = 256;
+export const ADJUSTMENT_LUT_SIZE = 4096;
 export const CHANNELS = ['r', 'g', 'b'] as const;
 export type Channel = (typeof CHANNELS)[number];
 export const HSL_CHANNELS = ['h', 's', 'l'] as const;
@@ -263,37 +264,142 @@ export function hslToRgb(h: number, s: number, l: number): [number, number, numb
                     : [c, 0, x];
     return [rgb[0] + m, rgb[1] + m, rgb[2] + m];
 }
-const normalizedByte = (v: number) => Math.floor(clamp(v, 0, 1) * 255 + 0.5);
-/** One RGBA8 LUT. This is valid because the shader's pre-adjustment output is scalar grayscale. */
-export function composeAdjustmentLut(stack: Adjustment[]): Uint8Array {
-    const rgba = new Uint8Array(1024);
-    const prepared = stack.map((a) =>
-        a.type === 'hsl'
-            ? { a, luts: undefined }
-            : a.type === 'levels'
-              ? { a, luts: CHANNELS.map((c) => levelsLut(a.channels[c])) }
-              : a.mode === 'rgb'
-                ? { a, luts: CHANNELS.map((c) => curveLut(a.channels[c])) }
-                : { a, luts: HSL_CHANNELS.map((c) => curveLut(a.channels[c])) },
+/** Convert a finite normalized float to IEEE 754 binary16, with round-to-nearest-even. */
+export function normalizedFloatToHalf(value: number): number {
+    const v = clamp(Number.isFinite(value) ? value : 0, 0, 1);
+    if (v === 0) return 0;
+    const bits = new Uint32Array(new Float32Array([v]).buffer)[0];
+    const exponent = (bits >>> 23) & 0xff;
+    let halfExponent = exponent - 127 + 15;
+    let mantissa = bits & 0x7fffff;
+    if (halfExponent <= 0) {
+        if (halfExponent < -10) return 0;
+        mantissa |= 0x800000;
+        const shift = 14 - halfExponent;
+        const rounded = (mantissa + (1 << (shift - 1)) - 1 + ((mantissa >>> shift) & 1)) >>> shift;
+        return rounded;
+    }
+    if (halfExponent >= 31) return 0x7bff;
+    mantissa += 0xfff + ((mantissa >>> 13) & 1);
+    if (mantissa & 0x800000) {
+        mantissa = 0;
+        halfExponent++;
+        if (halfExponent >= 31) return 0x7bff;
+    }
+    return (halfExponent << 10) | (mantissa >>> 13);
+}
+
+export function levelsValueFloat(a: LevelsChannel, input: number): number {
+    const value = input * 255;
+    if (value < a.inputLow) return a.outputLow / 255;
+    if (value >= a.inputHigh) return a.outputHigh / 255;
+    return clamp(
+        (a.outputLow +
+            (a.outputHigh - a.outputLow) * Math.pow((value - a.inputLow) / (a.inputHigh - a.inputLow), a.gamma)) /
+            255,
+        0,
+        1,
     );
-    for (let i = 0; i < 256; i++) {
-        let rgb: [number, number, number] = [i, i, i];
-        for (const { a, luts } of prepared)
-            if (a.enabled) {
-                if (a.type === 'hsl') rgb = applyHslAdjustment(a, rgb);
-                else if (a.type !== 'curve' || a.mode === 'rgb')
-                    rgb = [luts![0][rgb[0]], luts![1][rgb[1]], luts![2][rgb[2]]];
-                else {
-                    const hsl = rgbToHsl(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
-                    const mapped = [
-                        luts![0][normalizedByte(hsl.h)] / 255,
-                        luts![1][normalizedByte(hsl.s)] / 255,
-                        luts![2][normalizedByte(hsl.l)] / 255,
-                    ];
-                    rgb = hslToRgb(mapped[0], mapped[1], mapped[2]).map(normalizedByte) as [number, number, number];
-                }
-            }
-        rgba.set([...rgb, 255], i * 4);
+}
+
+/** Paint.NET-shaped HSL control, evaluated without byte conversion or truncation. */
+export function applyHslAdjustmentFloat(a: HslAdjustment, rgb: [number, number, number]): [number, number, number] {
+    if (!a.enabled || (a.hue === 0 && a.saturation === 100 && a.lightness === 0)) return [...rgb];
+    const [r, g, b] = rgb;
+    const intensity = (7471 * b + 38470 * g + 19595 * r) / 65536;
+    const internalSaturation = a.saturation > 100 ? (a.saturation - 100) * 3 + 100 : a.saturation;
+    const factor = internalSaturation / 100;
+    let converted = [r, g, b].map((channel) => clamp(intensity + (channel - intensity) * factor, 0, 1)) as [
+        number,
+        number,
+        number,
+    ];
+    if (a.hue !== 0) {
+        const max = Math.max(...converted),
+            min = Math.min(...converted),
+            delta = max - min,
+            saturation = max === 0 ? 0 : delta / max;
+        let hue = 0;
+        if (delta !== 0)
+            hue =
+                max === converted[0]
+                    ? ((converted[1] - converted[2]) / delta) % 6
+                    : max === converted[1]
+                      ? (converted[2] - converted[0]) / delta + 2
+                      : (converted[0] - converted[1]) / delta + 4;
+        hue = (((hue / 6 + a.hue / 360) % 1) + 1) % 1;
+        const h = hue * 6,
+            sector = Math.floor(h),
+            fraction = h - sector,
+            p = max * (1 - saturation),
+            q = max * (1 - saturation * fraction),
+            t = max * (1 - saturation * (1 - fraction));
+        converted = (
+            saturation === 0
+                ? [max, max, max]
+                : sector === 0
+                  ? [max, t, p]
+                  : sector === 1
+                    ? [q, max, p]
+                    : sector === 2
+                      ? [p, max, t]
+                      : sector === 3
+                        ? [p, q, max]
+                        : sector === 4
+                          ? [t, p, max]
+                          : [max, p, q]
+        ) as [number, number, number];
+    }
+    if (a.lightness !== 0) {
+        const amount = Math.abs(a.lightness) / 100,
+            target = a.lightness > 0 ? 1 : 0;
+        converted = converted.map((channel) => channel * (1 - amount) + target * amount) as [number, number, number];
+    }
+    return converted;
+}
+
+/** Apply the literal stack order while retaining normalized floating-point components throughout. */
+export function applyAdjustmentStackFloat(
+    stack: Adjustment[],
+    input: [number, number, number],
+): [number, number, number] {
+    let rgb = [...input] as [number, number, number];
+    for (const a of stack) {
+        if (!a.enabled) continue;
+        if (a.type === 'hsl') rgb = applyHslAdjustmentFloat(a, rgb);
+        else if (a.type === 'levels')
+            rgb = CHANNELS.map((channel, i) => levelsValueFloat(a.channels[channel], rgb[i])) as [
+                number,
+                number,
+                number,
+            ];
+        else if (a.mode === 'rgb')
+            rgb = CHANNELS.map((channel, i) =>
+                clamp(interpolateNatural(a.channels[channel], rgb[i] * 255) / 255, 0, 1),
+            ) as [number, number, number];
+        else {
+            const hsl = rgbToHsl(...rgb);
+            rgb = hslToRgb(
+                clamp(interpolateNatural(a.channels.h, hsl.h * 255) / 255, 0, 1),
+                clamp(interpolateNatural(a.channels.s, hsl.s * 255) / 255, 0, 1),
+                clamp(interpolateNatural(a.channels.l, hsl.l * 255) / 255, 0, 1),
+            );
+        }
+    }
+    return rgb;
+}
+
+/** CPU-composed scalar-to-color RGBA16F LUT used by the renderer. */
+export function composeAdjustmentLut(stack: Adjustment[]): Uint16Array {
+    const rgba = new Uint16Array(ADJUSTMENT_LUT_SIZE * 4);
+    for (let i = 0; i < ADJUSTMENT_LUT_SIZE; i++) {
+        const value = i / (ADJUSTMENT_LUT_SIZE - 1);
+        const rgb = applyAdjustmentStackFloat(stack, [value, value, value]);
+        const offset = i * 4;
+        rgba[offset] = normalizedFloatToHalf(rgb[0]);
+        rgba[offset + 1] = normalizedFloatToHalf(rgb[1]);
+        rgba[offset + 2] = normalizedFloatToHalf(rgb[2]);
+        rgba[offset + 3] = 0x3c00;
     }
     return rgba;
 }
