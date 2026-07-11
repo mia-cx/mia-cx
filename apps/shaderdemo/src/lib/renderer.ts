@@ -1,4 +1,5 @@
 export const FIELD_PARAMETER_SCHEMA = [
+    { key: 'fieldScale', label: 'Base field size', min: 32, max: 512, step: 1, default: 128 },
     { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 2.5 },
     { key: 'ridgeMix', label: 'Billow / ridge mix', min: 0, max: 1, step: 0.01, default: 1 },
     { key: 'ridgeSharpness', label: 'Ridge sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
@@ -89,7 +90,7 @@ export function packUniform(
 ) {
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set([resolution[0], resolution[1], time, seed, ...FIELD_PARAMETER_SCHEMA.map(({ key }) => parameters[key])]);
-    data[20] = octaveIndex;
+    data[21] = octaveIndex;
     data.set(
         OCTAVE_PARAMETER_SCHEMA.flatMap((group) => group.map(({ key }) => parameters[key])),
         24,
@@ -104,7 +105,7 @@ export function advanceSimulationTime(time: number, deltaSeconds: number, speed:
 const common = /* wgsl */ `
 struct U {
  resolution: vec2f, time: f32, seed: f32,
- flowStretch: f32, ridgeMix: f32, ridgeSharpness: f32,
+ fieldScale: f32, flowStretch: f32, ridgeMix: f32, ridgeSharpness: f32,
  warpScale: f32, warpStrength: f32, threshold: f32, thresholdSoftness: f32,
  secondaryScale: f32, secondaryMix: f32, finalContrast: f32, animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
@@ -142,7 +143,7 @@ const baseShader =
     // Evaluate the original coarse field continuously at full resolution. This retains the old 1:128
     // composition scale without ever rasterizing/thresholding the whole image into a low-res mosaic.
     let centeredPixel=pos.xy-u.resolution*.5;
-    let fieldPixel=centeredPixel/128.;
+    let fieldPixel=centeredPixel/u.fieldScale;
     let flow=mat2x2f(.89,.45,-.45,.89)*vec2f(fieldPixel.x,fieldPixel.y*u.flowStretch);
     let drift=noise3v(flow*u.warpScale,t*.11)-.5;
     let p=flow+drift*u.warpStrength;
@@ -380,7 +381,7 @@ export class AtmosphereRenderer {
             const target = this.textures[(octave + 1) % 2];
             data[0] = target.width;
             data[1] = target.height;
-            data[20] = octave;
+            data[21] = octave;
             draw(target.createView(), this.pipelines[1], source, true);
         }
         data[0] = this.canvas.width;
