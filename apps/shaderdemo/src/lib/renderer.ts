@@ -157,18 +157,23 @@ const octaveShader =
     common +
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
+fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
+    let angle=hash(pixel+vec2f(salt*17.13,salt*5.71))*6.2831853;
+    let radius=sqrt(hash(pixel+vec2f(salt*3.37+41.9,salt*11.73-19.4)))*distance;
+    return vec2f(cos(angle),sin(angle))*radius;
+}
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let sourceSize=vec2f(textureDimensions(src));
     let settings=u.octaves[u32(u.octaveIndex)];
-    let offset=vec2f(settings.w)/sourceSize;
-    let center=textureSample(src,samp,uv).r;
-    // Four diagonal taps are a compact Kawase diffusion kernel at each progressively larger level.
-    let blurred=(textureSample(src,samp,uv+offset*vec2f(-1.,-1.)).r+
-        textureSample(src,samp,uv+offset*vec2f(1.,-1.)).r+
-        textureSample(src,samp,uv+offset*vec2f(-1.,1.)).r+
-        textureSample(src,samp,uv+offset).r)*.25;
-    let diffused=mix(center,blurred,settings.z);
+    let pixel=floor(pos.xy);
+    // Diffusion follows a frosted-glass scatter: deterministic random source pixels inside the distance radius.
+    let s0=textureSample(src,samp,uv+scatterOffset(pixel,1.+u.octaveIndex*7.,settings.w)/sourceSize).r;
+    let s1=textureSample(src,samp,uv+scatterOffset(pixel,2.+u.octaveIndex*7.,settings.w)/sourceSize).r;
+    let s2=textureSample(src,samp,uv+scatterOffset(pixel,3.+u.octaveIndex*7.,settings.w)/sourceSize).r;
+    let s3=textureSample(src,samp,uv+scatterOffset(pixel,4.+u.octaveIndex*7.,settings.w)/sourceSize).r;
+    // Zero smoothness keeps the hard single-pixel scatter; one averages four scatters into softer diffusion.
+    let diffused=mix(s0,(s0+s1+s2+s3)*.25,settings.z);
     let phase=u.time*(.17+u.octaveIndex*.047)+u.octaveIndex*13.71;
     // Every iteration injects 1:1 texel noise; earlier levels naturally become larger in final pixels.
     let detail=noise3(vec3f(pos.xy+vec2f(u.octaveIndex*7.3,-u.octaveIndex*4.9),phase))-.5;
