@@ -7,13 +7,18 @@
         OCTAVE_PARAMETER_SCHEMA,
         OCTAVE_PIXELATE_SCHEMA,
         PARAMETER_SCHEMA,
-        defaultParameters,
         type ParameterKey,
         type RenderOptions,
         type GpuTimingStats,
     } from '$lib/renderer';
     import { GpuTelemetry, type FrameRollingSummary, type GpuRollingSummary } from '$lib/telemetry';
-    import { normalizeSavedSettings, resetSettingsTab, serializeShaderSettings, shaderSettings } from '$lib/settings';
+    import {
+        defaultShaderSettings,
+        normalizeSavedSettings,
+        resetSettingsTab,
+        serializeShaderSettings,
+        shaderSettings,
+    } from '$lib/settings';
     import AdjustmentEditor from '$lib/AdjustmentEditor.svelte';
     import {
         MAX_ADJUSTMENTS,
@@ -26,12 +31,13 @@
 
     let canvas: HTMLCanvasElement;
     let renderer: AtmosphereRenderer | undefined;
+    const initialDefaults = defaultShaderSettings();
     let options: RenderOptions = {
-        seed: 4.2,
+        seed: initialDefaults.seed,
         dprCap: Number.POSITIVE_INFINITY,
         renderScale: 1,
-        parameters: defaultParameters(),
-        adjustments: [],
+        parameters: initialDefaults.parameters,
+        adjustments: initialDefaults.adjustments,
     };
     let paused = false;
     let controlsOpen = true;

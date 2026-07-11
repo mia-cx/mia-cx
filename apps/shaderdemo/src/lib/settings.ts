@@ -5,10 +5,10 @@ import {
     OCTAVE_PARAMETER_SCHEMA,
     OCTAVE_PIXELATE_SCHEMA,
     PARAMETER_SCHEMA,
-    defaultParameters,
     type ShaderParameters,
 } from './renderer';
 import { sanitizeAdjustments, type Adjustment } from './adjustments';
+import defaultSettingsFixture from './default-settings.json';
 
 export interface SavedShaderSettings {
     seed: number;
@@ -16,11 +16,10 @@ export interface SavedShaderSettings {
     adjustments: Adjustment[];
 }
 
-const initialSettings = (): SavedShaderSettings => ({
-    seed: 4.2,
-    parameters: defaultParameters(),
-    adjustments: [],
-});
+const canonicalSettings = defaultSettingsFixture.settings as unknown as SavedShaderSettings;
+
+/** Return an isolated copy so consumers can freely mutate nested adjustment points. */
+const initialSettings = (): SavedShaderSettings => JSON.parse(JSON.stringify(canonicalSettings)) as SavedShaderSettings;
 
 export const defaultShaderSettings = initialSettings;
 

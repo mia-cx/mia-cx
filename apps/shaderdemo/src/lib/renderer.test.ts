@@ -62,9 +62,10 @@ describe('field configuration', () => {
     it('creates fresh complete settings for reset-to-defaults', () => {
         const first = defaultShaderSettings();
         const second = defaultShaderSettings();
-        expect(first.seed).toBe(4.2);
+        expect(first.seed).toBe(496.02595502997605);
         expect(first.parameters).toEqual(defaultParameters());
-        expect(first.adjustments).toEqual([]);
+        expect(first.adjustments).toHaveLength(8);
+        expect(first.adjustments).not.toBe(second.adjustments);
         first.parameters.fieldScale = 32;
         expect(second.parameters.fieldScale).toBe(1007);
     });
@@ -132,7 +133,7 @@ describe('field configuration', () => {
         expect(defaultParameters()).toMatchObject({
             fieldScale: 1007,
             flowStretch: 2.5,
-            billowAmount: 1,
+            billowAmount: 1.1,
             ridgeAmount: 2,
             ridgeSharpness: 4,
             baseBlendMode: 2,
@@ -158,10 +159,10 @@ describe('field configuration', () => {
         for (const key of ['billowAmount', 'ridgeAmount', 'secondaryCloudAmount', 'secondaryRibbonAmount'] as const) {
             expect(FIELD_PARAMETER_SCHEMA.find((parameter) => parameter.key === key)?.min).toBe(-2);
         }
-        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual(Array(5).fill(0.005));
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual([0.005, 0.01, 0.015, 0.015, 0.015]);
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[1].default)).toEqual(Array(5).fill(0));
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[2].default)).toEqual([0.85, 1, 0.5, 1, 1]);
-        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual([0.5, 0.1, 2, 1, 2]);
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual([0.35, 0.15, 0.75, 1.5, 1]);
         expect(OCTAVE_PIXELATE_SCHEMA.map(({ default: value }) => value)).toEqual(Array(5).fill(0));
         expect(OCTAVE_BLUR_SCHEMA.map(({ default: value }) => value)).toEqual([0, 0.5, 0.3, 0.3, 0.1]);
     });

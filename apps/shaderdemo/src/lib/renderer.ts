@@ -1,7 +1,15 @@
 import { FrameTelemetry, type FrameRollingSummary } from './telemetry';
 import { ADJUSTMENT_LUT_SIZE, composeAdjustmentLut, type Adjustment } from './adjustments';
+import defaultSettingsFixture from './default-settings.json';
 
-export const FIELD_PARAMETER_SCHEMA = [
+const canonicalParameterDefaults = defaultSettingsFixture.settings.parameters;
+const withCanonicalDefaults = <T extends readonly { key: string; default: number }[]>(schema: T): T =>
+    schema.map((parameter) => ({
+        ...parameter,
+        default: (canonicalParameterDefaults as Record<string, number>)[parameter.key],
+    })) as unknown as T;
+
+const FIELD_PARAMETER_SCHEMA_BASE = [
     { key: 'fieldScale', label: 'Base field size', min: 32, max: 2048, step: 1, default: 1007 },
     { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 2.5 },
     { key: 'billowAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: 1 },
@@ -28,6 +36,7 @@ export const FIELD_PARAMETER_SCHEMA = [
     { key: 'centerRoundness', label: 'Center roundness', min: 2, max: 12, step: 0.1, default: 4.7 },
     { key: 'centerSoftness', label: 'Center softness', min: 0.01, max: 1.5, step: 0.01, default: 1.5 },
 ] as const;
+export const FIELD_PARAMETER_SCHEMA = withCanonicalDefaults(FIELD_PARAMETER_SCHEMA_BASE);
 
 export const OCTAVE_COUNT = 5;
 export const GPU_TIMING_SAMPLE_INTERVAL = 30;
@@ -63,7 +72,7 @@ const noiseDefaults = Array<number>(OCTAVE_COUNT).fill(0.005);
 const smoothnessDefaults = [0.85, 1, 0.5, 1, 1];
 const distanceDefaults = [0.5, 0.1, 2, 1, 2];
 const blurDefaults = [0, 0.5, 0.3, 0.3, 0.1];
-export const OCTAVE_PARAMETER_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, index) => {
+const OCTAVE_PARAMETER_SCHEMA_BASE = Array.from({ length: OCTAVE_COUNT }, (_, index) => {
     const octave = index + 1;
     return [
         {
@@ -93,7 +102,8 @@ export const OCTAVE_PARAMETER_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, 
         },
     ];
 });
-export const OCTAVE_PIXELATE_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, index) => ({
+export const OCTAVE_PARAMETER_SCHEMA = OCTAVE_PARAMETER_SCHEMA_BASE.map((group) => withCanonicalDefaults(group));
+const OCTAVE_PIXELATE_SCHEMA_BASE = Array.from({ length: OCTAVE_COUNT }, (_, index) => ({
     key: `octave${index + 1}Pixelate` as `octave${number}Pixelate`,
     label: 'Pixelate canvas',
     min: 0,
@@ -101,7 +111,8 @@ export const OCTAVE_PIXELATE_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, i
     step: 1,
     default: 0,
 }));
-export const OCTAVE_BLUR_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, index) => ({
+export const OCTAVE_PIXELATE_SCHEMA = withCanonicalDefaults(OCTAVE_PIXELATE_SCHEMA_BASE);
+const OCTAVE_BLUR_SCHEMA_BASE = Array.from({ length: OCTAVE_COUNT }, (_, index) => ({
     key: `octave${index + 1}BlurRadius` as `octave${number}BlurRadius`,
     label: 'Pre-blur radius',
     min: 0,
@@ -109,6 +120,7 @@ export const OCTAVE_BLUR_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, index
     step: 0.01,
     default: blurDefaults[index],
 }));
+export const OCTAVE_BLUR_SCHEMA = withCanonicalDefaults(OCTAVE_BLUR_SCHEMA_BASE);
 export const PARAMETER_SCHEMA = [
     ...FIELD_PARAMETER_SCHEMA,
     ...OCTAVE_PARAMETER_SCHEMA.flat(),
