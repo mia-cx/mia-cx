@@ -67,9 +67,15 @@ export function scaledSize(width: number, height: number, scale: number) {
     return { width: Math.max(1, Math.floor(width * scale)), height: Math.max(1, Math.floor(height * scale)) };
 }
 
-/** Raw density starts at 1/128; each of the seven passes doubles pixel density. */
-export function progressiveScales(renderScale: number) {
-    return Array.from({ length: OCTAVE_COUNT + 1 }, (_, index) => renderScale / 2 ** (OCTAVE_COUNT - index));
+/** Effect-space pixel sizes; every image pass itself remains full resolution. */
+export function octavePixelSizes() {
+    return Array.from({ length: OCTAVE_COUNT }, (_, index) => 2 ** index);
+}
+
+/** The base and seven octave stages all have the same full render dimensions. */
+export function fullResolutionPassSizes(width: number, height: number, renderScale: number) {
+    const size = scaledSize(width, height, renderScale);
+    return Array.from({ length: OCTAVE_COUNT + 1 }, () => ({ ...size }));
 }
 
 export const UNIFORM_FLOATS = 52;
@@ -171,19 +177,21 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
     let sourceSize=vec2f(textureDimensions(src));
     let settings=u.octaves[u32(u.octaveIndex)];
     let pixel=floor(pos.xy);
+    let octavePixelSize=exp2(u.octaveIndex);
     let sampleCount=u32(round(mix(1.,8.,settings.z)));
     var scattered=0.;
     for(var sampleIndex=0u;sampleIndex<8u;sampleIndex++) {
         if(sampleIndex<sampleCount) {
             let salt=1.+u.octaveIndex*8.+f32(sampleIndex);
-            let offset=scatterOffset(pixel,salt,settings.w);
+            let offset=scatterOffset(pixel,salt,settings.w*octavePixelSize);
             scattered+=textureSample(src,samp,uv+offset/sourceSize).r;
         }
     }
     // Paint.NET's smoothness is sample count: 1–8 randomly displaced bilinear samples blended together.
     scattered/=f32(sampleCount);
-    // Literal 1:1 static pixel noise is layered on top of the scattered previous stage.
-    let detail=hash(pixel+vec2f(u.octaveIndex*37.7,u.octaveIndex*91.3))-.5;
+    // Literal noise is constant in effect-space cells while the source underneath stays full resolution.
+    let noiseCell=floor(pixel/octavePixelSize);
+    let detail=hash(noiseCell+vec2f(u.octaveIndex*37.7,u.octaveIndex*91.3))-.5;
     let injected=scattered+detail*settings.x;
     let thresholdWidth=max(.015,fwidth(injected)*1.5);
     let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,injected);
@@ -284,10 +292,9 @@ export class AtmosphereRenderer {
         if (!this.device) return;
         this.textures.forEach((texture) => texture.destroy());
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
-        // Raw 1/128 density followed by seven literal 2x upscale/diffuse/noise passes.
-        const scales = progressiveScales(this.options.renderScale);
-        this.textures = scales.map((scale) => {
-            const size = scaledSize(this.canvas.width, this.canvas.height, scale);
+        // Two full-resolution targets ping-pong through the base and all seven octave effects.
+        const size = scaledSize(this.canvas.width, this.canvas.height, this.options.renderScale);
+        this.textures = Array.from({ length: 2 }, () => {
             return this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage });
         });
     }
@@ -328,7 +335,7 @@ export class AtmosphereRenderer {
             c = this.context,
             buffers = this.buffers,
             s = this.sampler;
-        if (!d || !c || buffers.length < 9 || !s || this.pipelines.length < 3 || this.textures.length < 8) return;
+        if (!d || !c || buffers.length < 9 || !s || this.pipelines.length < 3 || this.textures.length < 2) return;
         const enc = d.createCommandEncoder();
         const data = packUniform(
             [this.textures[0].width, this.textures[0].height],
@@ -362,14 +369,16 @@ export class AtmosphereRenderer {
         };
         draw(this.textures[0].createView(), this.pipelines[0]);
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
-            data[0] = this.textures[octave + 1].width;
-            data[1] = this.textures[octave + 1].height;
+            const source = this.textures[octave % 2];
+            const target = this.textures[(octave + 1) % 2];
+            data[0] = target.width;
+            data[1] = target.height;
             data[20] = octave;
-            draw(this.textures[octave + 1].createView(), this.pipelines[1], this.textures[octave], true);
+            draw(target.createView(), this.pipelines[1], source, true);
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), this.pipelines[2], this.textures[OCTAVE_COUNT], true);
+        draw(c.getCurrentTexture().createView(), this.pipelines[2], this.textures[OCTAVE_COUNT % 2], true);
         d.queue.submit([enc.finish()]);
     }
     destroy() {

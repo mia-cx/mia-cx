@@ -7,8 +7,9 @@ import {
     UNIFORM_FLOATS,
     advanceSimulationTime,
     defaultParameters,
+    fullResolutionPassSizes,
+    octavePixelSizes,
     packUniform,
-    progressiveScales,
     renderSize,
     scaledSize,
 } from './renderer';
@@ -19,14 +20,19 @@ describe('field configuration', () => {
         expect(renderSize(801.9, 600.8, 3, Number.POSITIVE_INFINITY)).toEqual({ width: 2405, height: 1802 });
         expect(renderSize(0, 0, 2, 1)).toEqual({ width: 1, height: 1 });
     });
-    it('keeps low-resolution render targets valid', () => {
-        expect(scaledSize(1202, 901, 1 / 128)).toEqual({ width: 9, height: 7 });
-        expect(scaledSize(0, 0, 1 / 128)).toEqual({ width: 1, height: 1 });
+    it('keeps scaled render targets valid', () => {
+        expect(scaledSize(1202, 901, 0.5)).toEqual({ width: 601, height: 450 });
+        expect(scaledSize(0, 0, 0.5)).toEqual({ width: 1, height: 1 });
     });
-    it('uses a raw target plus exactly seven doubling passes', () => {
+    it('keeps the base and all seven octave stages full resolution', () => {
         expect(OCTAVE_COUNT).toBe(7);
-        expect(progressiveScales(1)).toEqual([1 / 128, 1 / 64, 1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1]);
-        expect(progressiveScales(0.5)[7]).toBe(0.5);
+        expect(octavePixelSizes()).toEqual([1, 2, 4, 8, 16, 32, 64]);
+        expect(fullResolutionPassSizes(1202, 901, 1)).toEqual(
+            Array.from({ length: 8 }, () => ({ width: 1202, height: 901 })),
+        );
+        expect(fullResolutionPassSizes(1202, 901, 0.5)).toEqual(
+            Array.from({ length: 8 }, () => ({ width: 601, height: 450 })),
+        );
     });
     it('changes evolution rate without changing the current phase', () => {
         expect(advanceSimulationTime(12, 0, 3)).toBe(12);
