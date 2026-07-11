@@ -200,6 +200,23 @@ describe('field configuration', () => {
         expect(old.parameters.baseBlendMode).toBe(2);
         expect(old.parameters.secondaryBlendMode).toBe(2);
         expect(old.parameters.secondaryRibbonBlendMode).toBe(2);
+        expect(old.parameters.temperature).toBe(6500);
+
+        const migratedNeutral = normalizeSavedSettings({
+            seed: 7,
+            parameters: { ...defaultParameters(), temperature: 0 },
+        });
+        const migratedWarm = normalizeSavedSettings({
+            seed: 7,
+            parameters: { ...defaultParameters(), temperature: 1 },
+        });
+        const migratedCool = normalizeSavedSettings({
+            seed: 7,
+            parameters: { ...defaultParameters(), temperature: -1 },
+        });
+        expect(migratedNeutral.parameters.temperature).toBe(6500);
+        expect(migratedWarm.parameters.temperature).toBe(8500);
+        expect(migratedCool.parameters.temperature).toBe(4500);
 
         const parameters = defaultParameters();
         parameters.baseBlendMode = 1.6;

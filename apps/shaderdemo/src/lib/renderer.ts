@@ -124,7 +124,7 @@ export const OCTAVE_BLUR_SCHEMA = withCanonicalDefaults(OCTAVE_BLUR_SCHEMA_BASE)
 export const POST_PARAMETER_SCHEMA = [
     { key: 'colorGradeEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
     { key: 'exposure', label: 'Exposure', min: -4, max: 4, step: 0.01, default: 0 },
-    { key: 'temperature', label: 'Temperature', min: -1, max: 1, step: 0.01, default: 0 },
+    { key: 'temperature', label: 'Temperature (K)', min: 3500, max: 10000, step: 50, default: 6500 },
     { key: 'tint', label: 'Tint', min: -1, max: 1, step: 0.01, default: 0 },
     { key: 'contrast', label: 'Contrast', min: -1, max: 1, step: 0.01, default: 0 },
     { key: 'saturation', label: 'Saturation', min: -1, max: 2, step: 0.01, default: 0 },
@@ -493,7 +493,7 @@ fn sourceValue(uv:vec2f)->f32 { return pow(clamp(textureSample(src,samp,uv).r,0.
  if(u.post[5].y!=0.) { let px=1./u.resolution; let n=sourceValue(uv+vec2f(px.x,0))+sourceValue(uv-vec2f(px.x,0))+sourceValue(uv+vec2f(0,px.y))+sourceValue(uv-vec2f(0,px.y)); f+=(f*4.-n)*u.post[5].y; }
  var rgb=adjusted(f); let ca=u.post[4].y/u.resolution.x;
  if(ca!=0.) { let dir=normalize(centered+vec2f(.0001))*ca; rgb=vec3f(adjusted(sourceValue(uv+dir)).r,rgb.g,adjusted(sourceValue(uv-dir)).b); }
- if(u.post[0].x>.5) { rgb*=exp2(u.post[0].y); rgb+=vec3f(u.post[0].z+u.post[0].w*.25,u.post[0].w*.5,-u.post[0].z-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let l=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(l),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,l))+u.post[2].x*smoothstep(.5,1.,l); }
+ if(u.post[0].x>.5) { rgb*=exp2(u.post[0].y); let temp=(u.post[0].z-6500.)/2000.; rgb*=vec3f(1.+temp*.08,1.,1.-temp*.08); rgb+=vec3f(u.post[0].w*.25,u.post[0].w*.5,-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let l=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(l),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,l))+u.post[2].x*smoothstep(.5,1.,l); }
  var b=0.; if((u.post[2].y>.5 && u.post[3].x!=0.) || (u.post[3].z>.5 && u.post[3].w!=0.)) { b=textureSample(bloom,samp,pos.xy/u.resolution).r; }
  if(u.post[2].y>.5 && u.post[3].x!=0.) { rgb+=b*u.post[3].x; }
  if(u.post[3].z>.5 && u.post[3].w!=0.) { rgb+=b*u.post[3].w*hueColor(u.post[4].x); }

@@ -67,7 +67,11 @@ export function normalizeSavedSettings(saved: Partial<SavedShaderSettings> | und
     const parameters = { ...defaults.parameters };
 
     for (const parameter of PARAMETER_SCHEMA) {
-        const value = saved?.parameters?.[parameter.key];
+        let value = saved?.parameters?.[parameter.key];
+        // Migrate the original normalized -1…1 temperature control into the finer Kelvin scale.
+        if (parameter.key === 'temperature' && typeof value === 'number' && value >= -1 && value <= 1) {
+            value = 6500 + value * 2000;
+        }
         if (typeof value === 'number' && Number.isFinite(value)) {
             const clamped = Math.min(parameter.max, Math.max(parameter.min, value));
             parameters[parameter.key] = parameter.key.endsWith('BlendMode') ? Math.round(clamped) : clamped;
