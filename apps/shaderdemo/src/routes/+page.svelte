@@ -25,6 +25,7 @@
     let controlsOpen = true;
     let ready = false;
     let status = 'Starting WebGPU…';
+    let fps = 0;
     const parameterTabs = [
         { id: 'field', label: 'Field' },
         { id: 'octaves', label: 'Octaves' },
@@ -107,6 +108,7 @@
             .then((instance) => {
                 if (disposed) return instance.destroy();
                 renderer = instance;
+                instance.onStats = (value) => (fps = value);
                 instance.setPaused(paused);
                 ready = true;
                 status = 'WebGPU';
@@ -134,6 +136,7 @@
 
 <main>
     <canvas class:ready bind:this={canvas} aria-label="Animated monochrome noise field"></canvas>
+    {#if ready}<output class="fps">{paused ? 'paused' : `${fps.toFixed(1)} fps`}</output>{/if}
     <nav aria-label="Study controls" data-disabled={!ready} inert={!ready}>
         <button class="reveal" onclick={() => (controlsOpen = !controlsOpen)} aria-expanded={controlsOpen}
             >{controlsOpen ? '×' : '+'}<span class="sr-only">{controlsOpen ? 'Hide' : 'Show'} controls</span></button
@@ -299,6 +302,21 @@
     canvas.ready {
         opacity: 1;
         transition: opacity 0.35s ease;
+    }
+    .fps {
+        position: fixed;
+        left: 14px;
+        bottom: 12px;
+        z-index: 1;
+        color: #ffffff99;
+        font:
+            10px ui-monospace,
+            SFMono-Regular,
+            Menlo,
+            monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        text-shadow: 0 1px 3px #000;
     }
     nav {
         position: fixed;

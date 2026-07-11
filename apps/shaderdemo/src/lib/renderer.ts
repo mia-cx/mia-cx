@@ -423,6 +423,8 @@ export class AtmosphereRenderer {
     private simTime = 0;
     private frameIndex = 0;
     private lastTime = performance.now();
+    private statsStartedAt = this.lastTime;
+    private statsFrames = 0;
     private destroyed = false;
     private invalid = true;
     paused = false;
@@ -513,6 +515,9 @@ export class AtmosphereRenderer {
     setPaused(value: boolean) {
         this.paused = value;
         this.lastTime = performance.now();
+        this.statsStartedAt = this.lastTime;
+        this.statsFrames = 0;
+        if (value) this.onStats?.(0, this.canvas.width, this.canvas.height);
         this.invalidate();
     }
     invalidate() {
@@ -532,7 +537,13 @@ export class AtmosphereRenderer {
         if (this.invalid || animated) {
             this.render();
             this.invalid = false;
-            this.onStats?.(dt > 0 ? 1 / dt : 0, this.canvas.width, this.canvas.height);
+            this.statsFrames += 1;
+            const statsElapsed = now - this.statsStartedAt;
+            if (statsElapsed >= 500) {
+                this.onStats?.((this.statsFrames * 1000) / statsElapsed, this.canvas.width, this.canvas.height);
+                this.statsStartedAt = now;
+                this.statsFrames = 0;
+            }
         }
         if (animated) this.schedule();
     };
