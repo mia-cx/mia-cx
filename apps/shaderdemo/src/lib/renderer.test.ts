@@ -4,7 +4,6 @@ import {
     BLUR_SHADER_SOURCE,
     COMMON_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
-    FINAL_OCTAVE_SHADER_SOURCE,
     OCTAVE_BLUR_SCHEMA,
     OCTAVE_COUNT,
     OCTAVE_PARAMETER_SCHEMA,
@@ -13,9 +12,7 @@ import {
     PARAMETER_SCHEMA,
     UNIFORM_FLOATS,
     advanceSimulationTime,
-    alignUniformSlotSize,
     bindGroupCacheKey,
-    canFuseFinalOctave,
     defaultParameters,
     fullResolutionPassSizes,
     octavePixelSizes,
@@ -194,10 +191,6 @@ describe('field configuration', () => {
         expect(Array.from(data.slice(52, 57))).toEqual(Array.from(new Float32Array([0, 0.5, 0.3, 0.3, 0.1])));
         expect(Array.from(data.slice(57, 60))).toEqual([0, 0, 0]);
     });
-    it('aligns fixed uniform slots to the device limit', () => {
-        expect(alignUniformSlotSize(240, 256)).toBe(256);
-        expect(alignUniformSlotSize(240, 512)).toBe(512);
-    });
     it('uses a dynamic radius and four diagonal samples with an exact zero-radius identity', () => {
         expect(BLUR_SHADER_SOURCE).toContain('exp2(4.-u.octaveIndex)');
         expect(BLUR_SHADER_SOURCE).toContain('u.blurRadii[radiusIndex/4u][radiusIndex%4u]');
@@ -268,31 +261,14 @@ describe('field configuration', () => {
     });
     it('uses exact zero threshold and diffusion bypasses in the octave shader', () => {
         expect(OCTAVE_SHADER_SOURCE).toContain('if(settings.w>0.)');
-        expect(OCTAVE_SHADER_SOURCE).toContain('if(settings.y==0.) { return injected; }');
+        expect(OCTAVE_SHADER_SOURCE).toContain('if(settings.y==0.) { return vec4f(injected,0.,0.,1.); }');
         expect(OCTAVE_SHADER_SOURCE.indexOf('if(settings.y==0.)')).toBeLessThan(
             OCTAVE_SHADER_SOURCE.indexOf('fwidth(injected)'),
         );
         expect(OCTAVE_SHADER_SOURCE).not.toContain('abs(settings.y)>.001');
         expect(OCTAVE_SHADER_SOURCE).toContain('var scattered: f32;');
-        expect(OCTAVE_SHADER_SOURCE).toContain('scattered=clampedLoad(vec2i(pixel));');
+        expect(OCTAVE_SHADER_SOURCE).toContain('} else {\n        scattered=textureSample(src,samp,sourceUv).r;');
         expect(OCTAVE_SHADER_SOURCE).not.toContain('var scattered=textureSample');
-    });
-    it('uses clamped exact loads off and preserves bilinear tile-center sampling on pixelation', () => {
-        expect(OCTAVE_SHADER_SOURCE).toContain('textureLoad(src,clamp(coord,vec2i(0),maximum),0).r');
-        expect(OCTAVE_SHADER_SOURCE).toContain('clampedLoad(vec2i(pixel)+vec2i(offset))');
-        expect(OCTAVE_SHADER_SOURCE).toContain('textureSample(src,samp,tiledUv+offset/sourceSize).r');
-        expect(OCTAVE_SHADER_SOURCE).toContain('textureSample(src,samp,tiledUv).r');
-        expect(OCTAVE_SHADER_SOURCE).toContain('if(pixelationBit)');
-    });
-    it('fuses only an active final effect at exact renderScale-one canvas dimensions', () => {
-        expect(canFuseFinalOctave(1, 800, 600, 800, 600, true)).toBe(true);
-        expect(canFuseFinalOctave(0.5, 800, 600, 800, 600, true)).toBe(false);
-        expect(canFuseFinalOctave(1, 799, 600, 800, 600, true)).toBe(false);
-        expect(canFuseFinalOctave(1, 800, 600, 800, 600, false)).toBe(false);
-        expect(FINAL_OCTAVE_SHADER_SOURCE).toContain('fn octaveDensity');
-        expect(FINAL_OCTAVE_SHADER_SOURCE).toContain('pack2x16float');
-        expect(FINAL_OCTAVE_SHADER_SOURCE).toContain('unpack2x16float');
-        expect(FINAL_OCTAVE_SHADER_SOURCE).toContain('u.finalContrast');
     });
     it('uses exact integer octave tiling and pixelation bits', () => {
         expect(OCTAVE_SHADER_SOURCE).toContain('let octave=u32(u.octaveIndex)');
