@@ -150,37 +150,41 @@ const baseShader =
     let center=1.-smoothstep(1.-centerFeather,1.+centerFeather,centerDistance);
     let centerAttenuation=exp2(-center*u.centerDarkness*4.);
     natural*=centerAttenuation;
-    return vec4f(natural,0.,0.,1.);
+    // Field shaping finishes here; recursive scatter/noise is the next destructive stage on top.
+    let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
+    let thresholded=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
+    return vec4f(thresholded,0.,0.,1.);
 }`;
 
 const octaveShader =
     common +
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
-fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
-    let angle=hash(pixel+vec2f(salt*17.13,salt*5.71))*6.2831853;
-    let radius=sqrt(hash(pixel+vec2f(salt*3.37+41.9,salt*11.73-19.4)))*distance;
+fn scatterOffset(pixel: vec2f, salt: f32, smoothness: f32, distance: f32) -> vec2f {
+    // Smoothness correlates the random displacement field spatially; it never averages colour samples.
+    let cellSize=mix(1.,16.,smoothness);
+    let fieldPixel=pixel/cellSize;
+    let angle=noise(fieldPixel+vec2f(salt*17.13,salt*5.71))*6.2831853;
+    let radius=sqrt(noise(fieldPixel+vec2f(salt*3.37+41.9,salt*11.73-19.4)))*distance;
     return vec2f(cos(angle),sin(angle))*radius;
 }
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
-    let sourceSize=vec2f(textureDimensions(src));
+    let sourceDimensions=textureDimensions(src);
+    let sourceSize=vec2f(sourceDimensions);
     let settings=u.octaves[u32(u.octaveIndex)];
     let pixel=floor(pos.xy);
-    // Diffusion follows a frosted-glass scatter: deterministic random source pixels inside the distance radius.
-    let s0=textureSample(src,samp,uv+scatterOffset(pixel,1.+u.octaveIndex*7.,settings.w)/sourceSize).r;
-    let s1=textureSample(src,samp,uv+scatterOffset(pixel,2.+u.octaveIndex*7.,settings.w)/sourceSize).r;
-    let s2=textureSample(src,samp,uv+scatterOffset(pixel,3.+u.octaveIndex*7.,settings.w)/sourceSize).r;
-    let s3=textureSample(src,samp,uv+scatterOffset(pixel,4.+u.octaveIndex*7.,settings.w)/sourceSize).r;
-    // Zero smoothness keeps the hard single-pixel scatter; one averages four scatters into softer diffusion.
-    let diffused=mix(s0,(s0+s1+s2+s3)*.25,settings.z);
-    let phase=u.time*(.17+u.octaveIndex*.047)+u.octaveIndex*13.71;
-    // Every iteration injects 1:1 texel noise; earlier levels naturally become larger in final pixels.
-    let detail=noise3(vec3f(pos.xy+vec2f(u.octaveIndex*7.3,-u.octaveIndex*4.9),phase))-.5;
-    let injected=diffused+detail*settings.x;
-    // Signed soft density bias: zero is neutral and continuity is preserved for the next level.
-    let remapped=clamp((injected-settings.y*.35)/(1.-abs(settings.y)*.35),-1.,2.);
-    return vec4f(remapped,0.,0.,1.);
+    let offset=scatterOffset(pixel,1.+u.octaveIndex*7.,settings.z,settings.w);
+    let sourcePixel=clamp(vec2i(floor(uv*sourceSize+offset)),vec2i(0),vec2i(sourceDimensions)-vec2i(1));
+    // One exact source pixel: literal frosted-glass scatter, with no blur or filtered averaging.
+    let scattered=textureLoad(src,sourcePixel,0).r;
+    // Literal 1:1 static pixel noise is layered on top of the scattered previous stage.
+    let detail=hash(pixel+vec2f(u.octaveIndex*37.7,u.octaveIndex*91.3))-.5;
+    let injected=scattered+detail*settings.x;
+    let thresholdWidth=max(.015,fwidth(injected)*1.5);
+    let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,injected);
+    let output=select(injected,thresholded,settings.y>.001);
+    return vec4f(output,0.,0.,1.);
 }`;
 
 const displayShader =
@@ -190,9 +194,7 @@ const displayShader =
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let density=textureSample(src,samp,uv).r;
-    let thresholdWidth=max(u.thresholdSoftness,fwidth(density)*1.5);
-    let thresholded=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,density);
-    let f=pow(clamp(thresholded,0.,1.),u.finalContrast);
+    let f=pow(clamp(density,0.,1.),u.finalContrast);
     return vec4f(vec3f(f),1.);
 }`;
 
