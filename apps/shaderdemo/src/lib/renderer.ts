@@ -52,6 +52,13 @@ export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 32;
 const GPU_QUERY_COUNT = MAX_RENDER_PASSES * 2;
 export interface GpuTimingStats {
     totalMs: number;
+    fieldMs: number;
+    colourMs: number;
+    lightingMs: number;
+    postMs: number;
+    octavesMs: number;
+    presentMs: number;
+    /** Legacy aliases retained for consumers of the original telemetry API. */
     baseMs: number;
     blurMs: number;
     octaveMs: number;
@@ -66,13 +73,27 @@ export function aggregateGpuTimestamps(timestamps: ArrayLike<bigint>, labels: re
         const ms = begin !== undefined && end !== undefined && end >= begin ? Number(end - begin) / 1_000_000 : 0;
         return { label, ms: Number.isFinite(ms) ? ms : 0 };
     });
-    const sum = (prefix: string) => passes.reduce((n, pass) => n + (pass.label.startsWith(prefix) ? pass.ms : 0), 0);
+    const sum = (...prefixes: string[]) =>
+        passes.reduce((n, pass) => n + (prefixes.some((prefix) => pass.label.startsWith(prefix)) ? pass.ms : 0), 0);
+    const fieldMs = sum('base', 'field-materialize');
+    const colourMs = sum('colour:');
+    const lightingMs = sum('lighting:');
+    const postMs = sum('post:');
+    const blurMs = sum('blur');
+    const octaveMs = sum('octave');
+    const presentMs = sum('display');
     return {
         totalMs: passes.reduce((n, pass) => n + pass.ms, 0),
-        baseMs: sum('base'),
-        blurMs: sum('blur'),
-        octaveMs: sum('octave'),
-        displayMs: sum('display'),
+        fieldMs,
+        colourMs,
+        lightingMs,
+        postMs,
+        octavesMs: blurMs + octaveMs,
+        presentMs,
+        baseMs: fieldMs,
+        blurMs,
+        octaveMs,
+        displayMs: presentMs,
         passes,
     };
 }
@@ -1220,12 +1241,6 @@ export class AtmosphereRenderer {
             60,
         );
         const stages = rendererStagePlan(this.options.post, this.options.parameters);
-        for (const effect of stages.lighting) {
-            const destination = rgbaCurrent === 2 ? 3 : 2;
-            data[58] = POST_KIND_INDEX[effect.kind];
-            draw(this.textureViews[destination], 8, rgbaCurrent, true, `lighting:${effect.kind}`);
-            rgbaCurrent = destination;
-        }
         if (this.adjustmentLutActive) {
             data.fill(0, 60, UNIFORM_FLOATS);
             data.set([0, 0, 0, 1, 1, 1, 1], 60);
@@ -1286,6 +1301,12 @@ export class AtmosphereRenderer {
             POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
         );
+        for (const effect of stages.lighting) {
+            const destination = rgbaCurrent === 2 ? 3 : 2;
+            data[58] = POST_KIND_INDEX[effect.kind];
+            draw(this.textureViews[destination], 8, rgbaCurrent, true, `lighting:${effect.kind}`);
+            rgbaCurrent = destination;
+        }
         for (const effect of stages.post) {
             if (effect.kind === 'datamosh' && !this.historyValid) continue;
             const destination = rgbaCurrent === 2 ? 3 : 2;

@@ -13,10 +13,14 @@ export interface FrameRollingSummary {
     rms2sMs?: number;
 }
 
-export type GpuMeanStats = Pick<GpuTimingStats, 'totalMs' | 'baseMs' | 'blurMs' | 'octaveMs' | 'displayMs'>;
+export type GpuMeanStats = Pick<
+    GpuTimingStats,
+    'totalMs' | 'fieldMs' | 'colourMs' | 'lightingMs' | 'postMs' | 'octavesMs' | 'presentMs'
+>;
 export interface GpuRollingSummary {
     windows: Record<(typeof GPU_WINDOWS_MS)[number], GpuMeanStats | undefined>;
     rms5sMs?: number;
+    perPass5s: Array<{ label: string; ms: number }>;
 }
 
 interface TimedValue<T> {
@@ -127,19 +131,30 @@ export class GpuTelemetry {
                     samples.reduce((sum, sample) => sum + sample[key], 0) / samples.length;
                 windows[windowMs] = {
                     totalMs: mean('totalMs'),
-                    baseMs: mean('baseMs'),
-                    blurMs: mean('blurMs'),
-                    octaveMs: mean('octaveMs'),
-                    displayMs: mean('displayMs'),
+                    fieldMs: mean('fieldMs'),
+                    colourMs: mean('colourMs'),
+                    lightingMs: mean('lightingMs'),
+                    postMs: mean('postMs'),
+                    octavesMs: mean('octavesMs'),
+                    presentMs: mean('presentMs'),
                 };
             }
         }
         const fiveSecondSamples = this.samples.current(nowMs, 5_000).map(({ value }) => value.totalMs);
+        const fiveSecondStats = this.samples.current(nowMs, 5_000).map(({ value }) => value);
+        const latestOrder = fiveSecondStats[fiveSecondStats.length - 1]?.passes.map(({ label }) => label) ?? [];
+        const perPass5s = latestOrder.map((label) => {
+            const timings = fiveSecondStats.flatMap((sample) =>
+                sample.passes.filter((pass) => pass.label === label).map((pass) => pass.ms),
+            );
+            return { label, ms: timings.reduce((sum, value) => sum + value, 0) / timings.length };
+        });
         return {
             windows,
             rms5sMs: fiveSecondSamples.length
                 ? Math.sqrt(fiveSecondSamples.reduce((sum, value) => sum + value * value, 0) / fiveSecondSamples.length)
                 : undefined,
+            perPass5s,
         };
     }
 

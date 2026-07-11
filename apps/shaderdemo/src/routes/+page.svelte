@@ -256,7 +256,7 @@
         setExpanded(item.id, true);
     }
     function changePost(next: PostEffect[]) {
-        // Lighting is a real pre-Colour stage; camera/film effects are post-Octaves.
+        // Lighting follows Colour; all remaining post effects precede Octaves.
         // Keep each stage contiguous so the visible order matches execution.
         post = [
             ...next.filter((item) => isLightingKind(item.type)),
@@ -364,10 +364,21 @@
                             gpuRolling.windows[5000]?.totalMs,
                         )} · 30s
                         {number(gpuRolling.windows[30000]?.totalMs)}ms · RMS {number(gpuRolling.rms5sMs)}<br />
-                        base {number(gpuRolling.windows[5000]?.baseMs)} · blur {number(
-                            gpuRolling.windows[5000]?.blurMs,
-                        )} · oct
-                        {number(gpuRolling.windows[5000]?.octaveMs)} · out {number(gpuRolling.windows[5000]?.displayMs)}
+                        field {number(gpuRolling.windows[5000]?.fieldMs)} · colour {number(
+                            gpuRolling.windows[5000]?.colourMs,
+                        )} · lighting {number(gpuRolling.windows[5000]?.lightingMs)} · post {number(
+                            gpuRolling.windows[5000]?.postMs,
+                        )} · octaves {number(gpuRolling.windows[5000]?.octavesMs)} · present {number(
+                            gpuRolling.windows[5000]?.presentMs,
+                        )}
+                        {#if gpuRolling.perPass5s.length}
+                            <details class="per-effect-timings">
+                                <summary>Per-effect timings</summary>
+                                {#each gpuRolling.perPass5s as pass}
+                                    <span>{pass.label} {number(pass.ms)}ms</span>
+                                {/each}
+                            </details>
+                        {/if}
                     {:else}
                         GPU timing…
                     {/if}
@@ -612,7 +623,7 @@
                                     <div class="group-heading pipeline-stage">
                                         <span
                                             >{isLightingKind(item.type)
-                                                ? 'Lighting — before Colour'
+                                                ? 'Lighting — after Colour'
                                                 : 'Post — before Octaves'}</span
                                         >
                                     </div>
