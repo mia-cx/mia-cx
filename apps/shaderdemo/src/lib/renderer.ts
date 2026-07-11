@@ -1,4 +1,4 @@
-export const PARAMETER_SCHEMA = [
+export const FIELD_PARAMETER_SCHEMA = [
     { key: 'baseScale', label: 'Base scale', min: 0.45, max: 4, step: 0.01, default: 1.51 },
     { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 2.5 },
     { key: 'ridgeMix', label: 'Billow / ridge mix', min: 0, max: 1, step: 0.01, default: 1 },
@@ -16,13 +16,35 @@ export const PARAMETER_SCHEMA = [
     { key: 'centerHeight', label: 'Center height', min: 0.1, max: 2.5, step: 0.01, default: 0.83 },
     { key: 'centerRoundness', label: 'Center roundness', min: 2, max: 12, step: 0.1, default: 4 },
     { key: 'centerSoftness', label: 'Center softness', min: 0.01, max: 1.5, step: 0.01, default: 1.5 },
-    { key: 'diffusionRadius', label: 'Diffusion radius', min: 0, max: 4, step: 0.05, default: 1.25 },
-    { key: 'diffusionAmount', label: 'Diffusion amount', min: 0, max: 1, step: 0.01, default: 0.65 },
-    { key: 'octaveNoiseAmount', label: 'Octave noise amount', min: 0, max: 0.6, step: 0.01, default: 0.16 },
-    { key: 'lacunarity', label: 'Frequency growth', min: 1.1, max: 4, step: 0.05, default: 2 },
-    { key: 'persistence', label: 'Amplitude falloff', min: 0, max: 1, step: 0.01, default: 0.55 },
-    { key: 'octaveCount', label: 'Progressive octaves', min: 0, max: 3, step: 1, default: 3 },
 ] as const;
+
+export const OCTAVE_COUNT = 7;
+const noiseDefaults = [0.12, 0.09, 0.065, 0.045, 0.03, 0.02, 0.012];
+const distanceDefaults = [3.5, 3, 2.5, 2, 1.5, 1.1, 0.75];
+export const OCTAVE_PARAMETER_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, index) => {
+    const octave = index + 1;
+    return [
+        {
+            key: `octave${octave}Noise`,
+            label: 'Noise amount',
+            min: 0,
+            max: 0.5,
+            step: 0.005,
+            default: noiseDefaults[index],
+        },
+        { key: `octave${octave}Threshold`, label: 'Threshold', min: -0.4, max: 0.4, step: 0.01, default: 0 },
+        { key: `octave${octave}Smoothness`, label: 'Diffusion smoothness', min: 0, max: 1, step: 0.01, default: 0.35 },
+        {
+            key: `octave${octave}Distance`,
+            label: 'Diffusion distance',
+            min: 0,
+            max: 6,
+            step: 0.05,
+            default: distanceDefaults[index],
+        },
+    ];
+});
+export const PARAMETER_SCHEMA = [...FIELD_PARAMETER_SCHEMA, ...OCTAVE_PARAMETER_SCHEMA.flat()];
 export type ParameterKey = (typeof PARAMETER_SCHEMA)[number]['key'];
 export type ShaderParameters = Record<ParameterKey, number>;
 export const defaultParameters = (): ShaderParameters =>
@@ -46,6 +68,29 @@ export function scaledSize(width: number, height: number, scale: number) {
     return { width: Math.max(1, Math.floor(width * scale)), height: Math.max(1, Math.floor(height * scale)) };
 }
 
+/** Raw density starts at 1/128; each of the seven passes doubles pixel density. */
+export function progressiveScales(renderScale: number) {
+    return Array.from({ length: OCTAVE_COUNT + 1 }, (_, index) => renderScale / 2 ** (OCTAVE_COUNT - index));
+}
+
+export const UNIFORM_FLOATS = 52;
+export function packUniform(
+    resolution: [number, number],
+    time: number,
+    seed: number,
+    parameters: ShaderParameters,
+    octaveIndex = 0,
+) {
+    const data = new Float32Array(UNIFORM_FLOATS);
+    data.set([resolution[0], resolution[1], time, seed, ...FIELD_PARAMETER_SCHEMA.map(({ key }) => parameters[key])]);
+    data[21] = octaveIndex;
+    data.set(
+        OCTAVE_PARAMETER_SCHEMA.flatMap((group) => group.map(({ key }) => parameters[key])),
+        24,
+    );
+    return data;
+}
+
 export function advanceSimulationTime(time: number, deltaSeconds: number, speed: number) {
     return time + deltaSeconds * speed;
 }
@@ -57,8 +102,8 @@ struct U {
  warpScale: f32, warpStrength: f32, threshold: f32, thresholdSoftness: f32,
  secondaryScale: f32, secondaryMix: f32, finalContrast: f32, animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
- centerSoftness: f32, diffusionRadius: f32, diffusionAmount: f32, octaveNoiseAmount: f32,
- lacunarity: f32, persistence: f32, octaveCount: f32, octaveIndex: f32
+ centerSoftness: f32, octaveIndex: f32, padding: vec2f,
+ octaves: array<vec4f, 7>
 };
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -114,21 +159,23 @@ const octaveShader =
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let sourceSize=vec2f(textureDimensions(src));
-    let offset=vec2f(u.diffusionRadius)/sourceSize;
+    let settings=u.octaves[u32(u.octaveIndex)];
+    let offset=vec2f(settings.w)/sourceSize;
     let center=textureSample(src,samp,uv).r;
     // Four diagonal taps are a compact Kawase diffusion kernel at each progressively larger level.
     let blurred=(textureSample(src,samp,uv+offset*vec2f(-1.,-1.)).r+
         textureSample(src,samp,uv+offset*vec2f(1.,-1.)).r+
         textureSample(src,samp,uv+offset*vec2f(-1.,1.)).r+
         textureSample(src,samp,uv+offset).r)*.25;
-    let enabled=select(0.,1.,u.octaveIndex<u.octaveCount);
-    let diffused=mix(center,blurred,u.diffusionAmount*enabled);
+    let diffused=mix(center,blurred,settings.z);
     var q=uv*2.-1.; q.x*=u.resolution.x/u.resolution.y;
-    let frequency=u.baseScale*pow(u.lacunarity,u.octaveIndex+1.);
+    let frequency=u.baseScale*pow(2.,u.octaveIndex+1.);
     let phase=u.time*(.17+u.octaveIndex*.047)+u.octaveIndex*13.71;
     let detail=noise3(vec3f(q*frequency+vec2f(u.octaveIndex*7.3,-u.octaveIndex*4.9),phase))-.5;
-    let amplitude=u.octaveNoiseAmount*pow(u.persistence,u.octaveIndex)*enabled;
-    return vec4f(diffused+detail*amplitude,0.,0.,1.);
+    let injected=diffused+detail*settings.x;
+    // Signed soft density bias: zero is neutral and continuity is preserved for the next level.
+    let remapped=clamp((injected-settings.y*.35)/(1.-abs(settings.y)*.35),-1.,2.);
+    return vec4f(remapped,0.,0.,1.);
 }`;
 
 const displayShader =
@@ -197,8 +244,11 @@ export class AtmosphereRenderer {
             make(octaveShader, 'r16float'),
             make(displayShader, format),
         ]);
-        self.buffers = Array.from({ length: 5 }, () =>
-            self.device!.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+        self.buffers = Array.from({ length: 9 }, () =>
+            self.device!.createBuffer({
+                size: UNIFORM_FLOATS * 4,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+            }),
         );
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
         self.device.lost.then((info) => {
@@ -223,8 +273,8 @@ export class AtmosphereRenderer {
         if (!this.device) return;
         this.textures.forEach((texture) => texture.destroy());
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
-        // Cheap destructive progression: 18% → 36% → 65% → renderScale, never repeated full-size blur.
-        const scales = [0.18, 0.36, 0.65, 1].map((scale) => scale * this.options.renderScale);
+        // Raw 1/128 density followed by seven literal 2x upscale/diffuse/noise passes.
+        const scales = progressiveScales(this.options.renderScale);
         this.textures = scales.map((scale) => {
             const size = scaledSize(this.canvas.width, this.canvas.height, scale);
             return this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage });
@@ -267,10 +317,14 @@ export class AtmosphereRenderer {
             c = this.context,
             buffers = this.buffers,
             s = this.sampler;
-        if (!d || !c || buffers.length < 5 || !s || this.pipelines.length < 3 || this.textures.length < 4) return;
+        if (!d || !c || buffers.length < 9 || !s || this.pipelines.length < 3 || this.textures.length < 8) return;
         const enc = d.createCommandEncoder();
-        // 28 floats (112 bytes), a multiple of WGSL's 16-byte uniform alignment.
-        const data = new Float32Array(28);
+        const data = packUniform(
+            [this.textures[0].width, this.textures[0].height],
+            this.simTime,
+            this.options.seed,
+            this.options.parameters,
+        );
         let passIndex = 0;
         const draw = (target: GPUTextureView, pipeline: GPURenderPipeline, source?: GPUTexture) => {
             const buffer = buffers[passIndex++];
@@ -289,23 +343,16 @@ export class AtmosphereRenderer {
             pass.draw(3);
             pass.end();
         };
-        data.set([
-            this.textures[0].width,
-            this.textures[0].height,
-            this.simTime,
-            this.options.seed,
-            ...PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
-        ]);
         draw(this.textures[0].createView(), this.pipelines[0]);
-        for (let octave = 0; octave < 3; octave += 1) {
+        for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
             data[0] = this.textures[octave + 1].width;
             data[1] = this.textures[octave + 1].height;
-            data[27] = octave;
+            data[21] = octave;
             draw(this.textures[octave + 1].createView(), this.pipelines[1], this.textures[octave]);
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), this.pipelines[2], this.textures[3]);
+        draw(c.getCurrentTexture().createView(), this.pipelines[2], this.textures[OCTAVE_COUNT]);
         d.queue.submit([enc.finish()]);
     }
     destroy() {

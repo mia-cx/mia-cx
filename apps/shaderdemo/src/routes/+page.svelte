@@ -1,6 +1,12 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { AtmosphereRenderer, PARAMETER_SCHEMA, defaultParameters, type RenderOptions } from '$lib/renderer';
+    import {
+        AtmosphereRenderer,
+        FIELD_PARAMETER_SCHEMA,
+        OCTAVE_PARAMETER_SCHEMA,
+        defaultParameters,
+        type RenderOptions,
+    } from '$lib/renderer';
 
     let canvas: HTMLCanvasElement;
     let renderer: AtmosphereRenderer | undefined;
@@ -14,9 +20,18 @@
     let controlsOpen = true;
     let ready = false;
     let status = 'Starting WebGPU…';
-    // Keep the tab model in place so later stages can add their own parameter panels.
-    const parameterTabs = [{ id: 'field', label: 'Field', parameters: PARAMETER_SCHEMA }] as const;
-    const selectedTab = parameterTabs[0];
+    const parameterTabs = [
+        { id: 'field', label: 'Field' },
+        { id: 'octaves', label: 'Octaves' },
+    ] as const;
+    let selectedTabId: (typeof parameterTabs)[number]['id'] = 'field';
+
+    function tabKeydown(event: KeyboardEvent) {
+        if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+        event.preventDefault();
+        selectedTabId = selectedTabId === 'field' ? 'octaves' : 'field';
+        requestAnimationFrame(() => document.getElementById(`tab-${selectedTabId}`)?.focus());
+    }
 
     function update() {
         options = { ...options, parameters: { ...options.parameters } };
@@ -79,34 +94,56 @@
                                 id="tab-{tab.id}"
                                 type="button"
                                 role="tab"
-                                aria-selected="true"
+                                aria-selected={selectedTabId === tab.id}
                                 aria-controls="panel-{tab.id}"
-                                tabindex="0">{tab.label}</button
+                                tabindex={selectedTabId === tab.id ? 0 : -1}
+                                onclick={() => (selectedTabId = tab.id)}
+                                onkeydown={tabKeydown}>{tab.label}</button
                             >
                         {/each}
                     </div>
-                    <div
-                        class="sliders"
-                        id="panel-{selectedTab.id}"
-                        role="tabpanel"
-                        aria-labelledby="tab-{selectedTab.id}"
-                    >
-                        {#each selectedTab.parameters as parameter}
-                            <label class="parameter">
-                                <span>{parameter.label}</span><output
-                                    >{options.parameters[parameter.key].toFixed(2)}</output
-                                >
-                                <input
-                                    type="range"
-                                    min={parameter.min}
-                                    max={parameter.max}
-                                    step={parameter.step}
-                                    bind:value={options.parameters[parameter.key]}
-                                    oninput={update}
-                                />
-                            </label>
-                        {/each}
-                    </div>
+                    {#if selectedTabId === 'field'}
+                        <div class="sliders" id="panel-field" role="tabpanel" aria-labelledby="tab-field">
+                            {#each FIELD_PARAMETER_SCHEMA as parameter}
+                                <label class="parameter">
+                                    <span>{parameter.label}</span><output
+                                        >{options.parameters[parameter.key].toFixed(2)}</output
+                                    >
+                                    <input
+                                        type="range"
+                                        min={parameter.min}
+                                        max={parameter.max}
+                                        step={parameter.step}
+                                        bind:value={options.parameters[parameter.key]}
+                                        oninput={update}
+                                    />
+                                </label>
+                            {/each}
+                        </div>
+                    {:else}
+                        <div class="sliders" id="panel-octaves" role="tabpanel" aria-labelledby="tab-octaves">
+                            {#each OCTAVE_PARAMETER_SCHEMA as parameters, index}
+                                <fieldset class="octave">
+                                    <legend>Octave {index + 1}</legend>
+                                    {#each parameters as parameter}
+                                        <label class="parameter">
+                                            <span>{parameter.label}</span><output
+                                                >{options.parameters[parameter.key].toFixed(2)}</output
+                                            >
+                                            <input
+                                                type="range"
+                                                min={parameter.min}
+                                                max={parameter.max}
+                                                step={parameter.step}
+                                                bind:value={options.parameters[parameter.key]}
+                                                oninput={update}
+                                            />
+                                        </label>
+                                    {/each}
+                                </fieldset>
+                            {/each}
+                        </div>
+                    {/if}
                 </div>
             </div>
         {/if}
@@ -215,7 +252,7 @@
     }
     .tabs {
         display: grid;
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 1fr;
         gap: 2px;
         padding: 4px 0;
     }
@@ -241,6 +278,18 @@
         cursor: default;
         letter-spacing: 0.03em;
         text-transform: none;
+    }
+    .octave {
+        display: grid;
+        gap: 6px;
+        margin: 0;
+        padding: 7px 3px 9px;
+        border: 0;
+        border-top: 1px solid #ffffff20;
+    }
+    .octave legend {
+        padding: 0;
+        color: #aaa;
     }
     .parameter output {
         color: #aaa;
