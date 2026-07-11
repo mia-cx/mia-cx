@@ -42,8 +42,16 @@
                 'warpStrength',
             ],
         },
-        { label: 'Secondary detail', toggle: 'secondaryEnabled', keys: ['secondaryScale', 'secondaryMix'] },
-        { label: 'Tertiary detail', toggle: 'tertiaryEnabled', keys: ['tertiaryScale', 'tertiaryAmount'] },
+        {
+            label: 'Secondary detail',
+            toggle: 'secondaryEnabled',
+            keys: ['secondaryScale', 'secondaryCloudAmount', 'secondaryRibbonAmount', 'secondaryRibbonSharpness'],
+        },
+        {
+            label: 'Tertiary detail',
+            toggle: 'tertiaryEnabled',
+            keys: ['tertiaryScale', 'tertiaryCloudAmount', 'tertiaryRibbonAmount', 'tertiaryRibbonSharpness'],
+        },
         { label: 'Field shaping', keys: ['threshold', 'thresholdSoftness', 'finalContrast'] },
         {
             label: 'Center attenuation',
