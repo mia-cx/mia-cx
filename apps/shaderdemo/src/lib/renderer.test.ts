@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
     BASE_SHADER_SOURCE,
+    BLOOM_EXTRACT_SHADER_SOURCE,
     BLUR_SHADER_SOURCE,
     COMMON_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
     DISPLAY_SHADER_SOURCE,
     GOD_RAYS_SHADER_SOURCE,
+    GOD_RAYS_TEXTURE_FORMAT,
     OCTAVE_BLUR_SCHEMA,
     OCTAVE_COUNT,
     OCTAVE_PARAMETER_SCHEMA,
@@ -40,6 +42,16 @@ describe('field configuration', () => {
         expect(GOD_RAYS_SHADER_SOURCE).toContain('center+(startUv-center)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('textureSampleLevel(src,samp,uv,0.)');
         expect(GOD_RAYS_SHADER_SOURCE).not.toContain('textureSample(src,samp,uv)');
+        expect(GOD_RAYS_TEXTURE_FORMAT).toBe('rgba16float');
+        expect(GOD_RAYS_SHADER_SOURCE).toContain('var sum=vec3f(0)');
+        expect(GOD_RAYS_SHADER_SOURCE).toContain('sum+=rgb*weight');
+        expect(GOD_RAYS_SHADER_SOURCE).toContain('var adjustmentLut:texture_2d<f32>');
+        expect(GOD_RAYS_SHADER_SOURCE.match(/textureLoad\(adjustmentLut/g)).toHaveLength(2);
+        expect(GOD_RAYS_SHADER_SOURCE).toContain('threshold<=0.');
+        expect(DISPLAY_SHADER_SOURCE).toContain('textureSample(godRays,samp,uv).rgb');
+        expect(DISPLAY_SHADER_SOURCE).not.toContain('vec3f(1),textureSample(godRays');
+        expect(BLOOM_EXTRACT_SHADER_SOURCE).toContain('textureSample(godRays,samp,uv).rgb');
+        expect(BLOOM_EXTRACT_SHADER_SOURCE).toContain('max(rays.r,max(rays.g,rays.b))');
 
         const parameters = defaultParameters();
         expect(godRaysIsActive(parameters)).toBe(false);
