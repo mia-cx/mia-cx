@@ -144,9 +144,16 @@ describe('RGB Paint.NET adjustment semantics', () => {
         expect(b.channels.g).toMatchObject({ inputLow: 30, inputHigh: 40, gamma: 2 });
         expect(b.channels.b).toBe(a.channels.b);
     });
-    it('does not allow the channel mask to become empty', () => {
-        expect(toggleChannelMask(['r'], 'r')).toEqual(['r']);
+    it('allows every channel in the mask to be unchecked', () => {
+        expect(toggleChannelMask(['r'], 'r')).toEqual([]);
         expect(toggleChannelMask(['r', 'b'], 'r')).toEqual(['b']);
         expect(toggleChannelMask(['b'], 'g')).toEqual(['g', 'b']);
+        expect(CHANNELS.reduce((mask, channel) => toggleChannelMask(mask, channel), [...CHANNELS])).toEqual([]);
+    });
+    it('preserves adjustment identity when editing an empty channel mask', () => {
+        const curve = newCurve();
+        const levels = newLevels();
+        expect(applyCurveEditToChannels(curve, [], { type: 'add', x: 100, y: 110 })).toBe(curve);
+        expect(setLevelsChannelsValue(levels, [], 'gamma', 2)).toBe(levels);
     });
 });

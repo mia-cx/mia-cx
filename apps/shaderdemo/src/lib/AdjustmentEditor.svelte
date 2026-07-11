@@ -48,6 +48,7 @@
                 max={row[3]}
                 step={row[4]}
                 value={adjustment.channels[channel][row[0]]}
+                disabled={channelMask.length === 0}
                 onchange={(e) =>
                     onchange(
                         setLevelsChannelsValue(adjustment, channelMask, row[0] as LevelsKey, +e.currentTarget.value),
@@ -58,6 +59,7 @@
                 max={row[3]}
                 step={row[4]}
                 value={adjustment.channels[channel][row[0]]}
+                disabled={channelMask.length === 0}
                 oninput={(e) =>
                     onchange(
                         setLevelsChannelsValue(adjustment, channelMask, row[0] as LevelsKey, +e.currentTarget.value),

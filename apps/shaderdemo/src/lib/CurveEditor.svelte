@@ -12,23 +12,29 @@
     export let channels: CurveChannels;
     export let channelMask: Channel[];
     export let onedit: (edit: CurveEdit) => void;
-    let selected = 0;
+    let selectedX = 0;
     let graph: SVGSVGElement;
-    $: selected = Math.min(selected, points.length - 1);
+    $: selected = Math.max(
+        0,
+        points.findIndex((point) => point.x === selectedX),
+    );
     $: channelPaths = Object.fromEntries(
         CHANNELS.map((channel) => [
             channel,
             Array.from(curveLut(channels[channel]), (y, x) => `${x},${255 - y}`).join(' '),
         ]),
     ) as Record<Channel, string>;
-    $: primaryChannel = CHANNELS.find((channel) => channels[channel] === points) ?? channelMask[0];
+    $: primaryChannel = channelMask.length
+        ? (CHANNELS.find((channel) => channels[channel] === points) ?? channelMask[0])
+        : undefined;
 
-    function commit(index: number, x: number, y: number) {
-        const old = points[index];
-        const nx = index === 0 ? 0 : index === points.length - 1 ? 255 : Math.max(1, Math.min(254, Math.round(x)));
+    function commit(oldX: number, x: number, y: number) {
+        if (channelMask.length === 0) return oldX;
+        const nx = oldX === 0 || oldX === 255 ? oldX : Math.max(1, Math.min(254, Math.round(x)));
         const ny = Math.max(0, Math.min(255, Math.round(y)));
-        onedit({ type: 'move', oldX: old.x, x: nx, y: ny });
-        selected = points.filter((point) => point.x < nx && point.x !== old.x).length;
+        onedit({ type: 'move', oldX, x: nx, y: ny });
+        selectedX = nx;
+        return nx;
     }
     function coordinates(event: PointerEvent) {
         const box = graph.getBoundingClientRect();
@@ -38,34 +44,50 @@
         };
     }
     function pointerdown(event: PointerEvent) {
+        if (event.button !== 0 || channelMask.length === 0) return;
         const c = coordinates(event);
-        let index = points.findIndex((p) => Math.hypot(p.x - c.x, p.y - c.y) < 9);
+        const index = points.findIndex((p) => Math.hypot(p.x - c.x, p.y - c.y) < 9);
+        let dragX: number;
         if (index < 0 && points.length < MAX_CURVE_POINTS) {
-            const marker = { x: Math.max(1, Math.min(254, Math.round(c.x))), y: Math.round(c.y) };
+            const marker = {
+                x: Math.max(1, Math.min(254, Math.round(c.x))),
+                y: Math.max(0, Math.min(255, Math.round(c.y))),
+            };
             if (points.some((p) => p.x === marker.x)) return;
             onedit({ type: 'add', ...marker });
-            index = points.findIndex((point) => point.x === marker.x);
-            selected = index < 0 ? points.filter((point) => point.x < marker.x).length : index;
-        } else if (index >= 0) selected = index;
-        if (index < 0) return;
+            dragX = marker.x;
+        } else if (index >= 0) dragX = points[index].x;
+        else return;
+        selectedX = dragX;
         graph.setPointerCapture(event.pointerId);
         const move = (e: PointerEvent) => {
             const at = coordinates(e);
-            commit(selected, at.x, at.y);
+            dragX = commit(dragX, at.x, at.y);
         };
-        const up = () => {
+        const cleanup = () => {
             graph.removeEventListener('pointermove', move);
-            graph.removeEventListener('pointerup', up);
+            graph.removeEventListener('pointerup', finish);
+            graph.removeEventListener('pointercancel', finish);
+            graph.removeEventListener('lostpointercapture', cleanup);
+        };
+        const finish = (e: PointerEvent) => {
+            cleanup();
+            if (graph.hasPointerCapture(e.pointerId)) graph.releasePointerCapture(e.pointerId);
         };
         graph.addEventListener('pointermove', move);
-        graph.addEventListener('pointerup', up);
+        graph.addEventListener('pointerup', finish);
+        graph.addEventListener('pointercancel', finish);
+        graph.addEventListener('lostpointercapture', cleanup);
     }
     function removeSelected() {
-        if (selected <= 0 || selected >= points.length - 1) return;
-        onedit({ type: 'remove', x: points[selected].x });
-        selected = Math.max(0, selected - 1);
+        if (channelMask.length === 0 || selectedX === 0 || selectedX === 255) return;
+        const index = points.findIndex((point) => point.x === selectedX);
+        if (index < 0) return;
+        onedit({ type: 'remove', x: selectedX });
+        selectedX = points[Math.max(0, index - 1)].x;
     }
     function keydown(event: KeyboardEvent) {
+        if (channelMask.length === 0) return;
         if (event.key === 'Delete' || event.key === 'Backspace') {
             event.preventDefault();
             removeSelected();
@@ -76,7 +98,7 @@
         const amount = event.shiftKey ? 10 : 1;
         const dx = event.key === 'ArrowLeft' ? -amount : event.key === 'ArrowRight' ? amount : 0;
         const dy = event.key === 'ArrowDown' ? -amount : event.key === 'ArrowUp' ? amount : 0;
-        commit(selected, points[selected].x + dx, points[selected].y + dy);
+        commit(selectedX, points[selected].x + dx, points[selected].y + dy);
     }
 </script>
 
@@ -88,6 +110,7 @@
     role="application"
     aria-label="Curve editor"
     tabindex="0"
+    class:inactive={channelMask.length === 0}
     onpointerdown={pointerdown}
     onkeydown={keydown}
 >
@@ -123,12 +146,17 @@
             r="4"
             onclick={(event) => {
                 event.stopPropagation();
-                selected = index;
+                if (channelMask.length > 0) selectedX = point.x;
             }}
             ondblclick={(event) => {
                 event.stopPropagation();
-                selected = index;
+                selectedX = point.x;
                 removeSelected();
+            }}
+            oncontextmenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (channelMask.length > 0 && point.x !== 0 && point.x !== 255) onedit({ type: 'remove', x: point.x });
             }}
         />
     {/each}
@@ -140,8 +168,8 @@
             min="0"
             max="255"
             value={points[selected].x}
-            disabled={selected === 0 || selected === points.length - 1}
-            onchange={(e) => commit(selected, +e.currentTarget.value, points[selected].y)}
+            disabled={channelMask.length === 0 || selected === 0 || selected === points.length - 1}
+            onchange={(e) => commit(selectedX, +e.currentTarget.value, points[selected].y)}
         /></label
     >
     <label
@@ -150,7 +178,8 @@
             min="0"
             max="255"
             value={points[selected].y}
-            onchange={(e) => commit(selected, points[selected].x, +e.currentTarget.value)}
+            disabled={channelMask.length === 0}
+            onchange={(e) => commit(selectedX, points[selected].x, +e.currentTarget.value)}
         /></label
     >
 </div>
@@ -214,6 +243,9 @@
     circle.selected {
         fill: #eee;
         stroke: #111;
+    }
+    .curve.inactive circle {
+        opacity: 0.25;
     }
     .coordinates {
         display: flex;

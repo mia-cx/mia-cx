@@ -141,10 +141,9 @@ export function setLevelsChannelsValue(
     return channels.reduce((next, channel) => setLevelsChannelValue(next, channel, key, raw), a);
 }
 
-/** Toggle a Paint.NET-style channel mask while ensuring it can never be empty. */
+/** Toggle a Paint.NET-style channel mask, preserving canonical channel order. */
 export function toggleChannelMask(mask: readonly Channel[], channel: Channel): Channel[] {
     if (!mask.includes(channel)) return CHANNELS.filter((item) => item === channel || mask.includes(item));
-    if (mask.length === 1) return [...mask];
     return CHANNELS.filter((item) => item !== channel && mask.includes(item));
 }
 
@@ -168,6 +167,7 @@ export function applyCurveEditToChannels(
     channels: readonly Channel[],
     edit: CurveEdit,
 ): CurveAdjustment {
+    if (channels.length === 0) return a;
     const next = { ...a.channels };
     for (const channel of channels) next[channel] = applyCurveEdit(a.channels[channel], edit);
     return { ...a, channels: next };
