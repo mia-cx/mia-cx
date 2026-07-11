@@ -1,5 +1,5 @@
 export const FIELD_PARAMETER_SCHEMA = [
-    { key: 'fieldScale', label: 'Base field size', min: 32, max: 512, step: 1, default: 128 },
+    { key: 'fieldScale', label: 'Base field size', min: 32, max: 2048, step: 1, default: 128 },
     { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 2.5 },
     { key: 'ridgeMix', label: 'Billow / ridge mix', min: 0, max: 1, step: 0.01, default: 1 },
     { key: 'ridgeSharpness', label: 'Ridge sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
