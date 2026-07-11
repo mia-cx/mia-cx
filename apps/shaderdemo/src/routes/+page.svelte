@@ -14,16 +14,8 @@
     } from '$lib/renderer';
     import { GpuTelemetry, type FrameRollingSummary, type GpuRollingSummary } from '$lib/telemetry';
     import { defaultShaderSettings, normalizeSavedSettings, shaderSettings } from '$lib/settings';
-    import CurveEditor from '$lib/CurveEditor.svelte';
-    import {
-        MAX_ADJUSTMENTS,
-        newCurve,
-        newLevels,
-        setLevelsValue,
-        type Adjustment,
-        type LevelsAdjustment,
-        type LevelsKey,
-    } from '$lib/adjustments';
+    import AdjustmentEditor from '$lib/AdjustmentEditor.svelte';
+    import { MAX_ADJUSTMENTS, newCurve, newLevels, type Adjustment } from '$lib/adjustments';
 
     let canvas: HTMLCanvasElement;
     let renderer: AtmosphereRenderer | undefined;
@@ -421,50 +413,10 @@
                                             }}>Remove</button
                                         >
                                     </div>
-                                    {#if adjustment.type === 'curve'}
-                                        <CurveEditor
-                                            points={adjustment.points}
-                                            onchange={(points) => replaceAdjustment(index, { ...adjustment, points })}
-                                        />
-                                    {:else}
-                                        {#each [['inputLow', 'Input black', 0, 254, 1], ['inputHigh', 'Input white', 1, 255, 1], ['gamma', 'Gamma', 0.1, 10, 0.1], ['outputLow', 'Output black', 0, 254, 1], ['outputHigh', 'Output white', 1, 255, 1]] as row}
-                                            <label class="parameter"
-                                                ><span>{row[1]}</span><input
-                                                    class="exact-value"
-                                                    aria-label={`${row[1]} exact value`}
-                                                    type="number"
-                                                    min={row[2]}
-                                                    max={row[3]}
-                                                    step={row[4]}
-                                                    value={adjustment[row[0] as LevelsKey]}
-                                                    onchange={(e) =>
-                                                        replaceAdjustment(
-                                                            index,
-                                                            setLevelsValue(
-                                                                adjustment as LevelsAdjustment,
-                                                                row[0] as LevelsKey,
-                                                                +e.currentTarget.value,
-                                                            ),
-                                                        )}
-                                                /><input
-                                                    type="range"
-                                                    min={row[2]}
-                                                    max={row[3]}
-                                                    step={row[4]}
-                                                    value={adjustment[row[0] as LevelsKey]}
-                                                    oninput={(e) =>
-                                                        replaceAdjustment(
-                                                            index,
-                                                            setLevelsValue(
-                                                                adjustment as LevelsAdjustment,
-                                                                row[0] as LevelsKey,
-                                                                +e.currentTarget.value,
-                                                            ),
-                                                        )}
-                                                /></label
-                                            >
-                                        {/each}
-                                    {/if}
+                                    <AdjustmentEditor
+                                        {adjustment}
+                                        onchange={(value) => replaceAdjustment(index, value)}
+                                    />
                                 </section>
                             {/each}
                             {#if options.adjustments.length === 0}<p class="empty">No adjustments.</p>{/if}

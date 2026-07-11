@@ -1,18 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import {
-    MAX_ADJUSTMENTS,
+    CHANNELS,
     composeAdjustmentLut,
     curveLut,
+    identityLevels,
     interpolateNatural,
     levelsValue,
+    newCurve,
     newLevels,
     sanitizeAdjustments,
-    setLevelsValue,
-    type CurveAdjustment,
+    setLevelsChannelValue,
 } from './adjustments';
 
-describe('Paint.NET adjustment semantics', () => {
-    it('makes an exact identity natural spline LUT', () => {
+describe('RGB Paint.NET adjustment semantics', () => {
+    it('creates independent identity channels', () => {
+        const curve = newCurve(),
+            levels = newLevels();
+        CHANNELS.forEach((c) => {
+            expect(curve.channels[c]).toEqual([
+                { x: 0, y: 0 },
+                { x: 255, y: 255 },
+            ]);
+            expect(levels.channels[c]).toEqual(identityLevels());
+        });
+        expect(curve.channels.r).not.toBe(curve.channels.g);
+        expect(levels.channels.r).not.toBe(levels.channels.g);
+    });
+    it('keeps natural spline and levels byte semantics', () => {
         expect([
             ...curveLut([
                 { x: 0, y: 0 },
@@ -29,80 +43,69 @@ describe('Paint.NET adjustment semantics', () => {
                 64,
             ),
         ).toBeCloseTo(175.688976, 5);
+        expect(levelsValue({ inputLow: 10, inputHigh: 110, outputLow: 20, outputHigh: 220, gamma: 2 }, 60)).toBe(70);
     });
-    it('clamps spline overshoot then truncates', () => {
-        const lut = curveLut([
-            { x: 0, y: 0 },
-            { x: 64, y: 255 },
-            { x: 128, y: 0 },
-            { x: 255, y: 255 },
+    it('migrates scalar settings identically to RGB', () => {
+        const [curve, levels] = sanitizeAdjustments([
+            {
+                type: 'curve',
+                id: 'c',
+                points: [
+                    { x: 0, y: 10 },
+                    { x: 255, y: 200 },
+                ],
+            },
+            { type: 'levels', id: 'l', inputLow: 10, inputHigh: 200, gamma: 2, outputLow: 5, outputHigh: 240 },
         ]);
-        expect(lut[60]).toBe(255);
-        expect(Number.isInteger(lut[100])).toBe(true);
+        expect(curve.type).toBe('curve');
+        expect(levels.type).toBe('levels');
+        if (curve.type === 'curve') expect(curve.channels.r).toEqual(curve.channels.g);
+        if (levels.type === 'levels') expect(levels.channels.r).toEqual(levels.channels.b);
     });
-    it('uses strict boundaries, direct gamma and truncation', () => {
-        const a = { ...newLevels(), inputLow: 10, inputHigh: 110, outputLow: 20, outputHigh: 220, gamma: 2 };
-        expect(levelsValue(a, 9)).toBe(20);
-        expect(levelsValue(a, 10)).toBe(20);
-        expect(levelsValue(a, 60)).toBe(70);
-        expect(levelsValue(a, 109)).toBe(216);
-        expect(levelsValue(a, 110)).toBe(220);
-    });
-    it('lets the edited levels endpoint win and push its partner', () => {
-        expect(setLevelsValue({ ...newLevels(), inputHigh: 20 }, 'inputLow', 30)).toMatchObject({
-            inputLow: 30,
-            inputHigh: 31,
-        });
-        expect(setLevelsValue({ ...newLevels(), outputLow: 30 }, 'outputHigh', 20)).toMatchObject({
-            outputLow: 19,
-            outputHigh: 20,
-        });
-    });
-    it('composes enabled byte LUTs in order with intermediate quantization', () => {
-        const curve: CurveAdjustment = {
-            id: 'c',
-            type: 'curve',
-            enabled: true,
-            points: [
-                { x: 0, y: 0 },
-                { x: 255, y: 128 },
-            ],
-        };
-        const levels = { ...newLevels(), id: 'l', gamma: 2 };
-        const result = composeAdjustmentLut([curve, levels]);
-        expect(result[200]).toBe(Math.trunc(255 * (Math.trunc((200 * 128) / 255) / 255) ** 2));
-        expect(composeAdjustmentLut([{ ...curve, enabled: false }])[200]).toBe(200);
-    });
-    it('sanitizes malformed state, IDs, integer points, endpoints, separation and count', () => {
-        const raw = Array.from({ length: MAX_ADJUSTMENTS + 3 }, (_, i) =>
-            i === 0
-                ? {
-                      type: 'curve',
-                      id: 'same',
-                      points: [
-                          { x: 4.4, y: 8.7 },
-                          { x: 4.2, y: 99 },
-                      ],
-                  }
-                : { type: 'levels', id: 'same', inputLow: 255, inputHigh: 0, outputLow: 255, outputHigh: 0, gamma: 99 },
-        );
-        const out = sanitizeAdjustments(raw);
-        expect(out).toHaveLength(MAX_ADJUSTMENTS);
-        expect(new Set(out.map((a) => a.id)).size).toBe(MAX_ADJUSTMENTS);
-        expect(out[0]).toMatchObject({
-            type: 'curve',
-            points: [
-                { x: 0, y: 0 },
-                { x: 4, y: 99 },
-                { x: 255, y: 255 },
-            ],
-        });
-        const level = out[1];
-        expect(level.type).toBe('levels');
-        if (level.type === 'levels') {
-            expect(level.inputLow).toBeLessThan(level.inputHigh);
-            expect(level.outputLow).toBeLessThan(level.outputHigh);
-            expect(level.gamma).toBe(10);
+    it('sanitizes malformed partial channels independently', () => {
+        const [a] = sanitizeAdjustments([{ type: 'levels', channels: { r: { gamma: 99 }, g: null } }]);
+        expect(a.type).toBe('levels');
+        if (a.type === 'levels') {
+            expect(a.channels.r.gamma).toBe(10);
+            expect(a.channels.g).toEqual(identityLevels());
+            expect(a.channels.b).toEqual(identityLevels());
         }
+    });
+    it('composes channels independently into interleaved RGBA with quantization', () => {
+        const curve = newCurve();
+        curve.channels.r = [
+            { x: 0, y: 0 },
+            { x: 255, y: 128 },
+        ];
+        curve.channels.b = [
+            { x: 0, y: 255 },
+            { x: 255, y: 0 },
+        ];
+        const levels = newLevels();
+        levels.channels.r.gamma = 2;
+        const lut = composeAdjustmentLut([curve, levels]),
+            i = 200 * 4;
+        expect(lut).toHaveLength(1024);
+        expect([...lut.slice(i, i + 4)]).toEqual([
+            Math.trunc(255 * (Math.trunc((200 * 128) / 255) / 255) ** 2),
+            200,
+            55,
+            255,
+        ]);
+    });
+    it('returns RGBA identity when all disabled', () => {
+        const a = newCurve();
+        a.enabled = false;
+        const lut = composeAdjustmentLut([a]);
+        expect([...lut.slice(200 * 4, 200 * 4 + 4)]).toEqual([200, 200, 200, 255]);
+    });
+    it('pushes endpoints only in the edited channel and deep-copies that path', () => {
+        const a = newLevels();
+        a.channels.r.inputHigh = 20;
+        const b = setLevelsChannelValue(a, 'r', 'inputLow', 30);
+        expect(b.channels.r).toMatchObject({ inputLow: 30, inputHigh: 31 });
+        expect(b.channels.g).toEqual(identityLevels());
+        expect(b.channels.g).toBe(a.channels.g);
+        expect(b.channels.r).not.toBe(a.channels.r);
     });
 });

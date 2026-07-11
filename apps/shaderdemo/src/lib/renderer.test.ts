@@ -31,6 +31,8 @@ describe('field configuration', () => {
     it('does one exact integer adjustment lookup in the existing display shader', () => {
         expect(DISPLAY_SHADER_SOURCE.match(/textureLoad\(adjustmentLut/g)).toHaveLength(1);
         expect(DISPLAY_SHADER_SOURCE).toContain('texture_2d<u32>');
+        expect(DISPLAY_SHADER_SOURCE).toContain('.rgb;');
+        expect(DISPLAY_SHADER_SOURCE).toContain('vec3f(rgb)/255.');
         expect(DISPLAY_SHADER_SOURCE).toContain('floor(f*255.+.5)');
         expect(DISPLAY_SHADER_SOURCE).toContain('if(u.blurRadii[1].w>.5)');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('textureSample(adjustmentLut');

@@ -441,7 +441,10 @@ export const DISPLAY_SHADER_SOURCE =
     let density=textureSample(src,samp,uv).r;
     var f=pow(clamp(density,0.,1.),u.finalContrast);
     // Existing final contrast first; adjustment LUT is the new final stage.
-    if(u.blurRadii[1].w>.5) { f=f32(textureLoad(adjustmentLut,vec2i(i32(floor(f*255.+.5)),0),0).r)/255.; }
+    if(u.blurRadii[1].w>.5) {
+        let rgb=textureLoad(adjustmentLut,vec2i(i32(floor(f*255.+.5)),0),0).rgb;
+        return vec4f(vec3f(rgb)/255.,1.);
+    }
     return vec4f(vec3f(f),1.);
 }`;
 
@@ -535,7 +538,7 @@ export class AtmosphereRenderer {
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
         self.adjustmentTexture = self.device.createTexture({
             size: [256, 1],
-            format: 'r8uint',
+            format: 'rgba8uint',
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
         });
         self.adjustmentView = self.adjustmentTexture.createView();
@@ -596,9 +599,9 @@ export class AtmosphereRenderer {
         if (key === this.adjustmentsKey) return;
         this.adjustmentsKey = key;
         const lut = composeAdjustmentLut(this.options.adjustments);
-        const bytes = new ArrayBuffer(256);
+        const bytes = new ArrayBuffer(lut.byteLength);
         new Uint8Array(bytes).set(lut);
-        this.device.queue.writeTexture({ texture: this.adjustmentTexture }, bytes, { bytesPerRow: 256 }, [256, 1]);
+        this.device.queue.writeTexture({ texture: this.adjustmentTexture }, bytes, { bytesPerRow: 1024 }, [256, 1]);
     }
     setPaused(value: boolean) {
         this.paused = value;
