@@ -150,7 +150,8 @@ fn noise3(p: vec3f) -> f32 {
     let i=floor(p); let f=fract(p); let s=f*f*(3.-2.*f);
     let z0=mix(mix(hash3(i),hash3(i+vec3f(1,0,0)),s.x),mix(hash3(i+vec3f(0,1,0)),hash3(i+vec3f(1,1,0)),s.x),s.y);
     let z1=mix(mix(hash3(i+vec3f(0,0,1)),hash3(i+vec3f(1,0,1)),s.x),mix(hash3(i+vec3f(0,1,1)),hash3(i+vec3f(1,1,1)),s.x),s.y);
-    return mix(z0,z1,s.z);
+    // Keep X/Y spatial interpolation smooth, but traverse Z linearly so animation has no built-in ease-in/out.
+    return mix(z0,z1,f.z);
 }
 fn noise3v(p: vec2f, z: f32) -> vec2f {
     return vec2f(noise3(vec3f(p,z)),noise3(vec3f(p+vec2f(17.7,43.2),z+11.3)));
