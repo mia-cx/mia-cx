@@ -160,22 +160,28 @@ const octaveShader =
     common +
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
-fn scatterOffset(pixel: vec2f, salt: f32, smoothness: f32, distance: f32) -> vec2f {
-    // Smoothness controls rigid section size. Every section moves by a whole source-pixel offset.
-    let sectionSize=exp2(mix(0.,6.,smoothness));
-    let section=floor(pixel/sectionSize);
-    let angle=hash(section+vec2f(salt*17.13,salt*5.71))*6.2831853;
-    let radius=sqrt(hash(section+vec2f(salt*3.37+41.9,salt*11.73-19.4)))*distance;
-    return round(vec2f(cos(angle),sin(angle))*radius);
+fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
+    // Paint.NET Frosted Glass: independent random angle and uniform radius for every pixel/sample.
+    let angle=hash(pixel+vec2f(salt*17.13,salt*5.71))*6.2831853;
+    let radius=hash(pixel+vec2f(salt*3.37+41.9,salt*11.73-19.4))*distance;
+    return vec2f(cos(angle),sin(angle))*radius;
 }
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let sourceSize=vec2f(textureDimensions(src));
     let settings=u.octaves[u32(u.octaveIndex)];
     let pixel=floor(pos.xy);
-    let offset=scatterOffset(pixel,1.+u.octaveIndex*7.,settings.z,settings.w);
-    // Linear reconstruction preserves the image while the quantized offset moves whole pixel sections.
-    let scattered=textureSample(src,samp,uv+offset/sourceSize).r;
+    let sampleCount=u32(round(mix(1.,8.,settings.z)));
+    var scattered=0.;
+    for(var sampleIndex=0u;sampleIndex<8u;sampleIndex++) {
+        if(sampleIndex<sampleCount) {
+            let salt=1.+u.octaveIndex*8.+f32(sampleIndex);
+            let offset=scatterOffset(pixel,salt,settings.w);
+            scattered+=textureSample(src,samp,uv+offset/sourceSize).r;
+        }
+    }
+    // Paint.NET's smoothness is sample count: 1–8 randomly displaced bilinear samples blended together.
+    scattered/=f32(sampleCount);
     // Literal 1:1 static pixel noise is layered on top of the scattered previous stage.
     let detail=hash(pixel+vec2f(u.octaveIndex*37.7,u.octaveIndex*91.3))-.5;
     let injected=scattered+detail*settings.x;
