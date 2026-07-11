@@ -119,6 +119,20 @@ export function fullResolutionPassSizes(width: number, height: number, renderSca
 }
 
 export const UNIFORM_FLOATS = 60;
+export const MAX_UNIFORM_SLOTS = 2 * OCTAVE_COUNT + 2;
+export function alignUniformSlotSize(byteSize: number, alignment: number) {
+    return Math.ceil(byteSize / alignment) * alignment;
+}
+export function canFuseFinalOctave(
+    renderScale: number,
+    textureWidth: number,
+    textureHeight: number,
+    canvasWidth: number,
+    canvasHeight: number,
+    effectActive: boolean,
+) {
+    return renderScale === 1 && effectActive && textureWidth === canvasWidth && textureHeight === canvasHeight;
+}
 export function packUniform(
     resolution: [number, number],
     time: number,
@@ -326,10 +340,12 @@ export const BLUR_SHADER_SOURCE =
     return vec4f(value,0.,0.,1.);
 }`;
 
-export const OCTAVE_SHADER_SOURCE =
-    COMMON_SHADER_SOURCE +
-    /* wgsl */ `
+const OCTAVE_SHADER_BODY = /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
+fn clampedLoad(coord: vec2i) -> f32 {
+    let maximum=vec2i(textureDimensions(src))-vec2i(1);
+    return textureLoad(src,clamp(coord,vec2i(0),maximum),0).r;
+}
 fn avalanche(value: u32) -> u32 {
     var x=value;
     x^=x>>16u; x*=0x7feb352du; x^=x>>15u; x*=0x846ca68bu; x^=x>>16u;
@@ -350,7 +366,7 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     let radius=f32(bits>>8u)*(1./16777215.)*distance;
     return directions[bits&15u]*radius;
 }
-@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+fn octaveDensity(pos: vec4f) -> f32 {
     let uv=pos.xy/u.resolution;
     let sourceSize=vec2f(textureDimensions(src));
     let octave=u32(u.octaveIndex);
@@ -362,29 +378,30 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     let pixelationBit=(u32(u.octavePixelationMask)&(1u<<octave))!=0u;
     let octavePixelSize=f32(octavePixelSizeU);
     let tiledUv=(vec2f(tile)+.5)*octavePixelSize/sourceSize;
-    let sourceUv=select(uv,tiledUv,pixelationBit);
     let sampleCount=u32(round(mix(1.,4.,settings.z)));
-    // Radius zero is an exact identity operation: no random resampling and no accumulated softening.
     var scattered: f32;
     if(settings.w>0.) {
         scattered=0.;
         let octaveFrameSalt=(octave*0x27d4eb2du) ^ (u32(u.frameIndex)*0x9e3779b9u);
         for(var sampleIndex=0u;sampleIndex<4u;sampleIndex++) {
             if(sampleIndex<sampleCount) {
-                // Run Frosted Glass in this octave's virtual pixel grid. Every real pixel inside a tile
-                // receives the same whole-tile displacement while retaining its local detail.
                 let tileOffset=round(scatterOffset(tile,sampleIndex,settings.w,octaveFrameSalt));
                 let offset=tileOffset*octavePixelSize;
-                scattered+=textureSample(src,samp,sourceUv+offset/sourceSize).r;
+                if(pixelationBit) {
+                    scattered+=textureSample(src,samp,tiledUv+offset/sourceSize).r;
+                } else {
+                    scattered+=clampedLoad(vec2i(pixel)+vec2i(offset));
+                }
             }
         }
         scattered/=f32(sampleCount);
     } else {
-        scattered=textureSample(src,samp,sourceUv).r;
+        if(pixelationBit) {
+            scattered=textureSample(src,samp,tiledUv).r;
+        } else {
+            scattered=clampedLoad(vec2i(pixel));
+        }
     }
-    // Paint.NET's smoothness is sample count: 1–4 randomly displaced bilinear samples blended together.
-    // Diffusion offsets and electrical noise are independently re-salted every rendered frame.
-    // Literal noise is constant per effect-space tile, but independently salted for each rendered frame.
     var injected=scattered;
     if(settings.x!=0.) {
         let noiseSalt=(octave*0x27d4eb2du) ^ (u32(u.frameIndex)*0x165667b1u) ^ 0xa511e9b3u;
@@ -392,10 +409,28 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
         let detail=f32(noiseBits)*(1./4294967295.)-.5;
         injected+=detail*settings.x;
     }
-    if(settings.y==0.) { return vec4f(injected,0.,0.,1.); }
+    if(settings.y==0.) { return injected; }
     let thresholdWidth=max(.015,fwidth(injected)*1.5);
-    let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,injected);
-    return vec4f(thresholded,0.,0.,1.);
+    return smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,injected);
+}
+`;
+
+export const OCTAVE_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    OCTAVE_SHADER_BODY +
+    /* wgsl */ `
+@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    return vec4f(octaveDensity(pos),0.,0.,1.);
+}`;
+
+export const FINAL_OCTAVE_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    OCTAVE_SHADER_BODY +
+    /* wgsl */ `
+@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let density=unpack2x16float(pack2x16float(vec2f(octaveDensity(pos),0.))).x;
+    let f=pow(clamp(density,0.,1.),u.finalContrast);
+    return vec4f(vec3f(f),1.);
 }`;
 
 const displayShader =
@@ -416,7 +451,9 @@ export class AtmosphereRenderer {
     private textures: GPUTexture[] = [];
     private textureViews: GPUTextureView[] = [];
     private sampler?: GPUSampler;
-    private buffers: GPUBuffer[] = [];
+    private uniformBuffer?: GPUBuffer;
+    private uniformSlotStride = 0;
+    private uniformSlab?: Float32Array<ArrayBuffer>;
     private bindGroups = new Map<string, GPUBindGroup>();
     private observer: ResizeObserver;
     private rafId = 0;
@@ -467,13 +504,17 @@ export class AtmosphereRenderer {
             make(BLUR_SHADER_SOURCE, 'r16float'),
             make(OCTAVE_SHADER_SOURCE, 'r16float'),
             make(displayShader, format),
+            make(FINAL_OCTAVE_SHADER_SOURCE, format),
         ]);
-        self.buffers = Array.from({ length: 2 * OCTAVE_COUNT + 2 }, () =>
-            self.device!.createBuffer({
-                size: UNIFORM_FLOATS * 4,
-                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-            }),
+        self.uniformSlotStride = alignUniformSlotSize(
+            UNIFORM_FLOATS * 4,
+            self.device.limits.minUniformBufferOffsetAlignment,
         );
+        self.uniformBuffer = self.device.createBuffer({
+            size: self.uniformSlotStride * MAX_UNIFORM_SLOTS,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        self.uniformSlab = new Float32Array((self.uniformSlotStride * MAX_UNIFORM_SLOTS) / 4);
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
         self.device.lost.then((info) => {
             if (!self.destroyed) self.onLost?.(`GPU device lost: ${info.message || info.reason}`);
@@ -548,16 +589,18 @@ export class AtmosphereRenderer {
         if (animated) this.schedule();
     };
     private render() {
-        const d = this.device,
-            c = this.context,
-            buffers = this.buffers,
-            s = this.sampler;
+        const d = this.device;
+        const c = this.context;
+        const uniformBuffer = this.uniformBuffer;
+        const uniformSlab = this.uniformSlab;
+        const s = this.sampler;
         if (
             !d ||
             !c ||
-            buffers.length < 2 * OCTAVE_COUNT + 2 ||
+            !uniformBuffer ||
+            !uniformSlab ||
             !s ||
-            this.pipelines.length < 4 ||
+            this.pipelines.length < 5 ||
             this.textures.length < 2 ||
             this.textureViews.length < 2
         )
@@ -579,13 +622,21 @@ export class AtmosphereRenderer {
             usesSampler = false,
         ) => {
             const uniformSlot = passIndex++;
-            const buffer = buffers[uniformSlot];
-            d.queue.writeBuffer(buffer, 0, data);
+            uniformSlab.set(data, (uniformSlot * this.uniformSlotStride) / 4);
             const pipeline = this.pipelines[pipelineIndex];
             const cacheKey = bindGroupCacheKey(pipelineIndex, sourceTextureIndex, uniformSlot);
             let bindGroup = this.bindGroups.get(cacheKey);
             if (!bindGroup) {
-                const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer } }];
+                const entries: GPUBindGroupEntry[] = [
+                    {
+                        binding: 0,
+                        resource: {
+                            buffer: uniformBuffer,
+                            offset: uniformSlot * this.uniformSlotStride,
+                            size: UNIFORM_FLOATS * 4,
+                        },
+                    },
+                ];
                 if (sourceTextureIndex !== undefined) {
                     entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
                     if (usesSampler) entries.push({ binding: 2, resource: s });
@@ -605,6 +656,16 @@ export class AtmosphereRenderer {
         };
         draw(this.textureViews[0], 0);
         let current = 0;
+        const finalEffectActive = octaveEffectIsActive(this.options.parameters, OCTAVE_COUNT - 1);
+        const fuseFinal = canFuseFinalOctave(
+            this.options.renderScale,
+            this.textures[0].width,
+            this.textures[0].height,
+            this.canvas.width,
+            this.canvas.height,
+            finalEffectActive,
+        );
+        let fused = false;
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
             data[29] = octave;
             if (octaveBlurIsActive(this.options.parameters, octave)) {
@@ -613,14 +674,22 @@ export class AtmosphereRenderer {
                 current = scratch;
             }
             if (octaveEffectIsActive(this.options.parameters, octave)) {
+                if (octave === OCTAVE_COUNT - 1 && fuseFinal) {
+                    draw(c.getCurrentTexture().createView(), 4, current, true);
+                    fused = true;
+                    continue;
+                }
                 const scratch = 1 - current;
                 draw(this.textureViews[scratch], 2, current, true);
                 current = scratch;
             }
         }
-        data[0] = this.canvas.width;
-        data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), 3, current, true);
+        if (!fused) {
+            data[0] = this.canvas.width;
+            data[1] = this.canvas.height;
+            draw(c.getCurrentTexture().createView(), 3, current, true);
+        }
+        d.queue.writeBuffer(uniformBuffer, 0, uniformSlab, 0, passIndex * this.uniformSlotStride);
         d.queue.submit([enc.finish()]);
         this.frameIndex = (this.frameIndex + 1) % 16_777_216;
     }
@@ -632,8 +701,9 @@ export class AtmosphereRenderer {
         this.textures.forEach((texture) => texture.destroy());
         this.textureViews = [];
         this.bindGroups.clear();
-        this.buffers.forEach((buffer) => buffer.destroy());
-        this.buffers = [];
+        this.uniformBuffer?.destroy();
+        this.uniformBuffer = undefined;
+        this.uniformSlab = undefined;
         try {
             this.context?.unconfigure();
         } catch {}
