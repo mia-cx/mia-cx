@@ -69,13 +69,13 @@ describe('field configuration', () => {
         expect(advanceSimulationTime(12, 0.5, 3)).toBe(13.5);
     });
     it('defines five independent groups of four valid controls', () => {
-        expect(FIELD_PARAMETER_SCHEMA).toHaveLength(26);
+        expect(FIELD_PARAMETER_SCHEMA).toHaveLength(25);
         expect(OCTAVE_PARAMETER_SCHEMA).toHaveLength(5);
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
         expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(56);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(56);
+        expect(PARAMETER_SCHEMA).toHaveLength(55);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(55);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -86,14 +86,13 @@ describe('field configuration', () => {
         expect(defaultParameters().centerDarkness).toBe(0);
         expect(defaultParameters().thresholdEnabled).toBe(1);
         expect(defaultParameters()).toMatchObject({
-            baseCloudBlendMode: 0,
-            baseRibbonBlendMode: 0,
+            baseBlendMode: 0,
             secondaryEnabled: 1,
             secondaryScale: 1.1,
             secondaryCloudAmount: 0,
             secondaryRibbonAmount: 0,
             secondaryRibbonSharpness: 1.76,
-            secondaryCloudBlendMode: 0,
+            secondaryBlendMode: 0,
             secondaryRibbonBlendMode: 0,
         });
         for (const key of ['billowAmount', 'ridgeAmount', 'secondaryCloudAmount', 'secondaryRibbonAmount'] as const) {
@@ -130,31 +129,16 @@ describe('field configuration', () => {
         expect(Object.keys(normalized.parameters).some((key) => key.startsWith('tertiary'))).toBe(false);
     });
     it('defaults old saved settings to Add and normalizes categorical modes', () => {
-        const oldParameters = { baseBlendMode: 2, secondaryBlendMode: 1 } as unknown as ReturnType<
-            typeof defaultParameters
-        >;
-        const old = normalizeSavedSettings({ seed: 7, parameters: oldParameters });
-        expect('baseBlendMode' in old.parameters).toBe(false);
-        expect('secondaryBlendMode' in old.parameters).toBe(false);
-        expect([
-            old.parameters.baseCloudBlendMode,
-            old.parameters.baseRibbonBlendMode,
-            old.parameters.secondaryCloudBlendMode,
-            old.parameters.secondaryRibbonBlendMode,
-        ]).toEqual([0, 0, 0, 0]);
+        const old = normalizeSavedSettings({ seed: 7, parameters: {} as ReturnType<typeof defaultParameters> });
+        expect(old.parameters.baseBlendMode).toBe(0);
+        expect(old.parameters.secondaryBlendMode).toBe(0);
+        expect(old.parameters.secondaryRibbonBlendMode).toBe(0);
 
         const parameters = defaultParameters();
-        parameters.baseCloudBlendMode = 2.6;
-        parameters.baseRibbonBlendMode = 1.4;
-        parameters.secondaryCloudBlendMode = -4;
-        parameters.secondaryRibbonBlendMode = 9;
+        parameters.baseBlendMode = 1.6;
+        parameters.secondaryBlendMode = -4;
         const normalized = normalizeSavedSettings({ seed: 7, parameters });
-        expect([
-            normalized.parameters.baseCloudBlendMode,
-            normalized.parameters.baseRibbonBlendMode,
-            normalized.parameters.secondaryCloudBlendMode,
-            normalized.parameters.secondaryRibbonBlendMode,
-        ]).toEqual([3, 1, 0, 3]);
+        expect([normalized.parameters.baseBlendMode, normalized.parameters.secondaryBlendMode]).toEqual([2, 0]);
     });
     it('packs the aligned uniform header and array<vec4f, 5>', () => {
         const parameters = defaultParameters();
@@ -163,8 +147,10 @@ describe('field configuration', () => {
         const data = packUniform([320, 180], 2, 9, parameters, 4);
         expect(data).toHaveLength(UNIFORM_FLOATS);
         expect(data.byteLength).toBe(240);
-        expect(data[30]).toBe(4);
-        expect(data[31]).toBe(5);
+        expect(Array.from(data.slice(12, 18))).toEqual(Array.from(new Float32Array([1, 1.1, 0, 0, 1.76, 0])));
+        expect(data[29]).toBe(4);
+        expect(data[30]).toBe(5);
+        expect(data[31]).toBe(0);
         expect(Array.from(data.slice(32, 36))).toEqual(
             Array.from(
                 new Float32Array([
@@ -197,24 +183,21 @@ describe('field configuration', () => {
         parameters.octave1BlurRadius = 0;
         expect(octaveBlurIsActive(parameters, 0)).toBe(false);
     });
-    it('composes four independent ordered layers with signed blend modes before attenuation and threshold', () => {
+    it('preserves the base generator blend while compositing secondary ribbon independently', () => {
         expect(BASE_SHADER_SOURCE).toContain('fn screen01');
         expect(BASE_SHADER_SOURCE).toContain('fn overlay01');
-        expect(BASE_SHADER_SOURCE).toContain('fn blendLayer(backdrop: f32, source: f32, amount: f32, mode: f32)');
-        expect(BASE_SHADER_SOURCE).toContain('if(amount==0.) { return backdrop; }');
-        expect(BASE_SHADER_SOURCE).toContain('backdrop-source*amount');
-        expect(BASE_SHADER_SOURCE).toContain('var natural=blendLayer(0.,cloud,u.billowAmount,u.baseCloudBlendMode)');
-        expect(BASE_SHADER_SOURCE).toContain('natural=blendLayer(natural,ribbon,u.ridgeAmount,u.baseRibbonBlendMode)');
+        expect(BASE_SHADER_SOURCE).toContain('fn blendSigned');
+        expect(BASE_SHADER_SOURCE).toContain('blendSigned(cloud*u.billowAmount,ribbon*u.ridgeAmount,u.baseBlendMode)');
         expect(BASE_SHADER_SOURCE).toContain(
-            'natural=blendLayer(natural,secondaryCloud,u.secondaryCloudAmount,u.secondaryCloudBlendMode)',
+            'natural=blendSigned(natural,secondaryCloud*u.secondaryCloudAmount,u.secondaryBlendMode)',
         );
         expect(BASE_SHADER_SOURCE).toContain(
-            'natural=blendLayer(natural,secondaryRibbon,u.secondaryRibbonAmount,u.secondaryRibbonBlendMode)',
+            'natural=blendSigned(natural,secondaryRibbon*u.secondaryRibbonAmount,u.secondaryRibbonBlendMode)',
         );
         expect(BASE_SHADER_SOURCE).not.toContain('secondaryShaped');
         expect(BASE_SHADER_SOURCE).toContain('if(u.secondaryEnabled>=.5)');
         expect(BASE_SHADER_SOURCE).toContain('fn smoothAbsFold');
-        expect(BASE_SHADER_SOURCE.indexOf('natural=blendLayer')).toBeLessThan(
+        expect(BASE_SHADER_SOURCE.indexOf('natural=blendSigned')).toBeLessThan(
             BASE_SHADER_SOURCE.indexOf('natural*=centerAttenuation'),
         );
     });
