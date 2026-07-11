@@ -405,6 +405,11 @@ describe('field configuration', () => {
         expect(DISPLAY_SHADER_SOURCE).toContain('if(mode<13.5) { return a-b; }');
         expect(DISPLAY_SHADER_SOURCE).toContain('if(strength<=0.) { return base; }');
         expect(BLOOM_EXTRACT_SHADER_SOURCE).toContain('fn extendedLightChannel');
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('fn extendedLightChannel');
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('if(mode<13.5){return a-b;}');
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('return select(1.,a/max(b,.00001),b>0.)');
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('if(strength<=0.){return base;}');
+        expect(POST_EFFECT_SHADER_SOURCE).not.toContain('return mix(base,layer');
     });
     it('preserves the base generator blend while compositing secondary ribbon independently', () => {
         expect(BASE_SHADER_SOURCE).toContain('fn screen01');
