@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     CHANNELS,
+    applyHslAdjustment,
     applyCurveEdit,
     applyCurveEditToChannels,
     composeAdjustmentLut,
@@ -11,6 +12,7 @@ import {
     levelsValue,
     newCurve,
     newHslCurve,
+    newHslAdjustment,
     newLevels,
     rgbToHsl,
     sanitizeAdjustments,
@@ -235,5 +237,32 @@ describe('RGB Paint.NET adjustment semantics', () => {
         const hsl = newHslCurve();
         expect(setCurveMode(rgb, 'rgb')).toBe(rgb);
         expect(setCurveMode(hsl, 'hsl')).toBe(hsl);
+    });
+    it('implements Paint.NET HSL defaults, identity, hue, saturation and lightness bytes', () => {
+        const a = newHslAdjustment();
+        expect(a).toMatchObject({ type: 'hsl', enabled: true, hue: 0, saturation: 100, lightness: 0 });
+        for (const rgb of [
+            [0, 0, 0],
+            [1, 127, 255],
+            [255, 0, 0],
+            [42, 43, 44],
+        ] as [number, number, number][])
+            expect(applyHslAdjustment(a, rgb)).toEqual(rgb);
+        expect(applyHslAdjustment({ ...a, hue: 120 }, [255, 0, 0])).toEqual([0, 255, 0]);
+        expect(applyHslAdjustment({ ...a, hue: -120 }, [255, 0, 0])).toEqual([0, 0, 255]);
+        const intensity = (7471 * 30 + 38470 * 20 + 19595 * 10) >> 16;
+        expect(applyHslAdjustment({ ...a, saturation: 0 }, [10, 20, 30])).toEqual([intensity, intensity, intensity]);
+        expect(applyHslAdjustment({ ...a, saturation: 200 }, [200, 100, 100])).toEqual([255, 13, 13]);
+        expect(applyHslAdjustment({ ...a, lightness: 100 }, [100, 100, 100])).toEqual([254, 254, 254]);
+        expect(applyHslAdjustment({ ...a, lightness: -100 }, [100, 100, 100])).toEqual([0, 0, 0]);
+        expect(applyHslAdjustment({ ...a, lightness: 50 }, [100, 100, 100])).toEqual([176, 176, 176]);
+    });
+    it('sanitizes HSL fields and bypasses disabled stack effects', () => {
+        const [a] = sanitizeAdjustments([
+            { type: 'hsl', id: 'keep', enabled: false, hue: 999, saturation: -4, lightness: NaN },
+        ]);
+        expect(a).toMatchObject({ id: 'keep', enabled: false, hue: 180, saturation: 0, lightness: 0 });
+        const lut = composeAdjustmentLut([a]);
+        expect([...lut.slice(90 * 4, 90 * 4 + 4)]).toEqual([90, 90, 90, 255]);
     });
 });

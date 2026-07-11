@@ -15,7 +15,14 @@
     import { GpuTelemetry, type FrameRollingSummary, type GpuRollingSummary } from '$lib/telemetry';
     import { defaultShaderSettings, normalizeSavedSettings, shaderSettings } from '$lib/settings';
     import AdjustmentEditor from '$lib/AdjustmentEditor.svelte';
-    import { MAX_ADJUSTMENTS, newCurve, newHslCurve, newLevels, type Adjustment } from '$lib/adjustments';
+    import {
+        MAX_ADJUSTMENTS,
+        newCurve,
+        newHslAdjustment,
+        newHslCurve,
+        newLevels,
+        type Adjustment,
+    } from '$lib/adjustments';
 
     let canvas: HTMLCanvasElement;
     let renderer: AtmosphereRenderer | undefined;
@@ -364,13 +371,20 @@
                                 ><button
                                     onclick={() => addAdjustment(newLevels())}
                                     disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add levels</button
+                                ><button
+                                    onclick={() => addAdjustment(newHslAdjustment())}
+                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add HSL</button
                                 >
                             </div>
                             {#each options.adjustments as adjustment, index (adjustment.id)}
                                 <section class="adjustment">
                                     <div class="adjustment-heading">
                                         <strong
-                                            >{adjustment.type === 'curve' ? 'Curve' : 'Levels'}
+                                            >{adjustment.type === 'curve'
+                                                ? 'Curve'
+                                                : adjustment.type === 'levels'
+                                                  ? 'Levels'
+                                                  : 'Hue / saturation / lightness'}
                                             {options.adjustments
                                                 .slice(0, index + 1)
                                                 .filter((a) => a.type === adjustment.type).length}</strong
@@ -406,7 +420,9 @@
                                                                   : newCurve()),
                                                               id: adjustment.id,
                                                           }
-                                                        : { ...newLevels(), id: adjustment.id },
+                                                        : adjustment.type === 'levels'
+                                                          ? { ...newLevels(), id: adjustment.id }
+                                                          : { ...newHslAdjustment(), id: adjustment.id },
                                                 )}>Reset</button
                                         ><button
                                             onclick={() => {

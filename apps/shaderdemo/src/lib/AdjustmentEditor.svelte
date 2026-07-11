@@ -4,6 +4,7 @@
         applyCurveEditToChannels,
         CHANNELS,
         HSL_CHANNELS,
+        setHslAdjustmentValue,
         setCurveMode,
         setLevelsChannelsValue,
         toggleChannelMask,
@@ -11,6 +12,7 @@
         type CurveChannel,
         type Channel,
         type LevelsKey,
+        type HslAdjustmentKey,
     } from './adjustments';
     let { adjustment, onchange }: { adjustment: Adjustment; onchange: (value: Adjustment) => void } = $props();
     let descriptors = $derived(adjustment.type === 'curve' && adjustment.mode === 'hsl' ? HSL_CHANNELS : CHANNELS);
@@ -33,29 +35,61 @@
         ['outputLow', 'Output black', 0, 254, 1],
         ['outputHigh', 'Output white', 1, 255, 1],
     ] as const;
+    const hslRows = [
+        ['hue', 'Hue', -180, 180, 1],
+        ['saturation', 'Saturation', 0, 200, 1],
+        ['lightness', 'Lightness', -100, 100, 1],
+    ] as const;
 </script>
 
-<div class="channels" aria-label="Color channels">
-    {#if adjustment.type === 'curve'}
-        <label class="mode"
-            >Mode <select
-                value={adjustment.mode}
-                onchange={(event) => onchange(setCurveMode(adjustment, event.currentTarget.value as 'rgb' | 'hsl'))}
+{#if adjustment.type !== 'hsl'}
+    <div class="channels" aria-label="Color channels">
+        {#if adjustment.type === 'curve'}
+            <label class="mode"
+                >Mode <select
+                    value={adjustment.mode}
+                    onchange={(event) => onchange(setCurveMode(adjustment, event.currentTarget.value as 'rgb' | 'hsl'))}
+                >
+                    <option value="rgb">RGB</option>
+                    <option value="hsl">HSL</option>
+                </select></label
             >
-                <option value="rgb">RGB</option>
-                <option value="hsl">HSL</option>
-            </select></label
+        {/if}
+        {#each descriptors as item}<label class={`channel-${item}`}
+                ><input
+                    type="checkbox"
+                    checked={channelMask.includes(item)}
+                    onchange={() => (channelMask = toggleChannelMask(channelMask, item, descriptors))}
+                />{item.toUpperCase()}</label
+            >{/each}
+    </div>
+{/if}
+{#if adjustment.type === 'hsl'}
+    {#each hslRows as row}
+        <label class="parameter"
+            ><span>{row[1]}</span><input
+                class="exact-value"
+                aria-label={`${row[1]} exact value`}
+                type="number"
+                min={row[2]}
+                max={row[3]}
+                step={row[4]}
+                value={adjustment[row[0]]}
+                onchange={(e) =>
+                    onchange(setHslAdjustmentValue(adjustment, row[0] as HslAdjustmentKey, +e.currentTarget.value))}
+            /><input
+                aria-label={row[1]}
+                type="range"
+                min={row[2]}
+                max={row[3]}
+                step={row[4]}
+                value={adjustment[row[0]]}
+                oninput={(e) =>
+                    onchange(setHslAdjustmentValue(adjustment, row[0] as HslAdjustmentKey, +e.currentTarget.value))}
+            /></label
         >
-    {/if}
-    {#each descriptors as item}<label class={`channel-${item}`}
-            ><input
-                type="checkbox"
-                checked={channelMask.includes(item)}
-                onchange={() => (channelMask = toggleChannelMask(channelMask, item, descriptors))}
-            />{item.toUpperCase()}</label
-        >{/each}
-</div>
-{#if adjustment.type === 'curve'}
+    {/each}
+{:else if adjustment.type === 'curve'}
     <CurveEditor
         points={adjustment.channels[channel as keyof typeof adjustment.channels]}
         channels={adjustment.channels as Record<string, import('./adjustments').CurvePoint[]>}

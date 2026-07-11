@@ -39,7 +39,13 @@ export interface LevelsAdjustment extends AdjustmentBase {
     type: 'levels';
     channels: LevelsChannels;
 }
-export type Adjustment = CurveAdjustment | LevelsAdjustment;
+export interface HslAdjustment extends AdjustmentBase {
+    type: 'hsl';
+    hue: number;
+    saturation: number;
+    lightness: number;
+}
+export type Adjustment = CurveAdjustment | LevelsAdjustment | HslAdjustment;
 export type LevelsKey = keyof LevelsChannel;
 export type CurveEdit =
     | { type: 'add'; x: number; y: number }
@@ -94,6 +100,85 @@ export const newLevels = (): LevelsAdjustment => ({
     enabled: true,
     channels: { r: identityLevels(), g: identityLevels(), b: identityLevels() },
 });
+export const newHslAdjustment = (): HslAdjustment => ({
+    id: adjustmentId(),
+    type: 'hsl',
+    enabled: true,
+    hue: 0,
+    saturation: 100,
+    lightness: 0,
+});
+export type HslAdjustmentKey = 'hue' | 'saturation' | 'lightness';
+const HSL_RANGES: Record<HslAdjustmentKey, [number, number]> = {
+    hue: [-180, 180],
+    saturation: [0, 200],
+    lightness: [-100, 100],
+};
+export function setHslAdjustmentValue(a: HslAdjustment, key: HslAdjustmentKey, raw: number): HslAdjustment {
+    const [lo, hi] = HSL_RANGES[key];
+    return { ...a, [key]: Math.round(clamp(finite(raw, a[key]), lo, hi)) };
+}
+
+/** Paint.NET's byte-quantized HueSaturationLightness pixel operation. */
+export function applyHslAdjustment(a: HslAdjustment, rgb: [number, number, number]): [number, number, number] {
+    if (!a.enabled || (a.hue === 0 && a.saturation === 100 && a.lightness === 0)) return [...rgb];
+    const [r, g, b] = rgb,
+        intensity = (7471 * b + 38470 * g + 19595 * r) >> 16,
+        internalSaturation = a.saturation > 100 ? (a.saturation - 100) * 3 + 100 : a.saturation,
+        satFactor = Math.trunc((internalSaturation * 1024) / 100),
+        saturated = [r, g, b].map((c) => clamp((intensity * 1024 + (c - intensity) * satFactor) >> 10, 0, 255)) as [
+            number,
+            number,
+            number,
+        ],
+        max = Math.max(...saturated),
+        min = Math.min(...saturated),
+        delta = max - min;
+    let converted: number[] = saturated;
+    if (a.hue !== 0) {
+        let hue = 0;
+        if (max !== 0 && delta !== 0) {
+            hue =
+                max === saturated[0]
+                    ? (saturated[1] - saturated[2]) / delta
+                    : max === saturated[1]
+                      ? 2 + (saturated[2] - saturated[0]) / delta
+                      : 4 + (saturated[0] - saturated[1]) / delta;
+            hue *= 60;
+            if (hue < 0) hue += 360;
+        }
+        let h = Math.trunc(hue) + a.hue;
+        while (h < 0) h += 360;
+        while (h > 360) h -= 360;
+        const s = Math.trunc(max === 0 || delta === 0 ? 0 : (delta / max) * 100) / 100,
+            v = Math.trunc((max / 255) * 100) / 100,
+            sectorPos = (h % 360) / 60,
+            sector = Math.floor(sectorPos),
+            f = sectorPos - sector,
+            p = v * (1 - s),
+            q = v * (1 - s * f),
+            t = v * (1 - s * (1 - f));
+        converted = (
+            s === 0
+                ? [v, v, v]
+                : sector === 0
+                  ? [v, t, p]
+                  : sector === 1
+                    ? [q, v, p]
+                    : sector === 2
+                      ? [p, v, t]
+                      : sector === 3
+                        ? [p, q, v]
+                        : sector === 4
+                          ? [t, p, v]
+                          : [v, p, q]
+        ).map((c) => Math.trunc(c * 255));
+    }
+    if (a.lightness === 0) return converted as [number, number, number];
+    const alpha = Math.floor((Math.abs(a.lightness) * 255) / 100),
+        target = a.lightness > 0 ? 255 : 0;
+    return converted.map((c) => Math.trunc((c * (255 - alpha) + target * alpha) / 256)) as [number, number, number];
+}
 
 /** Natural cubic spline matching OpenPDN Core/SplineInterpolator.cs (natural endpoints). */
 export function interpolateNatural(points: CurvePoint[], x: number): number {
@@ -183,23 +268,27 @@ const normalizedByte = (v: number) => Math.floor(clamp(v, 0, 1) * 255 + 0.5);
 export function composeAdjustmentLut(stack: Adjustment[]): Uint8Array {
     const rgba = new Uint8Array(1024);
     const prepared = stack.map((a) =>
-        a.type === 'levels'
-            ? { a, luts: CHANNELS.map((c) => levelsLut(a.channels[c])) }
-            : a.mode === 'rgb'
-              ? { a, luts: CHANNELS.map((c) => curveLut(a.channels[c])) }
-              : { a, luts: HSL_CHANNELS.map((c) => curveLut(a.channels[c])) },
+        a.type === 'hsl'
+            ? { a, luts: undefined }
+            : a.type === 'levels'
+              ? { a, luts: CHANNELS.map((c) => levelsLut(a.channels[c])) }
+              : a.mode === 'rgb'
+                ? { a, luts: CHANNELS.map((c) => curveLut(a.channels[c])) }
+                : { a, luts: HSL_CHANNELS.map((c) => curveLut(a.channels[c])) },
     );
     for (let i = 0; i < 256; i++) {
         let rgb: [number, number, number] = [i, i, i];
         for (const { a, luts } of prepared)
             if (a.enabled) {
-                if (a.type !== 'curve' || a.mode === 'rgb') rgb = [luts[0][rgb[0]], luts[1][rgb[1]], luts[2][rgb[2]]];
+                if (a.type === 'hsl') rgb = applyHslAdjustment(a, rgb);
+                else if (a.type !== 'curve' || a.mode === 'rgb')
+                    rgb = [luts![0][rgb[0]], luts![1][rgb[1]], luts![2][rgb[2]]];
                 else {
                     const hsl = rgbToHsl(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
                     const mapped = [
-                        luts[0][normalizedByte(hsl.h)] / 255,
-                        luts[1][normalizedByte(hsl.s)] / 255,
-                        luts[2][normalizedByte(hsl.l)] / 255,
+                        luts![0][normalizedByte(hsl.h)] / 255,
+                        luts![1][normalizedByte(hsl.s)] / 255,
+                        luts![2][normalizedByte(hsl.l)] / 255,
                     ];
                     rgb = hslToRgb(mapped[0], mapped[1], mapped[2]).map(normalizedByte) as [number, number, number];
                 }
@@ -320,6 +409,15 @@ export function sanitizeAdjustments(value: unknown): Adjustment[] {
                     g: sanitizeLevel(channels?.g ?? legacy),
                     b: sanitizeLevel(channels?.b ?? legacy),
                 },
+            });
+        } else if (r.type === 'hsl') {
+            out.push({
+                id: idFor(r.id),
+                type: 'hsl',
+                enabled,
+                hue: Math.round(clamp(finite(r.hue, 0), -180, 180)),
+                saturation: Math.round(clamp(finite(r.saturation, 100), 0, 200)),
+                lightness: Math.round(clamp(finite(r.lightness, 0), -100, 100)),
             });
         } else if (r.type === 'curve' && (channels || Array.isArray(r.points))) {
             const mode = r.mode === 'hsl' ? 'hsl' : 'rgb';
