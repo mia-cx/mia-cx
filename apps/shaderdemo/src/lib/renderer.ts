@@ -19,8 +19,8 @@ export const FIELD_PARAMETER_SCHEMA = [
 ] as const;
 
 export const OCTAVE_COUNT = 7;
-const noiseDefaults = [0.12, 0.09, 0.065, 0.045, 0.03, 0.02, 0.012];
-const distanceDefaults = [3.5, 3, 2.5, 2, 1.5, 1.1, 0.75];
+const noiseDefaults = Array<number>(OCTAVE_COUNT).fill(0);
+const distanceDefaults = Array<number>(OCTAVE_COUNT).fill(0);
 export const OCTAVE_PARAMETER_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, index) => {
     const octave = index + 1;
     return [
@@ -182,6 +182,7 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
     let settings=u.octaves[u32(u.octaveIndex)];
     let pixel=floor(pos.xy);
     let octavePixelSize=exp2(6.-u.octaveIndex);
+    let tile=floor(pixel/octavePixelSize);
     let sampleCount=u32(round(mix(1.,8.,settings.z)));
     // Radius zero is an exact identity operation: no random resampling and no accumulated softening.
     var scattered=textureSample(src,samp,uv).r;
@@ -190,7 +191,10 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
         for(var sampleIndex=0u;sampleIndex<8u;sampleIndex++) {
             if(sampleIndex<sampleCount) {
                 let salt=1.+u.octaveIndex*8.+f32(sampleIndex);
-                let offset=scatterOffset(pixel,salt,settings.w*octavePixelSize);
+                // Run Frosted Glass in this octave's virtual pixel grid. Every real pixel inside a tile
+                // receives the same whole-tile displacement while retaining its local detail.
+                let tileOffset=round(scatterOffset(tile,salt,settings.w));
+                let offset=tileOffset*octavePixelSize;
                 scattered+=textureSample(src,samp,uv+offset/sourceSize).r;
             }
         }
@@ -198,8 +202,7 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
     }
     // Paint.NET's smoothness is sample count: 1–8 randomly displaced bilinear samples blended together.
     // Literal noise is constant in effect-space cells while the source underneath stays full resolution.
-    let noiseCell=floor(pixel/octavePixelSize);
-    let detail=hash(noiseCell+vec2f(u.octaveIndex*37.7,u.octaveIndex*91.3))-.5;
+    let detail=hash(tile+vec2f(u.octaveIndex*37.7,u.octaveIndex*91.3))-.5;
     let injected=scattered+detail*settings.x;
     let thresholdWidth=max(.015,fwidth(injected)*1.5);
     let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,injected);

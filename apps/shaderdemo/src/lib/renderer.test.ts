@@ -53,9 +53,8 @@ describe('field configuration', () => {
             expect(defaultParameters()[parameter.key]).toBe(parameter.default);
         }
         expect(defaultParameters().centerDarkness).toBe(0.65);
-        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual([
-            0.12, 0.09, 0.065, 0.045, 0.03, 0.02, 0.012,
-        ]);
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual(Array(7).fill(0));
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual(Array(7).fill(0));
     });
     it('packs the aligned uniform header and array<vec4f, 7>', () => {
         const parameters = defaultParameters();
