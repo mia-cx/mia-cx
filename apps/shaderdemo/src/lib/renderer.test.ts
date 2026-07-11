@@ -8,6 +8,7 @@ import {
     OCTAVE_COUNT,
     OCTAVE_PARAMETER_SCHEMA,
     OCTAVE_PIXELATE_SCHEMA,
+    OCTAVE_SHADER_SOURCE,
     PARAMETER_SCHEMA,
     UNIFORM_FLOATS,
     advanceSimulationTime,
@@ -167,7 +168,7 @@ describe('field configuration', () => {
     it('uses a dynamic radius and four diagonal samples with an exact zero-radius identity', () => {
         expect(BLUR_SHADER_SOURCE).toContain('exp2(4.-u.octaveIndex)');
         expect(BLUR_SHADER_SOURCE).toContain('u.blurRadii[radiusIndex/4u][radiusIndex%4u]');
-        expect(BLUR_SHADER_SOURCE).toContain('if(radius<=0.0001)');
+        expect(BLUR_SHADER_SOURCE).toContain('if(radius<=0.)');
         expect(BLUR_SHADER_SOURCE.match(/textureSample\(/g)).toHaveLength(5);
     });
     it('skips neutral octave work while smoothness alone remains neutral', () => {
@@ -182,12 +183,16 @@ describe('field configuration', () => {
         expect(octaveBlurIsActive(parameters, 0)).toBe(true);
         parameters.octave1BlurRadius = 0;
         expect(octaveBlurIsActive(parameters, 0)).toBe(false);
+        parameters.octave1BlurRadius = 0.00001;
+        expect(octaveBlurIsActive(parameters, 0)).toBe(true);
+        parameters.octave1Threshold = 0.00001;
+        expect(octaveEffectIsActive(parameters, 0)).toBe(true);
     });
     it('preserves the base generator blend while compositing secondary ribbon independently', () => {
         expect(BASE_SHADER_SOURCE).toContain('fn screen01');
         expect(BASE_SHADER_SOURCE).toContain('fn overlay01');
         expect(BASE_SHADER_SOURCE).toContain('fn blendSigned');
-        expect(BASE_SHADER_SOURCE).toContain('blendSigned(cloud*u.billowAmount,ribbon*u.ridgeAmount,u.baseBlendMode)');
+        expect(BASE_SHADER_SOURCE).toContain('shaped=blendSigned(shaped,ribbon*u.ridgeAmount,u.baseBlendMode)');
         expect(BASE_SHADER_SOURCE).toContain(
             'natural=blendSigned(natural,secondaryCloud*u.secondaryCloudAmount,u.secondaryBlendMode)',
         );
@@ -195,13 +200,42 @@ describe('field configuration', () => {
             'natural=blendSigned(natural,secondaryRibbon*u.secondaryRibbonAmount,u.secondaryRibbonBlendMode)',
         );
         expect(BASE_SHADER_SOURCE).not.toContain('secondaryShaped');
-        expect(BASE_SHADER_SOURCE).toContain('if(u.secondaryEnabled>=.5)');
+        expect(BASE_SHADER_SOURCE).toContain(
+            'if(u.secondaryEnabled>=.5 && (u.secondaryCloudAmount!=0. || u.secondaryRibbonAmount!=0.))',
+        );
         expect(BASE_SHADER_SOURCE).toContain('fn smoothAbsFold');
         expect(BASE_SHADER_SOURCE.indexOf('natural=blendSigned')).toBeLessThan(
-            BASE_SHADER_SOURCE.indexOf('natural*=centerAttenuation'),
+            BASE_SHADER_SOURCE.indexOf('natural*=exp2'),
         );
     });
+    it('uses exact zero guards for blending and generator sources', () => {
+        expect(COMMON_SHADER_SOURCE).toContain('if(source==0.) { return backdrop; }');
+        for (const guard of [
+            'if(u.billowAmount!=0.)',
+            'if(u.ridgeAmount!=0.)',
+            'if(u.secondaryCloudAmount!=0.)',
+            'if(u.secondaryRibbonAmount!=0.)',
+        ]) {
+            expect(BASE_SHADER_SOURCE).toContain(guard);
+        }
+    });
+    it('uses only the applied warp offset for primary and secondary positions', () => {
+        expect(BASE_SHADER_SOURCE).toContain(
+            'let fieldHasAmount=u.billowAmount!=0. || u.ridgeAmount!=0. || secondaryHasAmount',
+        );
+        expect(BASE_SHADER_SOURCE).toContain('if(fieldHasAmount && u.warpStrength!=0.)');
+        expect(BASE_SHADER_SOURCE).toContain('warpOffset=(noise3v(flow*u.warpScale,t*.11)-.5)*u.warpStrength');
+        expect(BASE_SHADER_SOURCE).toContain('let p=flow+warpOffset');
+        expect(BASE_SHADER_SOURCE).toContain('-warpOffset*.41');
+        expect(BASE_SHADER_SOURCE).not.toContain('let drift=');
+        expect(BASE_SHADER_SOURCE).not.toMatch(/-drift|drift\*u\.warpStrength/);
+    });
+    it('uses exact zero threshold and diffusion bypasses in the octave shader', () => {
+        expect(OCTAVE_SHADER_SOURCE).toContain('if(settings.w>0.)');
+        expect(OCTAVE_SHADER_SOURCE).toContain('settings.y!=0.');
+        expect(OCTAVE_SHADER_SOURCE).not.toContain('abs(settings.y)>.001');
+    });
     it('can bypass the stage-one threshold to expose the raw field', () => {
-        expect(BASE_SHADER_SOURCE).toContain('select(natural,thresholded,u.thresholdEnabled>=.5)');
+        expect(BASE_SHADER_SOURCE).toContain('if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }');
     });
 });

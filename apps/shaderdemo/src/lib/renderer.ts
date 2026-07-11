@@ -146,7 +146,7 @@ export function octaveEffectIsActive(parameters: ShaderParameters, index: number
 }
 
 export function octaveBlurIsActive(parameters: ShaderParameters, index: number) {
-    return parameters[OCTAVE_BLUR_SCHEMA[index].key] > 0.0001;
+    return parameters[OCTAVE_BLUR_SCHEMA[index].key] > 0;
 }
 
 export function advanceSimulationTime(time: number, deltaSeconds: number, speed: number) {
@@ -219,6 +219,7 @@ fn overlay01(backdrop: f32, source: f32) -> f32 {
     return select(2.*a*b,1.-2.*(1.-a)*(1.-b),a>.5);
 }
 fn blendSigned(backdrop: f32, source: f32, mode: f32) -> f32 {
+    if(source==0.) { return backdrop; }
     if(mode<.5) { return backdrop+source; }
     if(mode<1.5) {
         // Signed screen: equal signs screen magnitudes; a negative source multiplicatively
@@ -250,33 +251,49 @@ export const BASE_SHADER_SOURCE =
     // The composition therefore stays stable across resolutions while higher-resolution targets add detail.
     let fieldPixel=q*(540./u.fieldScale);
     let flow=mat2x2f(.89,.45,-.45,.89)*vec2f(fieldPixel.x,fieldPixel.y*u.flowStretch);
-    let drift=noise3v(flow*u.warpScale,t*.11)-.5;
-    let p=flow+drift*u.warpStrength;
-    let primaryPosition=vec3f(p,t*.075);
-    let secondaryPosition=vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-drift*.41,t*.12+7.1);
-    let cloud=smoothAbsFold(noise3(primaryPosition,307.)*2.-1.);
-    let ribbonBase=1.-abs(noise3(primaryPosition,401.)*2.-1.);
-    let ribbon=pow(clamp(ribbonBase,0.,1.),u.ridgeSharpness);
-    let shaped=blendSigned(cloud*u.billowAmount,ribbon*u.ridgeAmount,u.baseBlendMode);
-    let secondaryCloud=smoothAbsFold(noise3(secondaryPosition,503.)*2.-1.);
-    let secondaryRibbonBase=1.-abs(noise3(secondaryPosition,601.)*2.-1.);
-    let secondaryRibbon=pow(clamp(secondaryRibbonBase,0.,1.),u.secondaryRibbonSharpness);
-    var natural=shaped;
-    if(u.secondaryEnabled>=.5) {
-        natural=blendSigned(natural,secondaryCloud*u.secondaryCloudAmount,u.secondaryBlendMode);
-        natural=blendSigned(natural,secondaryRibbon*u.secondaryRibbonAmount,u.secondaryRibbonBlendMode);
+    var warpOffset=vec2f(0.);
+    let secondaryHasAmount=u.secondaryEnabled>=.5 && (u.secondaryCloudAmount!=0. || u.secondaryRibbonAmount!=0.);
+    let fieldHasAmount=u.billowAmount!=0. || u.ridgeAmount!=0. || secondaryHasAmount;
+    if(fieldHasAmount && u.warpStrength!=0.) {
+        warpOffset=(noise3v(flow*u.warpScale,t*.11)-.5)*u.warpStrength;
     }
-    let centerPoint=abs(q/vec2f(u.centerWidth,u.centerHeight));
-    let centerDistance=pow(pow(centerPoint.x,u.centerRoundness)+pow(centerPoint.y,u.centerRoundness),1./u.centerRoundness);
-    let centerFeather=u.centerSoftness*.5;
-    let center=1.-smoothstep(1.-centerFeather,1.+centerFeather,centerDistance);
-    let centerAttenuation=exp2(-center*u.centerDarkness*4.);
-    natural*=centerAttenuation;
+    let p=flow+warpOffset;
+    let primaryPosition=vec3f(p,t*.075);
+    var shaped=0.;
+    if(u.billowAmount!=0.) {
+        let cloud=smoothAbsFold(noise3(primaryPosition,307.)*2.-1.);
+        shaped=cloud*u.billowAmount;
+    }
+    if(u.ridgeAmount!=0.) {
+        let ribbonBase=1.-abs(noise3(primaryPosition,401.)*2.-1.);
+        let ribbon=pow(clamp(ribbonBase,0.,1.),u.ridgeSharpness);
+        shaped=blendSigned(shaped,ribbon*u.ridgeAmount,u.baseBlendMode);
+    }
+    var natural=shaped;
+    if(u.secondaryEnabled>=.5 && (u.secondaryCloudAmount!=0. || u.secondaryRibbonAmount!=0.)) {
+        let secondaryPosition=vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-warpOffset*.41,t*.12+7.1);
+        if(u.secondaryCloudAmount!=0.) {
+            let secondaryCloud=smoothAbsFold(noise3(secondaryPosition,503.)*2.-1.);
+            natural=blendSigned(natural,secondaryCloud*u.secondaryCloudAmount,u.secondaryBlendMode);
+        }
+        if(u.secondaryRibbonAmount!=0.) {
+            let secondaryRibbonBase=1.-abs(noise3(secondaryPosition,601.)*2.-1.);
+            let secondaryRibbon=pow(clamp(secondaryRibbonBase,0.,1.),u.secondaryRibbonSharpness);
+            natural=blendSigned(natural,secondaryRibbon*u.secondaryRibbonAmount,u.secondaryRibbonBlendMode);
+        }
+    }
+    if(u.centerDarkness!=0.) {
+        let centerPoint=abs(q/vec2f(u.centerWidth,u.centerHeight));
+        let centerDistance=pow(pow(centerPoint.x,u.centerRoundness)+pow(centerPoint.y,u.centerRoundness),1./u.centerRoundness);
+        let centerFeather=u.centerSoftness*.5;
+        let center=1.-smoothstep(1.-centerFeather,1.+centerFeather,centerDistance);
+        natural*=exp2(-center*u.centerDarkness*4.);
+    }
     // Field shaping finishes here; recursive scatter/noise is the next destructive stage on top.
+    if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }
     let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
     let thresholded=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
-    let fieldOutput=select(natural,thresholded,u.thresholdEnabled>=.5);
-    return vec4f(fieldOutput,0.,0.,1.);
+    return vec4f(thresholded,0.,0.,1.);
 }`;
 
 export const BLUR_SHADER_SOURCE =
@@ -288,7 +305,7 @@ export const BLUR_SHADER_SOURCE =
     let sourceSize=vec2f(textureDimensions(src));
     let radiusIndex=u32(u.octaveIndex);
     let radius=u.blurRadii[radiusIndex/4u][radiusIndex%4u];
-    if(radius<=0.0001) { return vec4f(textureSample(src,samp,uv).r,0.,0.,1.); }
+    if(radius<=0.) { return vec4f(textureSample(src,samp,uv).r,0.,0.,1.); }
     // Four bilinearly filtered diagonal taps provide a compact, scale-relative Kawase blur.
     let octavePixelSize=exp2(4.-u.octaveIndex);
     let offset=vec2f(octavePixelSize*radius)/sourceSize;
@@ -322,7 +339,7 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
     let sampleCount=u32(round(mix(1.,8.,settings.z)));
     // Radius zero is an exact identity operation: no random resampling and no accumulated softening.
     var scattered=textureSample(src,samp,sourceUv).r;
-    if(settings.w>0.0001) {
+    if(settings.w>0.) {
         scattered=0.;
         for(var sampleIndex=0u;sampleIndex<8u;sampleIndex++) {
             if(sampleIndex<sampleCount) {
@@ -342,7 +359,7 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
     let injected=scattered+detail*settings.x;
     let thresholdWidth=max(.015,fwidth(injected)*1.5);
     let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,injected);
-    let output=select(injected,thresholded,abs(settings.y)>.001);
+    let output=select(injected,thresholded,settings.y!=0.);
     return vec4f(output,0.,0.,1.);
 }`;
 
