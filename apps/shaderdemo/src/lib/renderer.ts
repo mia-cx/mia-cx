@@ -151,20 +151,22 @@ fn noise(p: vec2f) -> f32 {
     return mix(mix(hash(i),hash(i+vec2f(1,0)),s.x),mix(hash(i+vec2f(0,1)),hash(i+vec2f(1)),s.x),s.y);
 }
 fn n2(p: vec2f) -> vec2f { return vec2f(noise(p),noise(p+vec2f(17.7,43.2))); }
-fn hash3(p: vec3f) -> f32 { return fract(sin(dot(p,vec3f(127.1,311.7,74.7)) + u.seed*19.19)*43758.5453); }
-fn simplexGradient(lattice: vec3f) -> vec3f {
+fn hash3(p: vec3f, seedSalt: f32) -> f32 {
+    return fract(sin(dot(p,vec3f(127.1,311.7,74.7)) + u.seed*19.19 + seedSalt*53.17)*43758.5453);
+}
+fn simplexGradient(lattice: vec3f, seedSalt: f32) -> vec3f {
     let gradients=array<vec3f,12>(
         vec3f(1,1,0),vec3f(-1,1,0),vec3f(1,-1,0),vec3f(-1,-1,0),
         vec3f(1,0,1),vec3f(-1,0,1),vec3f(1,0,-1),vec3f(-1,0,-1),
         vec3f(0,1,1),vec3f(0,-1,1),vec3f(0,1,-1),vec3f(0,-1,-1)
     );
-    return gradients[u32(floor(hash3(lattice)*12.))];
+    return gradients[u32(floor(hash3(lattice,seedSalt)*12.))];
 }
-fn simplexCorner(lattice: vec3f, offset: vec3f) -> f32 {
+fn simplexCorner(lattice: vec3f, offset: vec3f, seedSalt: f32) -> f32 {
     let kernel=max(.6-dot(offset,offset),0.);
-    return kernel*kernel*kernel*kernel*dot(simplexGradient(lattice),offset);
+    return kernel*kernel*kernel*kernel*dot(simplexGradient(lattice,seedSalt),offset);
 }
-fn noise3(p: vec3f) -> f32 {
+fn noise3(p: vec3f, seedSalt: f32) -> f32 {
     // Isotropic simplex gradient noise: all axes share one tetrahedral lattice and compact C2 kernel.
     let skew=(p.x+p.y+p.z)/3.;
     let cell=floor(p+skew);
@@ -177,16 +179,16 @@ fn noise3(p: vec3f) -> f32 {
     let x1=x0-i1+vec3f(1./6.);
     let x2=x0-i2+vec3f(1./3.);
     let x3=x0-vec3f(.5);
-    let sum=simplexCorner(cell,x0)+simplexCorner(cell+i1,x1)+simplexCorner(cell+i2,x2)+simplexCorner(cell+vec3f(1),x3);
+    let sum=simplexCorner(cell,x0,seedSalt)+simplexCorner(cell+i1,x1,seedSalt)+simplexCorner(cell+i2,x2,seedSalt)+simplexCorner(cell+vec3f(1),x3,seedSalt);
     // Conventional 32x simplex normalization, remapped approximately from [-1,1] to [0,1].
     return .5+16.*sum;
 }
 fn noise3v(p: vec2f, z: f32) -> vec2f {
-    return vec2f(noise3(vec3f(p,z)),noise3(vec3f(p+vec2f(17.7,43.2),z+11.3)));
+    return vec2f(noise3(vec3f(p,z),101.),noise3(vec3f(p+vec2f(17.7,43.2),z+11.3),211.));
 }
 `;
 
-const baseShader =
+export const BASE_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
@@ -198,19 +200,19 @@ const baseShader =
     let flow=mat2x2f(.89,.45,-.45,.89)*vec2f(fieldPixel.x,fieldPixel.y*u.flowStretch);
     let drift=noise3v(flow*u.warpScale,t*.11)-.5;
     let p=flow+drift*u.warpStrength;
-    let primary=noise3(vec3f(p,t*.075));
-    let secondary=noise3(vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-drift*.41,t*.12+7.1));
-    let tertiary=noise3(vec3f(p*u.tertiaryScale+vec2f(-4.1,19.3)+drift*.23,t*.18+19.7));
-    let cloud=abs(primary*2.-1.);
-    let ribbonBase=1.-abs(primary*2.-1.);
+    let primaryPosition=vec3f(p,t*.075);
+    let secondaryPosition=vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-drift*.41,t*.12+7.1);
+    let tertiaryPosition=vec3f(p*u.tertiaryScale+vec2f(-4.1,19.3)+drift*.23,t*.18+19.7);
+    let cloud=abs(noise3(primaryPosition,307.)*2.-1.);
+    let ribbonBase=1.-abs(noise3(primaryPosition,401.)*2.-1.);
     let ribbon=pow(clamp(ribbonBase,0.,1.),u.ridgeSharpness);
     let shaped=cloud*u.billowAmount+ribbon*u.ridgeAmount;
-    let secondaryCloud=abs(secondary*2.-1.);
-    let secondaryRibbonBase=1.-abs(secondary*2.-1.);
+    let secondaryCloud=abs(noise3(secondaryPosition,503.)*2.-1.);
+    let secondaryRibbonBase=1.-abs(noise3(secondaryPosition,601.)*2.-1.);
     let secondaryRibbon=pow(clamp(secondaryRibbonBase,0.,1.),u.secondaryRibbonSharpness);
     let secondaryShaped=secondaryCloud*u.secondaryCloudAmount+secondaryRibbon*u.secondaryRibbonAmount;
-    let tertiaryCloud=abs(tertiary*2.-1.);
-    let tertiaryRibbonBase=1.-abs(tertiary*2.-1.);
+    let tertiaryCloud=abs(noise3(tertiaryPosition,701.)*2.-1.);
+    let tertiaryRibbonBase=1.-abs(noise3(tertiaryPosition,809.)*2.-1.);
     let tertiaryRibbon=pow(clamp(tertiaryRibbonBase,0.,1.),u.tertiaryRibbonSharpness);
     let tertiaryShaped=tertiaryCloud*u.tertiaryCloudAmount+tertiaryRibbon*u.tertiaryRibbonAmount;
     var natural=shaped+secondaryShaped*u.secondaryEnabled+tertiaryShaped*u.tertiaryEnabled;
@@ -333,7 +335,7 @@ export class AtmosphereRenderer {
             });
         };
         self.pipelines = await Promise.all([
-            make(baseShader, 'r16float'),
+            make(BASE_SHADER_SOURCE, 'r16float'),
             make(octaveShader, 'r16float'),
             make(displayShader, format),
         ]);

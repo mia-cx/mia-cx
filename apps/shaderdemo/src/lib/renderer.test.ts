@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    BASE_SHADER_SOURCE,
     COMMON_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
     OCTAVE_COUNT,
@@ -22,6 +23,22 @@ describe('field configuration', () => {
         expect(COMMON_SHADER_SOURCE).toContain('fn simplexCorner');
         expect(COMMON_SHADER_SOURCE).toContain('kernel*kernel*kernel*kernel');
         expect(COMMON_SHADER_SOURCE).not.toContain('mix(z0,z1,f.z)');
+    });
+    it('uses separate salted simplex fields for every cloud and ribbon', () => {
+        expect(COMMON_SHADER_SOURCE).toContain('fn hash3(p: vec3f, seedSalt: f32)');
+        expect(COMMON_SHADER_SOURCE).toContain('u.seed*19.19 + seedSalt*53.17');
+        expect(COMMON_SHADER_SOURCE).toContain('hash3(lattice,seedSalt)');
+
+        const fieldSamples = [
+            'noise3(primaryPosition,307.)',
+            'noise3(primaryPosition,401.)',
+            'noise3(secondaryPosition,503.)',
+            'noise3(secondaryPosition,601.)',
+            'noise3(tertiaryPosition,701.)',
+            'noise3(tertiaryPosition,809.)',
+        ];
+        fieldSamples.forEach((sample) => expect(BASE_SHADER_SOURCE).toContain(sample));
+        expect(new Set(fieldSamples.map((sample) => sample.match(/,(\d+)\./)?.[1])).size).toBe(6);
     });
     it('caps DPR and rounds down to stable physical dimensions', () => {
         expect(renderSize(801.9, 600.8, 3, 1.5)).toEqual({ width: 1202, height: 901 });
