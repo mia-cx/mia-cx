@@ -8,7 +8,7 @@ export const FIELD_PARAMETER_SCHEMA = [
     { key: 'warpScale', label: 'Warp scale', min: 0.2, max: 2.5, step: 0.01, default: 0.68 },
     { key: 'warpStrength', label: 'Warp strength', min: 0, max: 1.5, step: 0.01, default: 1.5 },
     { key: 'secondaryEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
-    { key: 'secondaryScale', label: 'Scale', min: 1.1, max: 5, step: 0.01, default: 1.1 },
+    { key: 'secondaryScale', label: 'Scale', min: 0, max: 2, step: 0.01, default: 1.1 },
     { key: 'secondaryCloudAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: 0 },
     { key: 'secondaryRibbonAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: 0 },
     { key: 'secondaryRibbonSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
@@ -59,10 +59,19 @@ export const OCTAVE_PIXELATE_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, i
     step: 1,
     default: 0,
 }));
+export const OCTAVE_BLUR_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, index) => ({
+    key: `octave${index + 1}BlurRadius` as `octave${number}BlurRadius`,
+    label: 'Pre-blur radius',
+    min: 0,
+    max: 2,
+    step: 0.01,
+    default: 0.25,
+}));
 export const PARAMETER_SCHEMA = [
     ...FIELD_PARAMETER_SCHEMA,
     ...OCTAVE_PARAMETER_SCHEMA.flat(),
     ...OCTAVE_PIXELATE_SCHEMA,
+    ...OCTAVE_BLUR_SCHEMA,
 ];
 export type ParameterKey = (typeof PARAMETER_SCHEMA)[number]['key'];
 export type ShaderParameters = Record<ParameterKey, number>;
@@ -99,7 +108,7 @@ export function fullResolutionPassSizes(width: number, height: number, renderSca
     return Array.from({ length: OCTAVE_COUNT + 1 }, () => ({ ...size }));
 }
 
-export const UNIFORM_FLOATS = 52;
+export const UNIFORM_FLOATS = 60;
 export function packUniform(
     resolution: [number, number],
     time: number,
@@ -118,7 +127,25 @@ export function packUniform(
         OCTAVE_PARAMETER_SCHEMA.flatMap((group) => group.map(({ key }) => parameters[key])),
         32,
     );
+    data.set(
+        OCTAVE_BLUR_SCHEMA.map(({ key }) => parameters[key]),
+        52,
+    );
     return data;
+}
+
+export function octaveEffectIsActive(parameters: ShaderParameters, index: number) {
+    const settings = OCTAVE_PARAMETER_SCHEMA[index];
+    return (
+        parameters[OCTAVE_PIXELATE_SCHEMA[index].key] >= 0.5 ||
+        parameters[settings[0].key] !== 0 ||
+        parameters[settings[1].key] !== 0 ||
+        parameters[settings[3].key] !== 0
+    );
+}
+
+export function octaveBlurIsActive(parameters: ShaderParameters, index: number) {
+    return parameters[OCTAVE_BLUR_SCHEMA[index].key] > 0.0001;
 }
 
 export function advanceSimulationTime(time: number, deltaSeconds: number, speed: number) {
@@ -136,7 +163,8 @@ struct U {
  animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
  centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32,
- octaves: array<vec4f, 5>
+ octaves: array<vec4f, 5>,
+ blurRadii: array<vec4f, 2>
 };
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -254,14 +282,16 @@ export const BLUR_SHADER_SOURCE =
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let sourceSize=vec2f(textureDimensions(src));
-    // A strongly centered cross gently joins detail inherited from the previous, coarser octave.
+    let radiusIndex=u32(u.octaveIndex);
+    let radius=u.blurRadii[radiusIndex/4u][radiusIndex%4u];
+    if(radius<=0.0001) { return vec4f(textureSample(src,samp,uv).r,0.,0.,1.); }
+    // Four bilinearly filtered diagonal taps provide a compact, scale-relative Kawase blur.
     let octavePixelSize=exp2(4.-u.octaveIndex);
-    let offset=vec2f(octavePixelSize)/sourceSize;
-    var value=textureSample(src,samp,uv).r*.76;
-    value+=textureSample(src,samp,uv+vec2f(offset.x,0.)).r*.06;
-    value+=textureSample(src,samp,uv-vec2f(offset.x,0.)).r*.06;
-    value+=textureSample(src,samp,uv+vec2f(0.,offset.y)).r*.06;
-    value+=textureSample(src,samp,uv-vec2f(0.,offset.y)).r*.06;
+    let offset=vec2f(octavePixelSize*radius)/sourceSize;
+    var value=textureSample(src,samp,uv+offset).r*.25;
+    value+=textureSample(src,samp,uv+vec2f(-offset.x,offset.y)).r*.25;
+    value+=textureSample(src,samp,uv+vec2f(offset.x,-offset.y)).r*.25;
+    value+=textureSample(src,samp,uv-offset).r*.25;
     return vec4f(value,0.,0.,1.);
 }`;
 
@@ -308,7 +338,7 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
     let injected=scattered+detail*settings.x;
     let thresholdWidth=max(.015,fwidth(injected)*1.5);
     let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,injected);
-    let output=select(injected,thresholded,settings.y>.001);
+    let output=select(injected,thresholded,abs(settings.y)>.001);
     return vec4f(output,0.,0.,1.);
 }`;
 
@@ -490,18 +520,23 @@ export class AtmosphereRenderer {
             pass.end();
         };
         draw(this.textures[0].createView(), this.pipelines[0]);
+        let current = 0;
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
             data[28] = octave;
-            data[0] = this.textures[1].width;
-            data[1] = this.textures[1].height;
-            draw(this.textures[1].createView(), this.pipelines[1], this.textures[0], true);
-            data[0] = this.textures[0].width;
-            data[1] = this.textures[0].height;
-            draw(this.textures[0].createView(), this.pipelines[2], this.textures[1], true);
+            if (octaveBlurIsActive(this.options.parameters, octave)) {
+                const scratch = 1 - current;
+                draw(this.textures[scratch].createView(), this.pipelines[1], this.textures[current], true);
+                current = scratch;
+            }
+            if (octaveEffectIsActive(this.options.parameters, octave)) {
+                const scratch = 1 - current;
+                draw(this.textures[scratch].createView(), this.pipelines[2], this.textures[current], true);
+                current = scratch;
+            }
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), this.pipelines[3], this.textures[0], true);
+        draw(c.getCurrentTexture().createView(), this.pipelines[3], this.textures[current], true);
         d.queue.submit([enc.finish()]);
     }
     destroy() {

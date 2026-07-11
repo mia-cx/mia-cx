@@ -4,6 +4,7 @@ import {
     BLUR_SHADER_SOURCE,
     COMMON_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
+    OCTAVE_BLUR_SCHEMA,
     OCTAVE_COUNT,
     OCTAVE_PARAMETER_SCHEMA,
     OCTAVE_PIXELATE_SCHEMA,
@@ -13,6 +14,8 @@ import {
     defaultParameters,
     fullResolutionPassSizes,
     octavePixelSizes,
+    octaveBlurIsActive,
+    octaveEffectIsActive,
     packUniform,
     renderSize,
     scaledSize,
@@ -70,8 +73,9 @@ describe('field configuration', () => {
         expect(OCTAVE_PARAMETER_SCHEMA).toHaveLength(5);
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(49);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(49);
+        expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
+        expect(PARAMETER_SCHEMA).toHaveLength(54);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(54);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -96,6 +100,7 @@ describe('field configuration', () => {
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual(Array(5).fill(0));
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual(Array(5).fill(0));
         expect(OCTAVE_PIXELATE_SCHEMA.map(({ default: value }) => value)).toEqual(Array(5).fill(0));
+        expect(OCTAVE_BLUR_SCHEMA.map(({ default: value }) => value)).toEqual(Array(5).fill(0.25));
     });
     it('ignores stale persisted sixth and seventh octave keys', () => {
         const saved = {
@@ -119,7 +124,7 @@ describe('field configuration', () => {
             tertiaryBlendMode: 2,
         } as ReturnType<typeof defaultParameters>;
         const normalized = normalizeSavedSettings({ seed: 7, parameters: saved });
-        expect(normalized.parameters.secondaryScale).toBe(2.25);
+        expect(normalized.parameters.secondaryScale).toBe(2);
         expect(Object.keys(normalized.parameters).some((key) => key.startsWith('tertiary'))).toBe(false);
     });
     it('defaults old saved settings to Add and normalizes categorical modes', () => {
@@ -139,7 +144,7 @@ describe('field configuration', () => {
         parameters.octave3Pixelate = 1;
         const data = packUniform([320, 180], 2, 9, parameters, 4);
         expect(data).toHaveLength(UNIFORM_FLOATS);
-        expect(data.byteLength).toBe(208);
+        expect(data.byteLength).toBe(240);
         expect(Array.from(data.slice(12, 18))).toEqual(Array.from(new Float32Array([1, 1.1, 0, 0, 1.76, 0])));
         expect(data[28]).toBe(4);
         expect(data[29]).toBe(5);
@@ -154,10 +159,27 @@ describe('field configuration', () => {
                 ]),
             ),
         );
+        expect(Array.from(data.slice(52, 57))).toEqual(Array(5).fill(0.25));
+        expect(Array.from(data.slice(57, 60))).toEqual([0, 0, 0]);
     });
-    it('uses the current 16-to-1 octave scale for the subtle pre-blur', () => {
+    it('uses a dynamic radius and four diagonal samples with an exact zero-radius identity', () => {
         expect(BLUR_SHADER_SOURCE).toContain('exp2(4.-u.octaveIndex)');
-        expect(BLUR_SHADER_SOURCE).toContain('textureSample(src,samp,uv).r*.76');
+        expect(BLUR_SHADER_SOURCE).toContain('u.blurRadii[radiusIndex/4u][radiusIndex%4u]');
+        expect(BLUR_SHADER_SOURCE).toContain('if(radius<=0.0001)');
+        expect(BLUR_SHADER_SOURCE.match(/textureSample\(/g)).toHaveLength(5);
+    });
+    it('skips neutral octave work while smoothness alone remains neutral', () => {
+        const parameters = defaultParameters();
+        expect(octaveEffectIsActive(parameters, 0)).toBe(false);
+        parameters.octave1Smoothness = 1;
+        expect(octaveEffectIsActive(parameters, 0)).toBe(false);
+        for (const key of ['octave1Noise', 'octave1Threshold', 'octave1Distance', 'octave1Pixelate'] as const) {
+            const active = { ...parameters, [key]: key === 'octave1Threshold' ? -0.1 : 1 };
+            expect(octaveEffectIsActive(active, 0)).toBe(true);
+        }
+        expect(octaveBlurIsActive(parameters, 0)).toBe(true);
+        parameters.octave1BlurRadius = 0;
+        expect(octaveBlurIsActive(parameters, 0)).toBe(false);
     });
     it('composes each generator with real signed blend modes before attenuation and threshold', () => {
         expect(BASE_SHADER_SOURCE).toContain('fn screen01');

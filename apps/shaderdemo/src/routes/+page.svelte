@@ -3,6 +3,7 @@
     import {
         AtmosphereRenderer,
         FIELD_PARAMETER_SCHEMA,
+        OCTAVE_BLUR_SCHEMA,
         OCTAVE_PARAMETER_SCHEMA,
         OCTAVE_PIXELATE_SCHEMA,
         PARAMETER_SCHEMA,
@@ -236,7 +237,7 @@
                                             }}
                                         />
                                     </label>
-                                    {#each parameters as parameter}
+                                    {#each [OCTAVE_BLUR_SCHEMA[index], ...parameters] as parameter}
                                         <label class="parameter">
                                             <span>{parameter.label}</span>
                                             <input
