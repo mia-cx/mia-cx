@@ -498,7 +498,7 @@ export const GOD_RAYS_SHADER_SOURCE =
  for(var i=0u;i<24u;i++) { if(i<count) {
   let progress=f32(i)/max(f32(count-1u),1.); let uv=center+(startUv-center)*pow(contraction,progress*64.);
   if(all(uv>=vec2f(0)) && all(uv<=vec2f(1))) {
-   let v=pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); let k=max(u.post[3].y,.00001);
+   let v=pow(clamp(textureSampleLevel(src,samp,uv,0.).r,0.,1.),u.finalContrast); let k=max(u.post[3].y,.00001);
    let soft=clamp((v-u.post[3].x+k)/(2.*k),0.,1.); sum+=max(v-u.post[3].x,0.)+soft*soft*k; visible+=1.;
   }
  } }

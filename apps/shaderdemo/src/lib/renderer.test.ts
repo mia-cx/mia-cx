@@ -36,6 +36,8 @@ describe('field configuration', () => {
         expect(GOD_RAYS_SHADER_SOURCE).toContain('pow(contraction,progress*64.)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('for(var i=0u;i<24u;i++)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('center+(startUv-center)');
+        expect(GOD_RAYS_SHADER_SOURCE).toContain('textureSampleLevel(src,samp,uv,0.)');
+        expect(GOD_RAYS_SHADER_SOURCE).not.toContain('textureSample(src,samp,uv)');
 
         const parameters = defaultParameters();
         expect(godRaysIsActive(parameters)).toBe(false);
