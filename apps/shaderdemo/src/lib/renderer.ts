@@ -127,7 +127,7 @@ export function advanceSimulationTime(time: number, deltaSeconds: number, speed:
     return time + deltaSeconds * speed;
 }
 
-const common = /* wgsl */ `
+export const COMMON_SHADER_SOURCE = /* wgsl */ `
 struct U {
  resolution: vec2f, time: f32, seed: f32,
  fieldScale: f32, flowStretch: f32, billowAmount: f32, ridgeAmount: f32,
@@ -152,12 +152,34 @@ fn noise(p: vec2f) -> f32 {
 }
 fn n2(p: vec2f) -> vec2f { return vec2f(noise(p),noise(p+vec2f(17.7,43.2))); }
 fn hash3(p: vec3f) -> f32 { return fract(sin(dot(p,vec3f(127.1,311.7,74.7)) + u.seed*19.19)*43758.5453); }
+fn simplexGradient(lattice: vec3f) -> vec3f {
+    let gradients=array<vec3f,12>(
+        vec3f(1,1,0),vec3f(-1,1,0),vec3f(1,-1,0),vec3f(-1,-1,0),
+        vec3f(1,0,1),vec3f(-1,0,1),vec3f(1,0,-1),vec3f(-1,0,-1),
+        vec3f(0,1,1),vec3f(0,-1,1),vec3f(0,1,-1),vec3f(0,-1,-1)
+    );
+    return gradients[u32(floor(hash3(lattice)*12.))];
+}
+fn simplexCorner(lattice: vec3f, offset: vec3f) -> f32 {
+    let kernel=max(.6-dot(offset,offset),0.);
+    return kernel*kernel*kernel*kernel*dot(simplexGradient(lattice),offset);
+}
 fn noise3(p: vec3f) -> f32 {
-    let i=floor(p); let f=fract(p); let s=f*f*(3.-2.*f);
-    let z0=mix(mix(hash3(i),hash3(i+vec3f(1,0,0)),s.x),mix(hash3(i+vec3f(0,1,0)),hash3(i+vec3f(1,1,0)),s.x),s.y);
-    let z1=mix(mix(hash3(i+vec3f(0,0,1)),hash3(i+vec3f(1,0,1)),s.x),mix(hash3(i+vec3f(0,1,1)),hash3(i+vec3f(1,1,1)),s.x),s.y);
-    // Keep X/Y spatial interpolation smooth, but traverse Z linearly so animation has no built-in ease-in/out.
-    return mix(z0,z1,f.z);
+    // Isotropic simplex gradient noise: all axes share one tetrahedral lattice and compact C2 kernel.
+    let skew=(p.x+p.y+p.z)/3.;
+    let cell=floor(p+skew);
+    let unskew=(cell.x+cell.y+cell.z)/6.;
+    let x0=p-(cell-unskew);
+    let first=select(vec3f(0),vec3f(1),x0>=x0.yzx);
+    let second=select(vec3f(0),vec3f(1),x0>x0.zxy);
+    let i1=min(first,second);
+    let i2=max(first,second);
+    let x1=x0-i1+vec3f(1./6.);
+    let x2=x0-i2+vec3f(1./3.);
+    let x3=x0-vec3f(.5);
+    let sum=simplexCorner(cell,x0)+simplexCorner(cell+i1,x1)+simplexCorner(cell+i2,x2)+simplexCorner(cell+vec3f(1),x3);
+    // Conventional 32x simplex normalization, remapped approximately from [-1,1] to [0,1].
+    return .5+16.*sum;
 }
 fn noise3v(p: vec2f, z: f32) -> vec2f {
     return vec2f(noise3(vec3f(p,z)),noise3(vec3f(p+vec2f(17.7,43.2),z+11.3)));
@@ -165,7 +187,7 @@ fn noise3v(p: vec2f, z: f32) -> vec2f {
 `;
 
 const baseShader =
-    common +
+    COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
@@ -205,7 +227,7 @@ const baseShader =
 }`;
 
 const octaveShader =
-    common +
+    COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
 fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
@@ -252,7 +274,7 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
 }`;
 
 const displayShader =
-    common +
+    COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {

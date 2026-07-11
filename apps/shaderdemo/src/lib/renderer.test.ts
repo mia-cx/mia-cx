@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    COMMON_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
     OCTAVE_COUNT,
     OCTAVE_PARAMETER_SCHEMA,
@@ -16,6 +17,12 @@ import {
 } from './renderer';
 
 describe('field configuration', () => {
+    it('uses seeded 3D simplex gradients instead of synchronized Z-slice interpolation', () => {
+        expect(COMMON_SHADER_SOURCE).toContain('fn simplexGradient');
+        expect(COMMON_SHADER_SOURCE).toContain('fn simplexCorner');
+        expect(COMMON_SHADER_SOURCE).toContain('kernel*kernel*kernel*kernel');
+        expect(COMMON_SHADER_SOURCE).not.toContain('mix(z0,z1,f.z)');
+    });
     it('caps DPR and rounds down to stable physical dimensions', () => {
         expect(renderSize(801.9, 600.8, 3, 1.5)).toEqual({ width: 1202, height: 901 });
         expect(renderSize(801.9, 600.8, 3, Number.POSITIVE_INFINITY)).toEqual({ width: 2405, height: 1802 });
