@@ -7,6 +7,7 @@
         OCTAVE_PARAMETER_SCHEMA,
         OCTAVE_PIXELATE_SCHEMA,
         PARAMETER_SCHEMA,
+        POST_PARAMETER_SCHEMA,
         type ParameterKey,
         type RenderOptions,
         type GpuTimingStats,
@@ -53,6 +54,7 @@
         { id: 'field', label: 'Field' },
         { id: 'octaves', label: 'Octaves' },
         { id: 'adjustments', label: 'Curves & levels' },
+        { id: 'post', label: 'Post' },
     ] as const;
     let selectedTabId: (typeof parameterTabs)[number]['id'] = 'field';
     const fieldGroups: { label: string; keys: ParameterKey[]; toggle?: ParameterKey }[] = [
@@ -89,6 +91,31 @@
         },
         { label: 'Motion', keys: ['animationSpeed'] },
     ];
+    const postGroups = [
+        {
+            label: 'Color grade',
+            toggle: 'colorGradeEnabled',
+            keys: ['exposure', 'temperature', 'tint', 'contrast', 'saturation', 'vibrance', 'shadows', 'highlights'],
+        },
+        {
+            label: 'Bloom',
+            toggle: 'bloomEnabled',
+            keys: ['bloomThreshold', 'bloomKnee', 'bloomIntensity', 'bloomRadius'],
+        },
+        { label: 'Glow', toggle: 'glowEnabled', keys: ['glowIntensity', 'glowHue'] },
+        {
+            label: 'Lens / camera',
+            keys: [
+                'chromaticAberration',
+                'vignetteAmount',
+                'vignetteSoftness',
+                'lensDistortion',
+                'sharpen',
+                'filmGrainAmount',
+                'filmGrainSize',
+            ],
+        },
+    ] as const;
 
     function tabKeydown(event: KeyboardEvent) {
         if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
@@ -378,7 +405,7 @@
                                 </fieldset>
                             {/each}
                         </div>
-                    {:else}
+                    {:else if selectedTabId === 'adjustments'}
                         <div
                             class="sliders adjustment-stack"
                             id="panel-adjustments"
@@ -462,6 +489,51 @@
                                 </section>
                             {/each}
                             {#if options.adjustments.length === 0}<p class="empty">No adjustments.</p>{/if}
+                        </div>
+                    {:else}
+                        <div class="sliders" id="panel-post" role="tabpanel" aria-labelledby="tab-post">
+                            {#each postGroups as group}
+                                <section class="field-group">
+                                    <div class="group-heading">
+                                        <span>{group.label}</span>
+                                        {#if 'toggle' in group}<label class="enabled"
+                                                ><span>Enabled</span><input
+                                                    type="checkbox"
+                                                    checked={options.parameters[group.toggle] >= 0.5}
+                                                    onchange={(event) => {
+                                                        options.parameters[group.toggle] = event.currentTarget.checked
+                                                            ? 1
+                                                            : 0;
+                                                        update();
+                                                    }}
+                                                /></label
+                                            >{/if}
+                                    </div>
+                                    {#each POST_PARAMETER_SCHEMA.filter( ({ key }) => group.keys.includes(key as never), ) as parameter}
+                                        <label class="parameter"
+                                            ><span>{parameter.label}</span>
+                                            <input
+                                                class="exact-value"
+                                                aria-label={`${parameter.label} exact value`}
+                                                type="number"
+                                                min={parameter.min}
+                                                max={parameter.max}
+                                                step={parameter.step}
+                                                bind:value={options.parameters[parameter.key]}
+                                                onchange={update}
+                                            />
+                                            <input
+                                                type="range"
+                                                min={parameter.min}
+                                                max={parameter.max}
+                                                step={parameter.step}
+                                                bind:value={options.parameters[parameter.key]}
+                                                oninput={update}
+                                            />
+                                        </label>
+                                    {/each}
+                                </section>
+                            {/each}
                         </div>
                     {/if}
                 </div>
@@ -606,7 +678,7 @@
     }
     .tabs {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         gap: 2px;
         padding: 4px 0;
     }

@@ -5,6 +5,7 @@ import {
     OCTAVE_PARAMETER_SCHEMA,
     OCTAVE_PIXELATE_SCHEMA,
     PARAMETER_SCHEMA,
+    POST_PARAMETER_SCHEMA,
     type ShaderParameters,
 } from './renderer';
 import { sanitizeAdjustments, type Adjustment } from './adjustments';
@@ -31,7 +32,7 @@ export const shaderSettings = persistentAtom<SavedShaderSettings>(SETTINGS_STORA
     decode: JSON.parse,
 });
 
-export type SettingsTab = 'field' | 'octaves' | 'adjustments';
+export type SettingsTab = 'field' | 'octaves' | 'adjustments' | 'post';
 
 /** Reset only the controls represented by one visible settings tab. */
 export function resetSettingsTab(settings: SavedShaderSettings, tab: SettingsTab): SavedShaderSettings {
@@ -42,7 +43,9 @@ export function resetSettingsTab(settings: SavedShaderSettings, tab: SettingsTab
     const schema =
         tab === 'field'
             ? FIELD_PARAMETER_SCHEMA
-            : [...OCTAVE_PARAMETER_SCHEMA.flat(), ...OCTAVE_PIXELATE_SCHEMA, ...OCTAVE_BLUR_SCHEMA];
+            : tab === 'post'
+              ? POST_PARAMETER_SCHEMA
+              : [...OCTAVE_PARAMETER_SCHEMA.flat(), ...OCTAVE_PIXELATE_SCHEMA, ...OCTAVE_BLUR_SCHEMA];
     for (const parameter of schema) parameters[parameter.key] = parameter.default;
     return { ...settings, parameters };
 }

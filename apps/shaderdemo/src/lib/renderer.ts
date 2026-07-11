@@ -40,7 +40,7 @@ export const FIELD_PARAMETER_SCHEMA = withCanonicalDefaults(FIELD_PARAMETER_SCHE
 
 export const OCTAVE_COUNT = 5;
 export const GPU_TIMING_SAMPLE_INTERVAL = 30;
-export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 2;
+export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 4;
 const GPU_QUERY_COUNT = MAX_RENDER_PASSES * 2;
 export interface GpuTimingStats {
     totalMs: number;
@@ -121,11 +121,38 @@ const OCTAVE_BLUR_SCHEMA_BASE = Array.from({ length: OCTAVE_COUNT }, (_, index) 
     default: blurDefaults[index],
 }));
 export const OCTAVE_BLUR_SCHEMA = withCanonicalDefaults(OCTAVE_BLUR_SCHEMA_BASE);
+export const POST_PARAMETER_SCHEMA = [
+    { key: 'colorGradeEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'exposure', label: 'Exposure', min: -4, max: 4, step: 0.01, default: 0 },
+    { key: 'temperature', label: 'Temperature', min: -1, max: 1, step: 0.01, default: 0 },
+    { key: 'tint', label: 'Tint', min: -1, max: 1, step: 0.01, default: 0 },
+    { key: 'contrast', label: 'Contrast', min: -1, max: 1, step: 0.01, default: 0 },
+    { key: 'saturation', label: 'Saturation', min: -1, max: 2, step: 0.01, default: 0 },
+    { key: 'vibrance', label: 'Vibrance', min: -1, max: 1, step: 0.01, default: 0 },
+    { key: 'shadows', label: 'Shadows', min: -1, max: 1, step: 0.01, default: 0 },
+    { key: 'highlights', label: 'Highlights', min: -1, max: 1, step: 0.01, default: 0 },
+    { key: 'bloomEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'bloomThreshold', label: 'Threshold', min: 0, max: 2, step: 0.01, default: 0.75 },
+    { key: 'bloomKnee', label: 'Softness', min: 0, max: 1, step: 0.01, default: 0.25 },
+    { key: 'bloomIntensity', label: 'Intensity', min: 0, max: 3, step: 0.01, default: 0 },
+    { key: 'bloomRadius', label: 'Radius', min: 0, max: 2, step: 0.01, default: 0.6 },
+    { key: 'glowEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'glowIntensity', label: 'Intensity', min: 0, max: 3, step: 0.01, default: 0 },
+    { key: 'glowHue', label: 'Hue', min: 0, max: 1, step: 0.01, default: 0.08 },
+    { key: 'chromaticAberration', label: 'Chromatic aberration', min: 0, max: 12, step: 0.1, default: 0 },
+    { key: 'vignetteAmount', label: 'Vignette', min: 0, max: 1, step: 0.01, default: 0 },
+    { key: 'vignetteSoftness', label: 'Vignette softness', min: 0.01, max: 1, step: 0.01, default: 0.35 },
+    { key: 'lensDistortion', label: 'Lens distortion', min: -0.5, max: 0.5, step: 0.005, default: 0 },
+    { key: 'sharpen', label: 'Sharpen', min: 0, max: 2, step: 0.01, default: 0 },
+    { key: 'filmGrainAmount', label: 'Film grain', min: 0, max: 0.3, step: 0.005, default: 0 },
+    { key: 'filmGrainSize', label: 'Grain size', min: 0.5, max: 4, step: 0.1, default: 1 },
+] as const;
 export const PARAMETER_SCHEMA = [
     ...FIELD_PARAMETER_SCHEMA,
     ...OCTAVE_PARAMETER_SCHEMA.flat(),
     ...OCTAVE_PIXELATE_SCHEMA,
     ...OCTAVE_BLUR_SCHEMA,
+    ...POST_PARAMETER_SCHEMA,
 ];
 export type ParameterKey = (typeof PARAMETER_SCHEMA)[number]['key'];
 export type ShaderParameters = Record<ParameterKey, number>;
@@ -163,7 +190,7 @@ export function fullResolutionPassSizes(width: number, height: number, renderSca
     return Array.from({ length: OCTAVE_COUNT + 1 }, () => ({ ...size }));
 }
 
-export const UNIFORM_FLOATS = 60;
+export const UNIFORM_FLOATS = 84;
 export function packUniform(
     resolution: [number, number],
     time: number,
@@ -187,6 +214,10 @@ export function packUniform(
     data.set(
         OCTAVE_BLUR_SCHEMA.map(({ key }) => parameters[key]),
         52,
+    );
+    data.set(
+        POST_PARAMETER_SCHEMA.map(({ key }) => parameters[key]),
+        60,
     );
     return data;
 }
@@ -227,7 +258,7 @@ struct U {
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
  centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32, frameIndex: f32,
  octaves: array<vec4f, 5>,
- blurRadii: array<vec4f, 2>
+ blurRadii: array<vec4f, 2>, post: array<vec4f, 6>
 };
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -446,23 +477,40 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
 export const DISPLAY_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
-@group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
-@group(0) @binding(3) var adjustmentLut: texture_2d<f32>;
-@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-    let uv=pos.xy/u.resolution;
-    let density=textureSample(src,samp,uv).r;
-    var f=pow(clamp(density,0.,1.),u.finalContrast);
-    // Existing final contrast first; adjustment LUT is the new final stage.
-    if(u.blurRadii[1].w>.5) {
-        let position=clamp(f,0.,1.)*4095.;
-        let lo=i32(floor(position));
-        let hi=min(lo+1,4095);
-        let fraction=position-f32(lo);
-        let rgb=mix(textureLoad(adjustmentLut,vec2i(lo,0),0).rgb,textureLoad(adjustmentLut,vec2i(hi,0),0).rgb,fraction);
-        return vec4f(rgb,1.);
-    }
-    return vec4f(vec3f(f),1.);
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
+@group(0) @binding(3) var adjustmentLut:texture_2d<f32>; @group(0) @binding(4) var bloom:texture_2d<f32>;
+fn hueColor(h:f32)->vec3f { return clamp(abs(fract(h+vec3f(0.,.667,.333))*6.-3.)-1.,vec3f(0),vec3f(1)); }
+fn adjusted(v:f32)->vec3f {
+ let f=clamp(v,0.,1.); if(u.blurRadii[1].w<=.5) { return vec3f(f); }
+ let p=f*4095.; let lo=i32(floor(p)); let hi=min(lo+1,4095);
+ return mix(textureLoad(adjustmentLut,vec2i(lo,0),0).rgb,textureLoad(adjustmentLut,vec2i(hi,0),0).rgb,p-f32(lo));
+}
+fn sourceValue(uv:vec2f)->f32 { return pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); }
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f {
+ var uv=pos.xy/u.resolution; let centered=uv*2.-1.;
+ if(u.post[5].x!=0.) { uv=.5+centered*(1.+u.post[5].x*dot(centered,centered))*.5; }
+ var f=sourceValue(uv);
+ if(u.post[5].y!=0.) { let px=1./u.resolution; let n=sourceValue(uv+vec2f(px.x,0))+sourceValue(uv-vec2f(px.x,0))+sourceValue(uv+vec2f(0,px.y))+sourceValue(uv-vec2f(0,px.y)); f+=(f*4.-n)*u.post[5].y; }
+ var rgb=adjusted(f); let ca=u.post[4].y/u.resolution.x;
+ if(ca!=0.) { let dir=normalize(centered+vec2f(.0001))*ca; rgb=vec3f(adjusted(sourceValue(uv+dir)).r,rgb.g,adjusted(sourceValue(uv-dir)).b); }
+ if(u.post[0].x>.5) { rgb*=exp2(u.post[0].y); rgb+=vec3f(u.post[0].z+u.post[0].w*.25,u.post[0].w*.5,-u.post[0].z-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let l=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(l),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,l))+u.post[2].x*smoothstep(.5,1.,l); }
+ var b=0.; if((u.post[2].y>.5 && u.post[3].x!=0.) || (u.post[3].z>.5 && u.post[3].w!=0.)) { b=textureSample(bloom,samp,pos.xy/u.resolution).r; }
+ if(u.post[2].y>.5 && u.post[3].x!=0.) { rgb+=b*u.post[3].x; }
+ if(u.post[3].z>.5 && u.post[3].w!=0.) { rgb+=b*u.post[3].w*hueColor(u.post[4].x); }
+ if(u.post[4].z!=0.) { let edge=smoothstep(1.-u.post[4].w,1.,length(centered)*.707); rgb*=1.-edge*u.post[4].z; }
+ if(u.post[5].z!=0.) { let grain=fract(sin(dot(floor(pos.xy/u.post[5].w),vec2f(12.9898,78.233))+u.frameIndex)*43758.5453)-.5; rgb+=grain*u.post[5].z; }
+ return vec4f(rgb,1.);
 }`;
+export const BLOOM_EXTRACT_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let v=pow(clamp(textureSample(src,samp,pos.xy/u.resolution).r,0.,1.),u.finalContrast); let t=u.post[2].z; let k=max(u.post[2].w,.00001); let soft=clamp((v-t+k)/(2.*k),0.,1.); return vec4f(max(v-t,0.)+soft*soft*k,0,0,1); }`;
+export const BLOOM_BLUR_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let o=(1.+u.post[3].y*3.)/vec2f(textureDimensions(src)); var v=textureSample(src,samp,uv+o).r+textureSample(src,samp,uv-o).r+textureSample(src,samp,uv+vec2f(-o.x,o.y)).r+textureSample(src,samp,uv+vec2f(o.x,-o.y)).r; return vec4f(v*.25,0,0,1); }`;
 
 export class AtmosphereRenderer {
     private device?: GPUDevice;
@@ -544,8 +592,10 @@ export class AtmosphereRenderer {
             make(BLUR_SHADER_SOURCE, 'r16float'),
             make(OCTAVE_SHADER_SOURCE, 'r16float'),
             make(DISPLAY_SHADER_SOURCE, format),
+            make(BLOOM_EXTRACT_SHADER_SOURCE, 'r16float'),
+            make(BLOOM_BLUR_SHADER_SOURCE, 'r16float'),
         ]);
-        self.buffers = Array.from({ length: 2 * OCTAVE_COUNT + 2 }, () =>
+        self.buffers = Array.from({ length: MAX_RENDER_PASSES }, () =>
             self.device!.createBuffer({
                 size: UNIFORM_FLOATS * 4,
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -600,6 +650,12 @@ export class AtmosphereRenderer {
         this.textures = Array.from({ length: 2 }, () => {
             return this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage });
         });
+        const bloomSize = scaledSize(size.width, size.height, 0.25);
+        this.textures.push(
+            ...Array.from({ length: 2 }, () =>
+                this.device!.createTexture({ size: [bloomSize.width, bloomSize.height], format: 'r16float', usage }),
+            ),
+        );
         this.textureViews = this.textures.map((texture) => texture.createView());
     }
     setOptions(options: RenderOptions) {
@@ -673,11 +729,11 @@ export class AtmosphereRenderer {
         if (
             !d ||
             !c ||
-            buffers.length < 2 * OCTAVE_COUNT + 2 ||
+            buffers.length < MAX_RENDER_PASSES ||
             !s ||
-            this.pipelines.length < 4 ||
-            this.textures.length < 2 ||
-            this.textureViews.length < 2
+            this.pipelines.length < 6 ||
+            this.textures.length < 4 ||
+            this.textureViews.length < 4
         )
             return;
         const enc = d.createCommandEncoder();
@@ -712,7 +768,10 @@ export class AtmosphereRenderer {
                 if (sourceTextureIndex !== undefined) {
                     entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
                     if (usesSampler) entries.push({ binding: 2, resource: s });
-                    if (pipelineIndex === 3) entries.push({ binding: 3, resource: this.adjustmentView! });
+                    if (pipelineIndex === 3) {
+                        entries.push({ binding: 3, resource: this.adjustmentView! });
+                        entries.push({ binding: 4, resource: this.textureViews[3] });
+                    }
                 }
                 bindGroup = d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
                 this.bindGroups.set(cacheKey, bindGroup);
@@ -756,6 +815,17 @@ export class AtmosphereRenderer {
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
         data[59] = this.options.adjustments.some((adjustment) => adjustment.enabled) ? 1 : 0;
+        const p = this.options.parameters;
+        const bloomActive =
+            (p.bloomEnabled >= 0.5 && p.bloomIntensity !== 0) || (p.glowEnabled >= 0.5 && p.glowIntensity !== 0);
+        if (bloomActive) {
+            data[0] = this.textures[2].width;
+            data[1] = this.textures[2].height;
+            draw(this.textureViews[2], 4, current, true, 'bloom-extract');
+            draw(this.textureViews[3], 5, 2, true, 'bloom-blur');
+            data[0] = this.canvas.width;
+            data[1] = this.canvas.height;
+        }
         draw(c.getCurrentTexture().createView(), 3, current, true, 'display');
         if (sampleGpu) {
             const bytes = gpuLabels!.length * 16;
@@ -766,7 +836,7 @@ export class AtmosphereRenderer {
         d.queue.submit([enc.finish()]);
         if (sampleGpu) this.readGpuTimestamps(gpuLabels!);
         this.renderedFrames += 1;
-        this.frameIndex = (this.frameIndex + 1) % 16_777_216;
+        if (!this.paused) this.frameIndex = (this.frameIndex + 1) % 16_777_216;
     }
     private readGpuTimestamps(labels: string[]) {
         const buffer = this.queryReadbackBuffer!;

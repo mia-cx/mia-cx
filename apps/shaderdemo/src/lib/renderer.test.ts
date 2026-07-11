@@ -32,12 +32,15 @@ describe('field configuration', () => {
     it('linearly interpolates the high-depth adjustment LUT in the existing display shader', () => {
         expect(DISPLAY_SHADER_SOURCE.match(/textureLoad\(adjustmentLut/g)).toHaveLength(2);
         expect(DISPLAY_SHADER_SOURCE).toContain('texture_2d<f32>');
-        expect(DISPLAY_SHADER_SOURCE).toContain('position=clamp(f,0.,1.)*4095.');
+        expect(DISPLAY_SHADER_SOURCE).toContain('let f=clamp(v,0.,1.)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('let p=f*4095.');
         expect(DISPLAY_SHADER_SOURCE).toContain('let hi=min(lo+1,4095)');
         expect(DISPLAY_SHADER_SOURCE).toContain('mix(textureLoad');
+        expect(DISPLAY_SHADER_SOURCE).toContain('adjusted(sourceValue(uv+dir)).r');
+        expect(DISPLAY_SHADER_SOURCE).toContain('adjusted(sourceValue(uv-dir)).b');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('f*255');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('/255.');
-        expect(DISPLAY_SHADER_SOURCE).toContain('if(u.blurRadii[1].w>.5)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('if(u.blurRadii[1].w<=.5)');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('textureSample(adjustmentLut');
     });
     it('aggregates nanosecond GPU timestamp pairs by semantic stage', () => {
@@ -121,8 +124,8 @@ describe('field configuration', () => {
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
         expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(55);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(55);
+        expect(PARAMETER_SCHEMA).toHaveLength(79);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(79);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -210,7 +213,7 @@ describe('field configuration', () => {
         parameters.octave3Pixelate = 1;
         const data = packUniform([320, 180], 2, 9, parameters, 4, 73);
         expect(data).toHaveLength(UNIFORM_FLOATS);
-        expect(data.byteLength).toBe(240);
+        expect(data.byteLength).toBe(336);
         expect(Array.from(data.slice(12, 18))).toEqual(Array.from(new Float32Array([1, 0.45, -0.25, -1, 4, 2])));
         expect(data[29]).toBe(4);
         expect(data[30]).toBe(5);
