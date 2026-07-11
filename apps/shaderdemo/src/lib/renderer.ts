@@ -2,17 +2,19 @@ export const FIELD_PARAMETER_SCHEMA = [
     { key: 'fieldScale', label: 'Base field size', min: 32, max: 2048, step: 1, default: 128 },
     { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 2.5 },
     { key: 'billowAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: 0 },
+    { key: 'baseCloudBlendMode', label: 'Blend mode', min: 0, max: 3, step: 1, default: 0 },
     { key: 'ridgeAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: 1 },
+    { key: 'baseRibbonBlendMode', label: 'Blend mode', min: 0, max: 3, step: 1, default: 0 },
     { key: 'ridgeSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
-    { key: 'baseBlendMode', label: 'Blend mode', min: 0, max: 2, step: 1, default: 0 },
     { key: 'warpScale', label: 'Warp scale', min: 0.2, max: 2.5, step: 0.01, default: 0.68 },
     { key: 'warpStrength', label: 'Warp strength', min: 0, max: 1.5, step: 0.01, default: 1.5 },
     { key: 'secondaryEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
     { key: 'secondaryScale', label: 'Scale', min: 0, max: 2, step: 0.01, default: 1.1 },
     { key: 'secondaryCloudAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: 0 },
+    { key: 'secondaryCloudBlendMode', label: 'Blend mode', min: 0, max: 3, step: 1, default: 0 },
     { key: 'secondaryRibbonAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: 0 },
+    { key: 'secondaryRibbonBlendMode', label: 'Blend mode', min: 0, max: 3, step: 1, default: 0 },
     { key: 'secondaryRibbonSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
-    { key: 'secondaryBlendMode', label: 'Blend mode', min: 0, max: 2, step: 1, default: 0 },
     { key: 'thresholdEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
     { key: 'threshold', label: 'Threshold', min: 0.05, max: 0.95, step: 0.01, default: 0.56 },
     { key: 'thresholdSoftness', label: 'Threshold softness', min: 0.01, max: 0.5, step: 0.01, default: 0.5 },
@@ -118,8 +120,8 @@ export function packUniform(
 ) {
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set([resolution[0], resolution[1], time, seed, ...FIELD_PARAMETER_SCHEMA.map(({ key }) => parameters[key])]);
-    data[28] = octaveIndex;
-    data[29] = OCTAVE_PIXELATE_SCHEMA.reduce(
+    data[30] = octaveIndex;
+    data[31] = OCTAVE_PIXELATE_SCHEMA.reduce(
         (mask, { key }, index) => mask + (parameters[key] >= 0.5 ? 2 ** index : 0),
         0,
     );
@@ -155,10 +157,10 @@ export function advanceSimulationTime(time: number, deltaSeconds: number, speed:
 export const COMMON_SHADER_SOURCE = /* wgsl */ `
 struct U {
  resolution: vec2f, time: f32, seed: f32,
- fieldScale: f32, flowStretch: f32, billowAmount: f32, ridgeAmount: f32,
- ridgeSharpness: f32, baseBlendMode: f32, warpScale: f32, warpStrength: f32,
- secondaryEnabled: f32, secondaryScale: f32, secondaryCloudAmount: f32,
- secondaryRibbonAmount: f32, secondaryRibbonSharpness: f32, secondaryBlendMode: f32,
+ fieldScale: f32, flowStretch: f32, billowAmount: f32, baseCloudBlendMode: f32,
+ ridgeAmount: f32, baseRibbonBlendMode: f32, ridgeSharpness: f32, warpScale: f32, warpStrength: f32,
+ secondaryEnabled: f32, secondaryScale: f32, secondaryCloudAmount: f32, secondaryCloudBlendMode: f32,
+ secondaryRibbonAmount: f32, secondaryRibbonBlendMode: f32, secondaryRibbonSharpness: f32,
  thresholdEnabled: f32, threshold: f32, thresholdSoftness: f32, finalContrast: f32,
  animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
@@ -216,21 +218,21 @@ fn overlay01(backdrop: f32, source: f32) -> f32 {
     let a=clamp(backdrop,0.,1.); let b=clamp(source,0.,1.);
     return select(2.*a*b,1.-2.*(1.-a)*(1.-b),a>.5);
 }
-fn blendSigned(backdrop: f32, source: f32, mode: f32) -> f32 {
-    if(mode<.5) { return backdrop+source; }
-    if(mode<1.5) {
-        // Signed screen: equal signs screen magnitudes; a negative source multiplicatively
-        // darkens a positive backdrop, retaining excess strength as signed subtraction.
-        if(source<0. && backdrop>0.) { let m=-source; return backdrop*(1.-min(m,1.))-max(m-1.,0.); }
-        if(source>=0. && backdrop<0.) { return backdrop+source; }
-        let sign=select(-1.,1.,backdrop+source>=0.);
-        return sign*screen01(abs(backdrop),abs(source));
+fn blendLayer(backdrop: f32, source: f32, amount: f32, mode: f32) -> f32 {
+    if(amount==0.) { return backdrop; }
+    if(mode<.5) { return backdrop+source*amount; }
+    if(mode<1.5) { return backdrop-source*amount; }
+    let magnitude=source*abs(amount);
+    if(mode<2.5) {
+        // Positive Screen uses the standard clamped operation. Its signed analogue darkens
+        // multiplicatively, then subtracts strength beyond one instead of producing NaNs.
+        if(amount>0.) { return screen01(backdrop,magnitude); }
+        return backdrop*(1.-clamp(magnitude,0.,1.))-max(magnitude-1.,0.);
     }
-    // Standard [0,1] overlay, mixed by signed source strength so zero remains an identity.
-    let strength=min(abs(source),1.);
-    let operand=select(clamp(source,0.,1.),1.-clamp(-source,0.,1.),source<0.);
-    let overlaid=overlay01(backdrop,operand);
-    return mix(backdrop,overlaid,strength)-select(0.,max(-source-1.,0.),source<0.);
+    // Standard clamped Overlay; a negative amount reverses its delta from the backdrop.
+    let overlaid=overlay01(backdrop,source);
+    let delta=(overlaid-clamp(backdrop,0.,1.))*min(abs(amount),1.);
+    return backdrop+select(-delta,delta,amount>0.);
 }
 fn smoothAbsFold(value: f32) -> f32 {
     // 0.001 removes the derivative cusp at the Cloud fold with negligible Add-mode displacement.
@@ -255,13 +257,15 @@ export const BASE_SHADER_SOURCE =
     let cloud=smoothAbsFold(noise3(primaryPosition,307.)*2.-1.);
     let ribbonBase=1.-abs(noise3(primaryPosition,401.)*2.-1.);
     let ribbon=pow(clamp(ribbonBase,0.,1.),u.ridgeSharpness);
-    let shaped=blendSigned(cloud*u.billowAmount,ribbon*u.ridgeAmount,u.baseBlendMode);
+    var natural=blendLayer(0.,cloud,u.billowAmount,u.baseCloudBlendMode);
+    natural=blendLayer(natural,ribbon,u.ridgeAmount,u.baseRibbonBlendMode);
     let secondaryCloud=smoothAbsFold(noise3(secondaryPosition,503.)*2.-1.);
     let secondaryRibbonBase=1.-abs(noise3(secondaryPosition,601.)*2.-1.);
     let secondaryRibbon=pow(clamp(secondaryRibbonBase,0.,1.),u.secondaryRibbonSharpness);
-    let secondaryShaped=blendSigned(secondaryCloud*u.secondaryCloudAmount,secondaryRibbon*u.secondaryRibbonAmount,u.secondaryBlendMode);
-    var natural=shaped;
-    if(u.secondaryEnabled>=.5) { natural=blendSigned(natural,secondaryShaped,u.secondaryBlendMode); }
+    if(u.secondaryEnabled>=.5) {
+        natural=blendLayer(natural,secondaryCloud,u.secondaryCloudAmount,u.secondaryCloudBlendMode);
+        natural=blendLayer(natural,secondaryRibbon,u.secondaryRibbonAmount,u.secondaryRibbonBlendMode);
+    }
     let centerPoint=abs(q/vec2f(u.centerWidth,u.centerHeight));
     let centerDistance=pow(pow(centerPoint.x,u.centerRoundness)+pow(centerPoint.y,u.centerRoundness),1./u.centerRoundness);
     let centerFeather=u.centerSoftness*.5;
@@ -522,7 +526,7 @@ export class AtmosphereRenderer {
         draw(this.textures[0].createView(), this.pipelines[0]);
         let current = 0;
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
-            data[28] = octave;
+            data[30] = octave;
             if (octaveBlurIsActive(this.options.parameters, octave)) {
                 const scratch = 1 - current;
                 draw(this.textures[scratch].createView(), this.pipelines[1], this.textures[current], true);

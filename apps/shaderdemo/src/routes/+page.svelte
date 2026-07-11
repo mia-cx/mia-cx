@@ -37,9 +37,10 @@
                 'fieldScale',
                 'flowStretch',
                 'billowAmount',
+                'baseCloudBlendMode',
                 'ridgeAmount',
+                'baseRibbonBlendMode',
                 'ridgeSharpness',
-                'baseBlendMode',
                 'warpScale',
                 'warpStrength',
             ],
@@ -50,9 +51,10 @@
             keys: [
                 'secondaryScale',
                 'secondaryCloudAmount',
+                'secondaryCloudBlendMode',
                 'secondaryRibbonAmount',
+                'secondaryRibbonBlendMode',
                 'secondaryRibbonSharpness',
-                'secondaryBlendMode',
             ],
         },
         { label: 'Threshold', toggle: 'thresholdEnabled', keys: ['threshold', 'thresholdSoftness'] },
@@ -187,8 +189,9 @@
                                                     onchange={update}
                                                 >
                                                     <option value={0}>Add</option>
-                                                    <option value={1}>Screen</option>
-                                                    <option value={2}>Overlay</option>
+                                                    <option value={1}>Subtract</option>
+                                                    <option value={2}>Screen</option>
+                                                    <option value={3}>Overlay</option>
                                                 </select>
                                             </label>
                                         {:else}
