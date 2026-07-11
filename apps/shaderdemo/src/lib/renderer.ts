@@ -19,6 +19,7 @@ export const FIELD_PARAMETER_SCHEMA = [
     { key: 'tertiaryRibbonAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: 0 },
     { key: 'tertiaryRibbonSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
     { key: 'tertiaryBlendMode', label: 'Blend mode', min: 0, max: 2, step: 1, default: 0 },
+    { key: 'thresholdEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
     { key: 'threshold', label: 'Threshold', min: 0.05, max: 0.95, step: 0.01, default: 0.56 },
     { key: 'thresholdSoftness', label: 'Threshold softness', min: 0.01, max: 0.5, step: 0.01, default: 0.5 },
     { key: 'finalContrast', label: 'Final contrast', min: 0.2, max: 3, step: 0.01, default: 1.54 },
@@ -114,8 +115,8 @@ export function packUniform(
 ) {
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set([resolution[0], resolution[1], time, seed, ...FIELD_PARAMETER_SCHEMA.map(({ key }) => parameters[key])]);
-    data[33] = octaveIndex;
-    data[34] = OCTAVE_PIXELATE_SCHEMA.reduce(
+    data[34] = octaveIndex;
+    data[35] = OCTAVE_PIXELATE_SCHEMA.reduce(
         (mask, { key }, index) => mask + (parameters[key] >= 0.5 ? 2 ** index : 0),
         0,
     );
@@ -139,7 +140,8 @@ struct U {
  secondaryRibbonAmount: f32, secondaryRibbonSharpness: f32, secondaryBlendMode: f32,
  tertiaryEnabled: f32, tertiaryScale: f32, tertiaryCloudAmount: f32,
  tertiaryRibbonAmount: f32, tertiaryRibbonSharpness: f32, tertiaryBlendMode: f32,
- threshold: f32, thresholdSoftness: f32, finalContrast: f32, animationSpeed: f32,
+ thresholdEnabled: f32, threshold: f32, thresholdSoftness: f32, finalContrast: f32,
+ animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
  centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32,
  octaves: array<vec4f, 7>
@@ -255,7 +257,8 @@ export const BASE_SHADER_SOURCE =
     // Field shaping finishes here; recursive scatter/noise is the next destructive stage on top.
     let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
     let thresholded=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
-    return vec4f(thresholded,0.,0.,1.);
+    let fieldOutput=select(natural,thresholded,u.thresholdEnabled>=.5);
+    return vec4f(fieldOutput,0.,0.,1.);
 }`;
 
 const octaveShader =
@@ -479,7 +482,7 @@ export class AtmosphereRenderer {
             const target = this.textures[(octave + 1) % 2];
             data[0] = target.width;
             data[1] = target.height;
-            data[33] = octave;
+            data[34] = octave;
             draw(target.createView(), this.pipelines[1], source, true);
         }
         data[0] = this.canvas.width;

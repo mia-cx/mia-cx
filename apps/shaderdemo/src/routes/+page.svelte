@@ -65,7 +65,8 @@
                 'tertiaryBlendMode',
             ],
         },
-        { label: 'Field shaping', keys: ['threshold', 'thresholdSoftness', 'finalContrast'] },
+        { label: 'Threshold', toggle: 'thresholdEnabled', keys: ['threshold', 'thresholdSoftness'] },
+        { label: 'Output', keys: ['finalContrast'] },
         {
             label: 'Center attenuation',
             keys: ['centerDarkness', 'centerWidth', 'centerHeight', 'centerRoundness', 'centerSoftness'],

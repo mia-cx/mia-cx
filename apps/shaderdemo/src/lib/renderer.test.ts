@@ -66,12 +66,12 @@ describe('field configuration', () => {
         expect(advanceSimulationTime(12, 0.5, 3)).toBe(13.5);
     });
     it('defines seven independent groups of four valid controls', () => {
-        expect(FIELD_PARAMETER_SCHEMA).toHaveLength(29);
+        expect(FIELD_PARAMETER_SCHEMA).toHaveLength(30);
         expect(OCTAVE_PARAMETER_SCHEMA).toHaveLength(7);
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(7);
-        expect(PARAMETER_SCHEMA).toHaveLength(64);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(64);
+        expect(PARAMETER_SCHEMA).toHaveLength(65);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(65);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -80,6 +80,7 @@ describe('field configuration', () => {
             expect(defaultParameters()[parameter.key]).toBe(parameter.default);
         }
         expect(defaultParameters().centerDarkness).toBe(0);
+        expect(defaultParameters().thresholdEnabled).toBe(1);
         expect(defaultParameters()).toMatchObject({
             baseBlendMode: 0,
             secondaryEnabled: 1,
@@ -136,9 +137,8 @@ describe('field configuration', () => {
         expect(Array.from(data.slice(12, 24))).toEqual(
             Array.from(new Float32Array([1, 1.1, 0, 0, 1.76, 0, 1, 2.035, 0, 0, 1.76, 0])),
         );
-        expect(data[33]).toBe(6);
-        expect(data[34]).toBe(5);
-        expect(data[35]).toBe(0);
+        expect(data[34]).toBe(6);
+        expect(data[35]).toBe(5);
         expect(Array.from(data.slice(36, 40))).toEqual(
             Array.from(
                 new Float32Array([
@@ -162,5 +162,8 @@ describe('field configuration', () => {
         expect(BASE_SHADER_SOURCE.indexOf('natural=blendSigned')).toBeLessThan(
             BASE_SHADER_SOURCE.indexOf('natural*=centerAttenuation'),
         );
+    });
+    it('can bypass the stage-one threshold to expose the raw field', () => {
+        expect(BASE_SHADER_SOURCE).toContain('select(natural,thresholded,u.thresholdEnabled>=.5)');
     });
 });
