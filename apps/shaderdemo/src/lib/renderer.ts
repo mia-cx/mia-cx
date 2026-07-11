@@ -689,7 +689,7 @@ export class AtmosphereRenderer {
             data[1] = this.canvas.height;
             draw(c.getCurrentTexture().createView(), 3, current, true);
         }
-        d.queue.writeBuffer(uniformBuffer, 0, uniformSlab, 0, passIndex * this.uniformSlotStride);
+        d.queue.writeBuffer(uniformBuffer, 0, uniformSlab.buffer, 0, passIndex * this.uniformSlotStride);
         d.queue.submit([enc.finish()]);
         this.frameIndex = (this.frameIndex + 1) % 16_777_216;
     }
