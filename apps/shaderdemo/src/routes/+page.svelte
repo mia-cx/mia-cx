@@ -4,6 +4,7 @@
         AtmosphereRenderer,
         FIELD_PARAMETER_SCHEMA,
         OCTAVE_PARAMETER_SCHEMA,
+        OCTAVE_PIXELATE_SCHEMA,
         defaultParameters,
         type RenderOptions,
     } from '$lib/renderer';
@@ -133,6 +134,20 @@
                             {#each OCTAVE_PARAMETER_SCHEMA as parameters, index}
                                 <fieldset class="octave">
                                     <legend>Octave {index + 1}</legend>
+                                    <label class="pixelate">
+                                        <span>{OCTAVE_PIXELATE_SCHEMA[index].label}</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={options.parameters[OCTAVE_PIXELATE_SCHEMA[index].key] >= 0.5}
+                                            onchange={(event) => {
+                                                options.parameters[OCTAVE_PIXELATE_SCHEMA[index].key] = event
+                                                    .currentTarget.checked
+                                                    ? 1
+                                                    : 0;
+                                                update();
+                                            }}
+                                        />
+                                    </label>
                                     {#each parameters as parameter}
                                         <label class="parameter">
                                             <span>{parameter.label}</span><output

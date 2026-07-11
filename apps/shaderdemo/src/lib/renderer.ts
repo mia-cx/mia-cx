@@ -44,7 +44,19 @@ export const OCTAVE_PARAMETER_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, 
         },
     ];
 });
-export const PARAMETER_SCHEMA = [...FIELD_PARAMETER_SCHEMA, ...OCTAVE_PARAMETER_SCHEMA.flat()];
+export const OCTAVE_PIXELATE_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, index) => ({
+    key: `octave${index + 1}Pixelate` as `octave${number}Pixelate`,
+    label: 'Pixelate canvas',
+    min: 0,
+    max: 1,
+    step: 1,
+    default: 0,
+}));
+export const PARAMETER_SCHEMA = [
+    ...FIELD_PARAMETER_SCHEMA,
+    ...OCTAVE_PARAMETER_SCHEMA.flat(),
+    ...OCTAVE_PIXELATE_SCHEMA,
+];
 export type ParameterKey = (typeof PARAMETER_SCHEMA)[number]['key'];
 export type ShaderParameters = Record<ParameterKey, number>;
 export const defaultParameters = (): ShaderParameters =>
@@ -91,6 +103,10 @@ export function packUniform(
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set([resolution[0], resolution[1], time, seed, ...FIELD_PARAMETER_SCHEMA.map(({ key }) => parameters[key])]);
     data[21] = octaveIndex;
+    data[22] = OCTAVE_PIXELATE_SCHEMA.reduce(
+        (mask, { key }, index) => mask + (parameters[key] >= 0.5 ? 2 ** index : 0),
+        0,
+    );
     data.set(
         OCTAVE_PARAMETER_SCHEMA.flatMap((group) => group.map(({ key }) => parameters[key])),
         24,
@@ -109,7 +125,7 @@ struct U {
  warpScale: f32, warpStrength: f32, threshold: f32, thresholdSoftness: f32,
  secondaryScale: f32, secondaryMix: f32, finalContrast: f32, animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
- centerSoftness: f32, octaveIndex: f32, padding: vec2f,
+ centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32, padding: f32,
  octaves: array<vec4f, 7>
 };
 @group(0) @binding(0) var<uniform> u: U;
@@ -183,9 +199,12 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
     let pixel=floor(pos.xy);
     let octavePixelSize=exp2(6.-u.octaveIndex);
     let tile=floor(pixel/octavePixelSize);
+    let pixelationBit=floor(u.octavePixelationMask/exp2(u.octaveIndex))%2.;
+    let tiledUv=(tile+.5)*octavePixelSize/sourceSize;
+    let sourceUv=select(uv,tiledUv,pixelationBit>.5);
     let sampleCount=u32(round(mix(1.,8.,settings.z)));
     // Radius zero is an exact identity operation: no random resampling and no accumulated softening.
-    var scattered=textureSample(src,samp,uv).r;
+    var scattered=textureSample(src,samp,sourceUv).r;
     if(settings.w>0.0001) {
         scattered=0.;
         for(var sampleIndex=0u;sampleIndex<8u;sampleIndex++) {
@@ -195,7 +214,7 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
                 // receives the same whole-tile displacement while retaining its local detail.
                 let tileOffset=round(scatterOffset(tile,salt,settings.w));
                 let offset=tileOffset*octavePixelSize;
-                scattered+=textureSample(src,samp,uv+offset/sourceSize).r;
+                scattered+=textureSample(src,samp,sourceUv+offset/sourceSize).r;
             }
         }
         scattered/=f32(sampleCount);

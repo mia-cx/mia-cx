@@ -3,6 +3,7 @@ import {
     FIELD_PARAMETER_SCHEMA,
     OCTAVE_COUNT,
     OCTAVE_PARAMETER_SCHEMA,
+    OCTAVE_PIXELATE_SCHEMA,
     PARAMETER_SCHEMA,
     UNIFORM_FLOATS,
     advanceSimulationTime,
@@ -43,8 +44,9 @@ describe('field configuration', () => {
         expect(FIELD_PARAMETER_SCHEMA).toHaveLength(17);
         expect(OCTAVE_PARAMETER_SCHEMA).toHaveLength(7);
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
-        expect(PARAMETER_SCHEMA).toHaveLength(45);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(45);
+        expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(7);
+        expect(PARAMETER_SCHEMA).toHaveLength(52);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(52);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -55,14 +57,18 @@ describe('field configuration', () => {
         expect(defaultParameters().centerDarkness).toBe(0);
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual(Array(7).fill(0));
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual(Array(7).fill(0));
+        expect(OCTAVE_PIXELATE_SCHEMA.map(({ default: value }) => value)).toEqual(Array(7).fill(0));
     });
     it('packs the aligned uniform header and array<vec4f, 7>', () => {
         const parameters = defaultParameters();
+        parameters.octave1Pixelate = 1;
+        parameters.octave3Pixelate = 1;
         const data = packUniform([320, 180], 2, 9, parameters, 6);
         expect(data).toHaveLength(UNIFORM_FLOATS);
         expect(data.byteLength).toBe(208);
         expect(data[21]).toBe(6);
-        expect(Array.from(data.slice(22, 24))).toEqual([0, 0]);
+        expect(data[22]).toBe(5);
+        expect(data[23]).toBe(0);
         expect(Array.from(data.slice(24, 28))).toEqual(
             Array.from(
                 new Float32Array([
