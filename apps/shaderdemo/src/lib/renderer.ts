@@ -1,7 +1,8 @@
 export const FIELD_PARAMETER_SCHEMA = [
     { key: 'fieldScale', label: 'Base field size', min: 32, max: 2048, step: 1, default: 128 },
     { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 2.5 },
-    { key: 'ridgeMix', label: 'Billow / ridge mix', min: 0, max: 1, step: 0.01, default: 1 },
+    { key: 'billowAmount', label: 'Billow amount', min: 0, max: 2, step: 0.01, default: 0 },
+    { key: 'ridgeAmount', label: 'Ridge amount', min: 0, max: 2, step: 0.01, default: 1 },
     { key: 'ridgeSharpness', label: 'Ridge sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
     { key: 'warpScale', label: 'Warp scale', min: 0.2, max: 2.5, step: 0.01, default: 0.68 },
     { key: 'warpStrength', label: 'Warp strength', min: 0, max: 1.5, step: 0.01, default: 1.5 },
@@ -102,8 +103,8 @@ export function packUniform(
 ) {
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set([resolution[0], resolution[1], time, seed, ...FIELD_PARAMETER_SCHEMA.map(({ key }) => parameters[key])]);
-    data[21] = octaveIndex;
-    data[22] = OCTAVE_PIXELATE_SCHEMA.reduce(
+    data[22] = octaveIndex;
+    data[23] = OCTAVE_PIXELATE_SCHEMA.reduce(
         (mask, { key }, index) => mask + (parameters[key] >= 0.5 ? 2 ** index : 0),
         0,
     );
@@ -121,11 +122,12 @@ export function advanceSimulationTime(time: number, deltaSeconds: number, speed:
 const common = /* wgsl */ `
 struct U {
  resolution: vec2f, time: f32, seed: f32,
- fieldScale: f32, flowStretch: f32, ridgeMix: f32, ridgeSharpness: f32,
+ fieldScale: f32, flowStretch: f32, billowAmount: f32, ridgeAmount: f32,
+ ridgeSharpness: f32,
  warpScale: f32, warpStrength: f32, threshold: f32, thresholdSoftness: f32,
  secondaryScale: f32, secondaryMix: f32, finalContrast: f32, animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
- centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32, padding: f32,
+ centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32,
  octaves: array<vec4f, 7>
 };
 @group(0) @binding(0) var<uniform> u: U;
@@ -166,9 +168,10 @@ const baseShader =
     let primary=noise3(vec3f(p,t*.075));
     let secondary=noise3(vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-drift*.41,t*.12+7.1));
     let tertiary=noise3(vec3f(p*u.secondaryScale*1.85+vec2f(-4.1,19.3)+drift*.23,t*.18+19.7));
-    let billow=1.-abs(primary*2.-1.);
-    let ridged=pow(clamp(billow,0.,1.),u.ridgeSharpness);
-    let shaped=mix(primary,ridged,u.ridgeMix);
+    let billow=abs(primary*2.-1.);
+    let ridgeBase=1.-abs(primary*2.-1.);
+    let ridged=pow(clamp(ridgeBase,0.,1.),u.ridgeSharpness);
+    let shaped=billow*u.billowAmount+ridged*u.ridgeAmount;
     var natural=shaped+(secondary-.5)*u.secondaryMix+(tertiary-.5)*u.secondaryMix*.35;
     let centerPoint=abs(q/vec2f(u.centerWidth,u.centerHeight));
     let centerDistance=pow(pow(centerPoint.x,u.centerRoundness)+pow(centerPoint.y,u.centerRoundness),1./u.centerRoundness);
@@ -403,7 +406,7 @@ export class AtmosphereRenderer {
             const target = this.textures[(octave + 1) % 2];
             data[0] = target.width;
             data[1] = target.height;
-            data[21] = octave;
+            data[22] = octave;
             draw(target.createView(), this.pipelines[1], source, true);
         }
         data[0] = this.canvas.width;

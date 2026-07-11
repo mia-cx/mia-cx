@@ -41,12 +41,12 @@ describe('field configuration', () => {
         expect(advanceSimulationTime(12, 0.5, 3)).toBe(13.5);
     });
     it('defines seven independent groups of four valid controls', () => {
-        expect(FIELD_PARAMETER_SCHEMA).toHaveLength(17);
+        expect(FIELD_PARAMETER_SCHEMA).toHaveLength(18);
         expect(OCTAVE_PARAMETER_SCHEMA).toHaveLength(7);
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(7);
-        expect(PARAMETER_SCHEMA).toHaveLength(52);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(52);
+        expect(PARAMETER_SCHEMA).toHaveLength(53);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(53);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -66,9 +66,8 @@ describe('field configuration', () => {
         const data = packUniform([320, 180], 2, 9, parameters, 6);
         expect(data).toHaveLength(UNIFORM_FLOATS);
         expect(data.byteLength).toBe(208);
-        expect(data[21]).toBe(6);
-        expect(data[22]).toBe(5);
-        expect(data[23]).toBe(0);
+        expect(data[22]).toBe(6);
+        expect(data[23]).toBe(5);
         expect(Array.from(data.slice(24, 28))).toEqual(
             Array.from(
                 new Float32Array([
