@@ -10,6 +10,7 @@
         defaultParameters,
         type ParameterKey,
         type RenderOptions,
+        type GpuTimingStats,
     } from '$lib/renderer';
     import { defaultShaderSettings, normalizeSavedSettings, shaderSettings } from '$lib/settings';
 
@@ -26,6 +27,7 @@
     let ready = false;
     let status = 'Starting WebGPU…';
     let fps = 0;
+    let gpuStats: GpuTimingStats | null | undefined;
     const parameterTabs = [
         { id: 'field', label: 'Field' },
         { id: 'octaves', label: 'Octaves' },
@@ -115,6 +117,7 @@
                 if (disposed) return instance.destroy();
                 renderer = instance;
                 instance.onStats = (value) => (fps = value);
+                instance.onGpuStats = (value) => (gpuStats = value);
                 instance.setPaused(paused);
                 ready = true;
                 status = 'WebGPU';
@@ -142,7 +145,13 @@
 
 <main>
     <canvas class:ready bind:this={canvas} aria-label="Animated monochrome noise field"></canvas>
-    {#if ready}<output class="fps">{paused ? 'paused' : `${fps.toFixed(1)} fps`}</output>{/if}
+    {#if ready}<output class="fps"
+            >{paused ? 'paused' : `${fps.toFixed(1)} fps`}<br />{gpuStats === null
+                ? 'GPU timing unavailable'
+                : gpuStats
+                  ? `GPU ${gpuStats.totalMs.toFixed(1)}ms · base ${gpuStats.baseMs.toFixed(1)} · blur ${gpuStats.blurMs.toFixed(1)} · oct ${gpuStats.octaveMs.toFixed(1)} · out ${gpuStats.displayMs.toFixed(1)}`
+                  : 'GPU timing…'}</output
+        >{/if}
     <nav aria-label="Study controls" data-disabled={!ready} inert={!ready}>
         <button class="reveal" onclick={() => (controlsOpen = !controlsOpen)} aria-expanded={controlsOpen}
             >{controlsOpen ? '×' : '+'}<span class="sr-only">{controlsOpen ? 'Hide' : 'Show'} controls</span></button

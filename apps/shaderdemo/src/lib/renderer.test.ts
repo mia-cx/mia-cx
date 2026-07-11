@@ -11,6 +11,8 @@ import {
     OCTAVE_SHADER_SOURCE,
     PARAMETER_SCHEMA,
     UNIFORM_FLOATS,
+    GPU_TIMING_SAMPLE_INTERVAL,
+    aggregateGpuTimestamps,
     advanceSimulationTime,
     bindGroupCacheKey,
     defaultParameters,
@@ -25,6 +27,26 @@ import {
 import { defaultShaderSettings, normalizeSavedSettings } from './settings';
 
 describe('field configuration', () => {
+    it('aggregates nanosecond GPU timestamp pairs by semantic stage', () => {
+        const stats = aggregateGpuTimestamps(
+            [0n, 2_000_000n, 3_000_000n, 8_000_000n, 9_000_000n, 21_000_000n, 22_000_000n, 22_400_000n],
+            ['base', 'blur2', 'octave2', 'display'],
+        );
+        expect(stats).toMatchObject({ totalMs: 19.4, baseMs: 2, blurMs: 5, octaveMs: 12, displayMs: 0.4 });
+        expect(stats.passes).toEqual([
+            { label: 'base', ms: 2 },
+            { label: 'blur2', ms: 5 },
+            { label: 'octave2', ms: 12 },
+            { label: 'display', ms: 0.4 },
+        ]);
+        expect(GPU_TIMING_SAMPLE_INTERVAL).toBe(30);
+    });
+    it('turns malformed or decreasing GPU timestamp pairs into safe zero deltas', () => {
+        expect(aggregateGpuTimestamps([5n, 4n, 1n], ['base', 'display']).passes).toEqual([
+            { label: 'base', ms: 0 },
+            { label: 'display', ms: 0 },
+        ]);
+    });
     it('creates fresh complete settings for reset-to-defaults', () => {
         const first = defaultShaderSettings();
         const second = defaultShaderSettings();

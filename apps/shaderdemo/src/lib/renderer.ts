@@ -27,6 +27,35 @@ export const FIELD_PARAMETER_SCHEMA = [
 ] as const;
 
 export const OCTAVE_COUNT = 5;
+export const GPU_TIMING_SAMPLE_INTERVAL = 30;
+export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 2;
+const GPU_QUERY_COUNT = MAX_RENDER_PASSES * 2;
+export interface GpuTimingStats {
+    totalMs: number;
+    baseMs: number;
+    blurMs: number;
+    octaveMs: number;
+    displayMs: number;
+    passes: Array<{ label: string; ms: number }>;
+}
+/** Aggregate WebGPU's nanosecond timestamps, safely treating malformed pairs as zero. */
+export function aggregateGpuTimestamps(timestamps: ArrayLike<bigint>, labels: readonly string[]): GpuTimingStats {
+    const passes = labels.map((label, i) => {
+        const begin = timestamps[i * 2],
+            end = timestamps[i * 2 + 1];
+        const ms = begin !== undefined && end !== undefined && end >= begin ? Number(end - begin) / 1_000_000 : 0;
+        return { label, ms: Number.isFinite(ms) ? ms : 0 };
+    });
+    const sum = (prefix: string) => passes.reduce((n, pass) => n + (pass.label.startsWith(prefix) ? pass.ms : 0), 0);
+    return {
+        totalMs: passes.reduce((n, pass) => n + pass.ms, 0),
+        baseMs: sum('base'),
+        blurMs: sum('blur'),
+        octaveMs: sum('octave'),
+        displayMs: sum('display'),
+        passes,
+    };
+}
 const noiseDefaults = Array<number>(OCTAVE_COUNT).fill(0.005);
 const smoothnessDefaults = [0.85, 1, 0.5, 1, 1];
 const distanceDefaults = [0.5, 0.1, 2, 1, 2];
@@ -427,8 +456,22 @@ export class AtmosphereRenderer {
     private statsFrames = 0;
     private destroyed = false;
     private invalid = true;
+    readonly gpuTimingSupported = false;
+    private querySet?: GPUQuerySet;
+    private queryResolveBuffer?: GPUBuffer;
+    private queryReadbackBuffer?: GPUBuffer;
+    private queryReadbackBusy = false;
+    private renderedFrames = 0;
+    private gpuStatsCallback?: (stats: GpuTimingStats | null) => void;
     paused = false;
     onStats?: (fps: number, width: number, height: number) => void;
+    get onGpuStats() {
+        return this.gpuStatsCallback;
+    }
+    set onGpuStats(callback: ((stats: GpuTimingStats | null) => void) | undefined) {
+        this.gpuStatsCallback = callback;
+        if (callback && !this.gpuTimingSupported) callback(null);
+    }
     onLost?: (message: string) => void;
 
     private constructor(
@@ -446,7 +489,11 @@ export class AtmosphereRenderer {
         const self = new AtmosphereRenderer(canvas, options);
         const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
         if (!adapter) throw new Error('No compatible WebGPU adapter was found.');
-        self.device = await adapter.requestDevice();
+        const gpuTimingSupported = adapter.features.has('timestamp-query');
+        self.device = await adapter.requestDevice(
+            gpuTimingSupported ? { requiredFeatures: ['timestamp-query'] } : undefined,
+        );
+        Object.defineProperty(self, 'gpuTimingSupported', { value: gpuTimingSupported });
         self.context = canvas.getContext('webgpu');
         if (!self.context) throw new Error('Could not create a WebGPU canvas context.');
         const format = navigator.gpu.getPreferredCanvasFormat();
@@ -475,6 +522,18 @@ export class AtmosphereRenderer {
             }),
         );
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+        if (gpuTimingSupported) {
+            self.querySet = self.device.createQuerySet({ type: 'timestamp', count: GPU_QUERY_COUNT });
+            const size = GPU_QUERY_COUNT * BigUint64Array.BYTES_PER_ELEMENT;
+            self.queryResolveBuffer = self.device.createBuffer({
+                size,
+                usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
+            });
+            self.queryReadbackBuffer = self.device.createBuffer({
+                size,
+                usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+            });
+        }
         self.device.lost.then((info) => {
             if (!self.destroyed) self.onLost?.(`GPU device lost: ${info.message || info.reason}`);
         });
@@ -563,6 +622,10 @@ export class AtmosphereRenderer {
         )
             return;
         const enc = d.createCommandEncoder();
+        const sampleGpu = Boolean(
+            this.querySet && !this.queryReadbackBusy && this.renderedFrames % GPU_TIMING_SAMPLE_INTERVAL === 0,
+        );
+        const gpuLabels: string[] | undefined = sampleGpu ? [] : undefined;
         const data = packUniform(
             [this.textures[0].width, this.textures[0].height],
             this.simTime,
@@ -577,6 +640,7 @@ export class AtmosphereRenderer {
             pipelineIndex: number,
             sourceTextureIndex?: number,
             usesSampler = false,
+            gpuLabel = '',
         ) => {
             const uniformSlot = passIndex++;
             const buffer = buffers[uniformSlot];
@@ -593,36 +657,73 @@ export class AtmosphereRenderer {
                 bindGroup = d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
                 this.bindGroups.set(cacheKey, bindGroup);
             }
+            const queryIndex = (gpuLabels?.length ?? 0) * 2;
             const pass = enc.beginRenderPass({
                 colorAttachments: [
                     { view: target, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 1 } },
                 ],
+                ...(sampleGpu
+                    ? {
+                          timestampWrites: {
+                              querySet: this.querySet!,
+                              beginningOfPassWriteIndex: queryIndex,
+                              endOfPassWriteIndex: queryIndex + 1,
+                          },
+                      }
+                    : {}),
             });
+            gpuLabels?.push(gpuLabel);
             pass.setPipeline(pipeline);
             pass.setBindGroup(0, bindGroup);
             pass.draw(3);
             pass.end();
         };
-        draw(this.textureViews[0], 0);
+        draw(this.textureViews[0], 0, undefined, false, 'base');
         let current = 0;
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
             data[29] = octave;
             if (octaveBlurIsActive(this.options.parameters, octave)) {
                 const scratch = 1 - current;
-                draw(this.textureViews[scratch], 1, current, true);
+                draw(this.textureViews[scratch], 1, current, true, `blur${octave + 1}`);
                 current = scratch;
             }
             if (octaveEffectIsActive(this.options.parameters, octave)) {
                 const scratch = 1 - current;
-                draw(this.textureViews[scratch], 2, current, true);
+                draw(this.textureViews[scratch], 2, current, true, `octave${octave + 1}`);
                 current = scratch;
             }
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), 3, current, true);
+        draw(c.getCurrentTexture().createView(), 3, current, true, 'display');
+        if (sampleGpu) {
+            const bytes = gpuLabels!.length * 16;
+            enc.resolveQuerySet(this.querySet!, 0, gpuLabels!.length * 2, this.queryResolveBuffer!, 0);
+            enc.copyBufferToBuffer(this.queryResolveBuffer!, 0, this.queryReadbackBuffer!, 0, bytes);
+            this.queryReadbackBusy = true;
+        }
         d.queue.submit([enc.finish()]);
+        if (sampleGpu) this.readGpuTimestamps(gpuLabels!);
+        this.renderedFrames += 1;
         this.frameIndex = (this.frameIndex + 1) % 16_777_216;
+    }
+    private readGpuTimestamps(labels: string[]) {
+        const buffer = this.queryReadbackBuffer!;
+        buffer
+            .mapAsync(GPUMapMode.READ)
+            .then(() => {
+                if (!this.destroyed) {
+                    const values = new BigUint64Array(buffer.getMappedRange()).slice(0, labels.length * 2);
+                    this.gpuStatsCallback?.(aggregateGpuTimestamps(values, labels));
+                }
+            })
+            .catch(() => {})
+            .finally(() => {
+                try {
+                    if (buffer.mapState === 'mapped') buffer.unmap();
+                } catch {}
+                this.queryReadbackBusy = false;
+            });
     }
     destroy() {
         if (this.destroyed) return;
@@ -634,6 +735,12 @@ export class AtmosphereRenderer {
         this.bindGroups.clear();
         this.buffers.forEach((buffer) => buffer.destroy());
         this.buffers = [];
+        try {
+            if (this.queryReadbackBuffer?.mapState === 'mapped') this.queryReadbackBuffer.unmap();
+        } catch {}
+        this.querySet?.destroy();
+        this.queryResolveBuffer?.destroy();
+        this.queryReadbackBuffer?.destroy();
         try {
             this.context?.unconfigure();
         } catch {}
