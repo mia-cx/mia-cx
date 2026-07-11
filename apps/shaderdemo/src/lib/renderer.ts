@@ -1282,6 +1282,17 @@ export class AtmosphereRenderer {
             draw(this.textureViews[destination], 10, rgbaCurrent, true, `colour:${effect.type}`);
             rgbaCurrent = destination;
         }
+        data.set(
+            POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
+            60,
+        );
+        for (const effect of stages.post) {
+            if (effect.kind === 'datamosh' && !this.historyValid) continue;
+            const destination = rgbaCurrent === 2 ? 3 : 2;
+            data[58] = POST_KIND_INDEX[effect.kind];
+            draw(this.textureViews[destination], 8, rgbaCurrent, true, `post:${effect.kind}`);
+            rgbaCurrent = destination;
+        }
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
             data[29] = octave;
             if (octaveBlurIsActive(this.options.parameters, octave)) {
@@ -1294,17 +1305,6 @@ export class AtmosphereRenderer {
                 draw(this.textureViews[destination], 2, rgbaCurrent, true, `octave${octave + 1}`);
                 rgbaCurrent = destination;
             }
-        }
-        data.set(
-            POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
-            60,
-        );
-        for (const effect of stages.post) {
-            if (effect.kind === 'datamosh' && !this.historyValid) continue;
-            const destination = rgbaCurrent === 2 ? 3 : 2;
-            data[58] = POST_KIND_INDEX[effect.kind];
-            draw(this.textureViews[destination], 8, rgbaCurrent, true, `post:${effect.kind}`);
-            rgbaCurrent = destination;
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;

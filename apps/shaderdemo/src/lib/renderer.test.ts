@@ -56,16 +56,20 @@ describe('field configuration', () => {
         expect(LUT_SHADER_SOURCE).toContain('mix(source,mapped,clamp(p(6),0.,1.))');
         expect(Array.from(cubeRgba16Data(new Float32Array([0, 0.5, 1])))).toEqual([0, 0x3800, 0x3c00, 0x3c00]);
     });
-    it('labels the adjustment pass after lighting and before RGB Colour and octaves', () => {
+    it('labels lighting before Colour and keeps octaves as the final effect stage', () => {
         const source = AtmosphereRenderer.toString();
         const lighting = source.indexOf('lighting:${effect.kind}');
         const adjustments = source.indexOf('colour:adjustments');
         const rgb = source.indexOf('colour:${effect.type}');
+        const post = source.indexOf('post:${effect.kind}');
         const octave = source.indexOf('octave${octave + 1}');
-        expect([lighting, adjustments, rgb, octave]).not.toContain(-1);
+        const display = source.indexOf('getCurrentTexture');
+        expect([lighting, adjustments, rgb, post, octave, display]).not.toContain(-1);
         expect(lighting).toBeLessThan(adjustments);
         expect(adjustments).toBeLessThan(rgb);
-        expect(rgb).toBeLessThan(octave);
+        expect(rgb).toBeLessThan(post);
+        expect(post).toBeLessThan(octave);
+        expect(octave).toBeLessThan(display);
     });
     it('samples Paint.NET Zoom Blur’s 64-step contraction path at bounded quarter-resolution taps', () => {
         const distance = PARAMETER_SCHEMA.find(({ key }) => key === 'godRaysAmount');

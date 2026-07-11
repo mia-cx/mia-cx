@@ -81,8 +81,8 @@
     const parameterTabs = [
         { id: 'field', label: 'Field' },
         { id: 'adjustments', label: 'Colour' },
-        { id: 'octaves', label: 'Octaves' },
         { id: 'post', label: 'Post' },
+        { id: 'octaves', label: 'Octaves' },
     ] as const;
     let selectedTabId: (typeof parameterTabs)[number]['id'] = $state('field');
     const fieldGroups: { label: string; keys: ParameterKey[]; toggle?: ParameterKey }[] = [
@@ -613,7 +613,7 @@
                                         <span
                                             >{isLightingKind(item.type)
                                                 ? 'Lighting — before Colour'
-                                                : 'Post — after Octaves'}</span
+                                                : 'Post — before Octaves'}</span
                                         >
                                     </div>
                                 {/if}
