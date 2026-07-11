@@ -16,6 +16,7 @@ import {
     renderSize,
     scaledSize,
 } from './renderer';
+import { normalizeSavedSettings } from './settings';
 
 describe('field configuration', () => {
     it('uses seeded 3D simplex gradients instead of synchronized Z-slice interpolation', () => {
@@ -65,12 +66,12 @@ describe('field configuration', () => {
         expect(advanceSimulationTime(12, 0.5, 3)).toBe(13.5);
     });
     it('defines seven independent groups of four valid controls', () => {
-        expect(FIELD_PARAMETER_SCHEMA).toHaveLength(26);
+        expect(FIELD_PARAMETER_SCHEMA).toHaveLength(29);
         expect(OCTAVE_PARAMETER_SCHEMA).toHaveLength(7);
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(7);
-        expect(PARAMETER_SCHEMA).toHaveLength(61);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(61);
+        expect(PARAMETER_SCHEMA).toHaveLength(64);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(64);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -80,16 +81,19 @@ describe('field configuration', () => {
         }
         expect(defaultParameters().centerDarkness).toBe(0);
         expect(defaultParameters()).toMatchObject({
+            baseBlendMode: 0,
             secondaryEnabled: 1,
             secondaryScale: 1.1,
             secondaryCloudAmount: 0,
             secondaryRibbonAmount: 0,
             secondaryRibbonSharpness: 1.76,
+            secondaryBlendMode: 0,
             tertiaryEnabled: 1,
             tertiaryScale: 2.035,
             tertiaryCloudAmount: 0,
             tertiaryRibbonAmount: 0,
             tertiaryRibbonSharpness: 1.76,
+            tertiaryBlendMode: 0,
         });
         for (const key of [
             'billowAmount',
@@ -105,19 +109,37 @@ describe('field configuration', () => {
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual(Array(7).fill(0));
         expect(OCTAVE_PIXELATE_SCHEMA.map(({ default: value }) => value)).toEqual(Array(7).fill(0));
     });
+    it('defaults old saved settings to Add and normalizes categorical modes', () => {
+        const old = normalizeSavedSettings({ seed: 7, parameters: {} as ReturnType<typeof defaultParameters> });
+        expect(old.parameters.baseBlendMode).toBe(0);
+        expect(old.parameters.secondaryBlendMode).toBe(0);
+        expect(old.parameters.tertiaryBlendMode).toBe(0);
+
+        const parameters = defaultParameters();
+        parameters.baseBlendMode = 1.6;
+        parameters.secondaryBlendMode = -4;
+        parameters.tertiaryBlendMode = 8;
+        const normalized = normalizeSavedSettings({ seed: 7, parameters });
+        expect([
+            normalized.parameters.baseBlendMode,
+            normalized.parameters.secondaryBlendMode,
+            normalized.parameters.tertiaryBlendMode,
+        ]).toEqual([2, 0, 2]);
+    });
     it('packs the aligned uniform header and array<vec4f, 7>', () => {
         const parameters = defaultParameters();
         parameters.octave1Pixelate = 1;
         parameters.octave3Pixelate = 1;
         const data = packUniform([320, 180], 2, 9, parameters, 6);
         expect(data).toHaveLength(UNIFORM_FLOATS);
-        expect(data.byteLength).toBe(240);
-        expect(Array.from(data.slice(11, 21))).toEqual(
-            Array.from(new Float32Array([1, 1.1, 0, 0, 1.76, 1, 2.035, 0, 0, 1.76])),
+        expect(data.byteLength).toBe(256);
+        expect(Array.from(data.slice(12, 24))).toEqual(
+            Array.from(new Float32Array([1, 1.1, 0, 0, 1.76, 0, 1, 2.035, 0, 0, 1.76, 0])),
         );
-        expect(data[30]).toBe(6);
-        expect(data[31]).toBe(5);
-        expect(Array.from(data.slice(32, 36))).toEqual(
+        expect(data[33]).toBe(6);
+        expect(data[34]).toBe(5);
+        expect(data[35]).toBe(0);
+        expect(Array.from(data.slice(36, 40))).toEqual(
             Array.from(
                 new Float32Array([
                     parameters.octave1Noise,
@@ -126,6 +148,19 @@ describe('field configuration', () => {
                     parameters.octave1Distance,
                 ]),
             ),
+        );
+    });
+    it('composes each generator with real signed blend modes before attenuation and threshold', () => {
+        expect(BASE_SHADER_SOURCE).toContain('fn screen01');
+        expect(BASE_SHADER_SOURCE).toContain('fn overlay01');
+        expect(BASE_SHADER_SOURCE).toContain('fn blendSigned');
+        expect(BASE_SHADER_SOURCE).toContain('blendSigned(cloud*u.billowAmount,ribbon*u.ridgeAmount,u.baseBlendMode)');
+        expect(BASE_SHADER_SOURCE).toContain('natural=blendSigned(natural,secondaryShaped,u.secondaryBlendMode)');
+        expect(BASE_SHADER_SOURCE).toContain('natural=blendSigned(natural,tertiaryShaped,u.tertiaryBlendMode)');
+        expect(BASE_SHADER_SOURCE).toContain('if(u.secondaryEnabled>=.5)');
+        expect(BASE_SHADER_SOURCE).toContain('fn smoothAbsFold');
+        expect(BASE_SHADER_SOURCE.indexOf('natural=blendSigned')).toBeLessThan(
+            BASE_SHADER_SOURCE.indexOf('natural*=centerAttenuation'),
         );
     });
 });

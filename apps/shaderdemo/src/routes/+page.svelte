@@ -38,6 +38,7 @@
                 'billowAmount',
                 'ridgeAmount',
                 'ridgeSharpness',
+                'baseBlendMode',
                 'warpScale',
                 'warpStrength',
             ],
@@ -45,12 +46,24 @@
         {
             label: 'Secondary detail',
             toggle: 'secondaryEnabled',
-            keys: ['secondaryScale', 'secondaryCloudAmount', 'secondaryRibbonAmount', 'secondaryRibbonSharpness'],
+            keys: [
+                'secondaryScale',
+                'secondaryCloudAmount',
+                'secondaryRibbonAmount',
+                'secondaryRibbonSharpness',
+                'secondaryBlendMode',
+            ],
         },
         {
             label: 'Tertiary detail',
             toggle: 'tertiaryEnabled',
-            keys: ['tertiaryScale', 'tertiaryCloudAmount', 'tertiaryRibbonAmount', 'tertiaryRibbonSharpness'],
+            keys: [
+                'tertiaryScale',
+                'tertiaryCloudAmount',
+                'tertiaryRibbonAmount',
+                'tertiaryRibbonSharpness',
+                'tertiaryBlendMode',
+            ],
         },
         { label: 'Field shaping', keys: ['threshold', 'thresholdSoftness', 'finalContrast'] },
         {
@@ -72,7 +85,9 @@
         for (const parameter of PARAMETER_SCHEMA) {
             const value = Number(parameters[parameter.key]);
             parameters[parameter.key] = Number.isFinite(value)
-                ? Math.min(parameter.max, Math.max(parameter.min, value))
+                ? parameter.key.endsWith('BlendMode')
+                    ? Math.round(Math.min(parameter.max, Math.max(parameter.min, value)))
+                    : Math.min(parameter.max, Math.max(parameter.min, value))
                 : parameter.default;
         }
         options = { ...options, parameters };
@@ -173,27 +188,41 @@
                                         {/if}
                                     </div>
                                     {#each FIELD_PARAMETER_SCHEMA.filter( ({ key }) => group.keys.includes(key), ) as parameter}
-                                        <label class="parameter">
-                                            <span>{parameter.label}</span>
-                                            <input
-                                                class="exact-value"
-                                                aria-label={`${parameter.label} exact value`}
-                                                type="number"
-                                                min={parameter.min}
-                                                max={parameter.max}
-                                                step={parameter.step}
-                                                bind:value={options.parameters[parameter.key]}
-                                                onchange={update}
-                                            />
-                                            <input
-                                                type="range"
-                                                min={parameter.min}
-                                                max={parameter.max}
-                                                step={parameter.step}
-                                                bind:value={options.parameters[parameter.key]}
-                                                oninput={update}
-                                            />
-                                        </label>
+                                        {#if parameter.key.endsWith('BlendMode')}
+                                            <label class="blend-mode">
+                                                <span>{parameter.label}</span>
+                                                <select
+                                                    bind:value={options.parameters[parameter.key]}
+                                                    onchange={update}
+                                                >
+                                                    <option value={0}>Add</option>
+                                                    <option value={1}>Screen</option>
+                                                    <option value={2}>Overlay</option>
+                                                </select>
+                                            </label>
+                                        {:else}
+                                            <label class="parameter">
+                                                <span>{parameter.label}</span>
+                                                <input
+                                                    class="exact-value"
+                                                    aria-label={`${parameter.label} exact value`}
+                                                    type="number"
+                                                    min={parameter.min}
+                                                    max={parameter.max}
+                                                    step={parameter.step}
+                                                    bind:value={options.parameters[parameter.key]}
+                                                    onchange={update}
+                                                />
+                                                <input
+                                                    type="range"
+                                                    min={parameter.min}
+                                                    max={parameter.max}
+                                                    step={parameter.step}
+                                                    bind:value={options.parameters[parameter.key]}
+                                                    oninput={update}
+                                                />
+                                            </label>
+                                        {/if}
                                     {/each}
                                 </section>
                             {/each}
@@ -397,6 +426,20 @@
         color: #ddd;
         text-transform: none;
         letter-spacing: 0.03em;
+    }
+    .controls .blend-mode {
+        justify-content: space-between;
+        text-transform: none;
+        letter-spacing: 0.03em;
+    }
+    .blend-mode select {
+        padding: 1px 2px;
+        border: 0;
+        border-bottom: 1px solid #ffffff24;
+        border-radius: 0;
+        background: #090909;
+        color: #ddd;
+        font: inherit;
     }
     .octave {
         display: grid;

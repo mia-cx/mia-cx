@@ -23,7 +23,8 @@ export function normalizeSavedSettings(saved: SavedShaderSettings | undefined): 
     for (const parameter of PARAMETER_SCHEMA) {
         const value = saved?.parameters?.[parameter.key];
         if (typeof value === 'number' && Number.isFinite(value)) {
-            parameters[parameter.key] = Math.min(parameter.max, Math.max(parameter.min, value));
+            const clamped = Math.min(parameter.max, Math.max(parameter.min, value));
+            parameters[parameter.key] = parameter.key.endsWith('BlendMode') ? Math.round(clamped) : clamped;
         }
     }
 

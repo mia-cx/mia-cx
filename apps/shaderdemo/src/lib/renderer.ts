@@ -4,6 +4,7 @@ export const FIELD_PARAMETER_SCHEMA = [
     { key: 'billowAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: 0 },
     { key: 'ridgeAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: 1 },
     { key: 'ridgeSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
+    { key: 'baseBlendMode', label: 'Blend mode', min: 0, max: 2, step: 1, default: 0 },
     { key: 'warpScale', label: 'Warp scale', min: 0.2, max: 2.5, step: 0.01, default: 0.68 },
     { key: 'warpStrength', label: 'Warp strength', min: 0, max: 1.5, step: 0.01, default: 1.5 },
     { key: 'secondaryEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
@@ -11,11 +12,13 @@ export const FIELD_PARAMETER_SCHEMA = [
     { key: 'secondaryCloudAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: 0 },
     { key: 'secondaryRibbonAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: 0 },
     { key: 'secondaryRibbonSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
+    { key: 'secondaryBlendMode', label: 'Blend mode', min: 0, max: 2, step: 1, default: 0 },
     { key: 'tertiaryEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
     { key: 'tertiaryScale', label: 'Scale', min: 1.1, max: 5, step: 0.01, default: 2.035 },
     { key: 'tertiaryCloudAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: 0 },
     { key: 'tertiaryRibbonAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: 0 },
     { key: 'tertiaryRibbonSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
+    { key: 'tertiaryBlendMode', label: 'Blend mode', min: 0, max: 2, step: 1, default: 0 },
     { key: 'threshold', label: 'Threshold', min: 0.05, max: 0.95, step: 0.01, default: 0.56 },
     { key: 'thresholdSoftness', label: 'Threshold softness', min: 0.01, max: 0.5, step: 0.01, default: 0.5 },
     { key: 'finalContrast', label: 'Final contrast', min: 0.2, max: 3, step: 0.01, default: 1.54 },
@@ -101,7 +104,7 @@ export function fullResolutionPassSizes(width: number, height: number, renderSca
     return Array.from({ length: OCTAVE_COUNT + 1 }, () => ({ ...size }));
 }
 
-export const UNIFORM_FLOATS = 60;
+export const UNIFORM_FLOATS = 64;
 export function packUniform(
     resolution: [number, number],
     time: number,
@@ -111,14 +114,14 @@ export function packUniform(
 ) {
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set([resolution[0], resolution[1], time, seed, ...FIELD_PARAMETER_SCHEMA.map(({ key }) => parameters[key])]);
-    data[30] = octaveIndex;
-    data[31] = OCTAVE_PIXELATE_SCHEMA.reduce(
+    data[33] = octaveIndex;
+    data[34] = OCTAVE_PIXELATE_SCHEMA.reduce(
         (mask, { key }, index) => mask + (parameters[key] >= 0.5 ? 2 ** index : 0),
         0,
     );
     data.set(
         OCTAVE_PARAMETER_SCHEMA.flatMap((group) => group.map(({ key }) => parameters[key])),
-        32,
+        36,
     );
     return data;
 }
@@ -131,11 +134,11 @@ export const COMMON_SHADER_SOURCE = /* wgsl */ `
 struct U {
  resolution: vec2f, time: f32, seed: f32,
  fieldScale: f32, flowStretch: f32, billowAmount: f32, ridgeAmount: f32,
- ridgeSharpness: f32, warpScale: f32, warpStrength: f32,
+ ridgeSharpness: f32, baseBlendMode: f32, warpScale: f32, warpStrength: f32,
  secondaryEnabled: f32, secondaryScale: f32, secondaryCloudAmount: f32,
- secondaryRibbonAmount: f32, secondaryRibbonSharpness: f32,
+ secondaryRibbonAmount: f32, secondaryRibbonSharpness: f32, secondaryBlendMode: f32,
  tertiaryEnabled: f32, tertiaryScale: f32, tertiaryCloudAmount: f32,
- tertiaryRibbonAmount: f32, tertiaryRibbonSharpness: f32,
+ tertiaryRibbonAmount: f32, tertiaryRibbonSharpness: f32, tertiaryBlendMode: f32,
  threshold: f32, thresholdSoftness: f32, finalContrast: f32, animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
  centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32,
@@ -186,6 +189,31 @@ fn noise3(p: vec3f, seedSalt: f32) -> f32 {
 fn noise3v(p: vec2f, z: f32) -> vec2f {
     return vec2f(noise3(vec3f(p,z),101.),noise3(vec3f(p+vec2f(17.7,43.2),z+11.3),211.));
 }
+fn screen01(a: f32, b: f32) -> f32 { return 1.-(1.-clamp(a,0.,1.))*(1.-clamp(b,0.,1.)); }
+fn overlay01(backdrop: f32, source: f32) -> f32 {
+    let a=clamp(backdrop,0.,1.); let b=clamp(source,0.,1.);
+    return select(2.*a*b,1.-2.*(1.-a)*(1.-b),a>.5);
+}
+fn blendSigned(backdrop: f32, source: f32, mode: f32) -> f32 {
+    if(mode<.5) { return backdrop+source; }
+    if(mode<1.5) {
+        // Signed screen: equal signs screen magnitudes; a negative source multiplicatively
+        // darkens a positive backdrop, retaining excess strength as signed subtraction.
+        if(source<0. && backdrop>0.) { let m=-source; return backdrop*(1.-min(m,1.))-max(m-1.,0.); }
+        if(source>=0. && backdrop<0.) { return backdrop+source; }
+        let sign=select(-1.,1.,backdrop+source>=0.);
+        return sign*screen01(abs(backdrop),abs(source));
+    }
+    // Standard [0,1] overlay, mixed by signed source strength so zero remains an identity.
+    let strength=min(abs(source),1.);
+    let operand=select(clamp(source,0.,1.),1.-clamp(-source,0.,1.),source<0.);
+    let overlaid=overlay01(backdrop,operand);
+    return mix(backdrop,overlaid,strength)-select(0.,max(-source-1.,0.),source<0.);
+}
+fn smoothAbsFold(value: f32) -> f32 {
+    // 0.001 removes the derivative cusp at the Cloud fold with negligible Add-mode displacement.
+    return sqrt(value*value+0.000001)-0.001;
+}
 `;
 
 export const BASE_SHADER_SOURCE =
@@ -203,19 +231,21 @@ export const BASE_SHADER_SOURCE =
     let primaryPosition=vec3f(p,t*.075);
     let secondaryPosition=vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-drift*.41,t*.12+7.1);
     let tertiaryPosition=vec3f(p*u.tertiaryScale+vec2f(-4.1,19.3)+drift*.23,t*.18+19.7);
-    let cloud=abs(noise3(primaryPosition,307.)*2.-1.);
+    let cloud=smoothAbsFold(noise3(primaryPosition,307.)*2.-1.);
     let ribbonBase=1.-abs(noise3(primaryPosition,401.)*2.-1.);
     let ribbon=pow(clamp(ribbonBase,0.,1.),u.ridgeSharpness);
-    let shaped=cloud*u.billowAmount+ribbon*u.ridgeAmount;
-    let secondaryCloud=abs(noise3(secondaryPosition,503.)*2.-1.);
+    let shaped=blendSigned(cloud*u.billowAmount,ribbon*u.ridgeAmount,u.baseBlendMode);
+    let secondaryCloud=smoothAbsFold(noise3(secondaryPosition,503.)*2.-1.);
     let secondaryRibbonBase=1.-abs(noise3(secondaryPosition,601.)*2.-1.);
     let secondaryRibbon=pow(clamp(secondaryRibbonBase,0.,1.),u.secondaryRibbonSharpness);
-    let secondaryShaped=secondaryCloud*u.secondaryCloudAmount+secondaryRibbon*u.secondaryRibbonAmount;
-    let tertiaryCloud=abs(noise3(tertiaryPosition,701.)*2.-1.);
+    let secondaryShaped=blendSigned(secondaryCloud*u.secondaryCloudAmount,secondaryRibbon*u.secondaryRibbonAmount,u.secondaryBlendMode);
+    let tertiaryCloud=smoothAbsFold(noise3(tertiaryPosition,701.)*2.-1.);
     let tertiaryRibbonBase=1.-abs(noise3(tertiaryPosition,809.)*2.-1.);
     let tertiaryRibbon=pow(clamp(tertiaryRibbonBase,0.,1.),u.tertiaryRibbonSharpness);
-    let tertiaryShaped=tertiaryCloud*u.tertiaryCloudAmount+tertiaryRibbon*u.tertiaryRibbonAmount;
-    var natural=shaped+secondaryShaped*u.secondaryEnabled+tertiaryShaped*u.tertiaryEnabled;
+    let tertiaryShaped=blendSigned(tertiaryCloud*u.tertiaryCloudAmount,tertiaryRibbon*u.tertiaryRibbonAmount,u.tertiaryBlendMode);
+    var natural=shaped;
+    if(u.secondaryEnabled>=.5) { natural=blendSigned(natural,secondaryShaped,u.secondaryBlendMode); }
+    if(u.tertiaryEnabled>=.5) { natural=blendSigned(natural,tertiaryShaped,u.tertiaryBlendMode); }
     let centerPoint=abs(q/vec2f(u.centerWidth,u.centerHeight));
     let centerDistance=pow(pow(centerPoint.x,u.centerRoundness)+pow(centerPoint.y,u.centerRoundness),1./u.centerRoundness);
     let centerFeather=u.centerSoftness*.5;
@@ -449,7 +479,7 @@ export class AtmosphereRenderer {
             const target = this.textures[(octave + 1) % 2];
             data[0] = target.width;
             data[1] = target.height;
-            data[30] = octave;
+            data[33] = octave;
             draw(target.createView(), this.pipelines[1], source, true);
         }
         data[0] = this.canvas.width;
