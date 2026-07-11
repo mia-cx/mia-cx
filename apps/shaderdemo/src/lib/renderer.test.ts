@@ -26,7 +26,7 @@ describe('field configuration', () => {
     });
     it('keeps the base and all seven octave stages full resolution', () => {
         expect(OCTAVE_COUNT).toBe(7);
-        expect(octavePixelSizes()).toEqual([1, 2, 4, 8, 16, 32, 64]);
+        expect(octavePixelSizes()).toEqual([64, 32, 16, 8, 4, 2, 1]);
         expect(fullResolutionPassSizes(1202, 901, 1)).toEqual(
             Array.from({ length: 8 }, () => ({ width: 1202, height: 901 })),
         );

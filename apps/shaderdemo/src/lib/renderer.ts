@@ -69,7 +69,8 @@ export function scaledSize(width: number, height: number, scale: number) {
 
 /** Effect-space pixel sizes; every image pass itself remains full resolution. */
 export function octavePixelSizes() {
-    return Array.from({ length: OCTAVE_COUNT }, (_, index) => 2 ** index);
+    // The first destructive tap comes from the coarsest stage; later taps add progressively finer pixels.
+    return Array.from({ length: OCTAVE_COUNT }, (_, index) => 2 ** (OCTAVE_COUNT - 1 - index));
 }
 
 /** The base and seven octave stages all have the same full render dimensions. */
@@ -138,9 +139,11 @@ const baseShader =
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
-    // Procedural noise is sampled in this target's real texel coordinates: one noise unit per pixel.
+    // Evaluate the original coarse field continuously at full resolution. This retains the old 1:128
+    // composition scale without ever rasterizing/thresholding the whole image into a low-res mosaic.
     let centeredPixel=pos.xy-u.resolution*.5;
-    let flow=mat2x2f(.89,.45,-.45,.89)*vec2f(centeredPixel.x,centeredPixel.y*u.flowStretch);
+    let fieldPixel=centeredPixel/128.;
+    let flow=mat2x2f(.89,.45,-.45,.89)*vec2f(fieldPixel.x,fieldPixel.y*u.flowStretch);
     let drift=noise3v(flow*u.warpScale,t*.11)-.5;
     let p=flow+drift*u.warpStrength;
     let primary=noise3(vec3f(p,t*.075));
@@ -177,18 +180,22 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
     let sourceSize=vec2f(textureDimensions(src));
     let settings=u.octaves[u32(u.octaveIndex)];
     let pixel=floor(pos.xy);
-    let octavePixelSize=exp2(u.octaveIndex);
+    let octavePixelSize=exp2(6.-u.octaveIndex);
     let sampleCount=u32(round(mix(1.,8.,settings.z)));
-    var scattered=0.;
-    for(var sampleIndex=0u;sampleIndex<8u;sampleIndex++) {
-        if(sampleIndex<sampleCount) {
-            let salt=1.+u.octaveIndex*8.+f32(sampleIndex);
-            let offset=scatterOffset(pixel,salt,settings.w*octavePixelSize);
-            scattered+=textureSample(src,samp,uv+offset/sourceSize).r;
+    // Radius zero is an exact identity operation: no random resampling and no accumulated softening.
+    var scattered=textureSample(src,samp,uv).r;
+    if(settings.w>0.0001) {
+        scattered=0.;
+        for(var sampleIndex=0u;sampleIndex<8u;sampleIndex++) {
+            if(sampleIndex<sampleCount) {
+                let salt=1.+u.octaveIndex*8.+f32(sampleIndex);
+                let offset=scatterOffset(pixel,salt,settings.w*octavePixelSize);
+                scattered+=textureSample(src,samp,uv+offset/sourceSize).r;
+            }
         }
+        scattered/=f32(sampleCount);
     }
     // Paint.NET's smoothness is sample count: 1–8 randomly displaced bilinear samples blended together.
-    scattered/=f32(sampleCount);
     // Literal noise is constant in effect-space cells while the source underneath stays full resolution.
     let noiseCell=floor(pixel/octavePixelSize);
     let detail=hash(noiseCell+vec2f(u.octaveIndex*37.7,u.octaveIndex*91.3))-.5;
