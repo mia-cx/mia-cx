@@ -1,5 +1,13 @@
 import { persistentAtom } from '@nanostores/persistent';
-import { PARAMETER_SCHEMA, defaultParameters, type ShaderParameters } from './renderer';
+import {
+    FIELD_PARAMETER_SCHEMA,
+    OCTAVE_BLUR_SCHEMA,
+    OCTAVE_PARAMETER_SCHEMA,
+    OCTAVE_PIXELATE_SCHEMA,
+    PARAMETER_SCHEMA,
+    defaultParameters,
+    type ShaderParameters,
+} from './renderer';
 import { sanitizeAdjustments, type Adjustment } from './adjustments';
 
 export interface SavedShaderSettings {
@@ -20,6 +28,34 @@ export const shaderSettings = persistentAtom<SavedShaderSettings>('shaderdemo:se
     encode: JSON.stringify,
     decode: JSON.parse,
 });
+
+export type SettingsTab = 'field' | 'octaves' | 'adjustments';
+
+/** Reset only the controls represented by one visible settings tab. */
+export function resetSettingsTab(settings: SavedShaderSettings, tab: SettingsTab): SavedShaderSettings {
+    const defaults = initialSettings();
+    if (tab === 'adjustments') return { ...settings, adjustments: defaults.adjustments };
+
+    const parameters = { ...settings.parameters };
+    const schema =
+        tab === 'field'
+            ? FIELD_PARAMETER_SCHEMA
+            : [...OCTAVE_PARAMETER_SCHEMA.flat(), ...OCTAVE_PIXELATE_SCHEMA, ...OCTAVE_BLUR_SCHEMA];
+    for (const parameter of schema) parameters[parameter.key] = parameter.default;
+    return { ...settings, parameters };
+}
+
+export function serializeShaderSettings(settings: SavedShaderSettings): string {
+    return JSON.stringify(
+        {
+            format: 'mia-cx-shaderdemo-settings',
+            version: 1,
+            settings,
+        },
+        null,
+        2,
+    );
+}
 
 export function normalizeSavedSettings(saved: Partial<SavedShaderSettings> | undefined): SavedShaderSettings {
     const defaults = initialSettings();

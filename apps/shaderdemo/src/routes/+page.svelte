@@ -13,7 +13,7 @@
         type GpuTimingStats,
     } from '$lib/renderer';
     import { GpuTelemetry, type FrameRollingSummary, type GpuRollingSummary } from '$lib/telemetry';
-    import { defaultShaderSettings, normalizeSavedSettings, shaderSettings } from '$lib/settings';
+    import { normalizeSavedSettings, resetSettingsTab, serializeShaderSettings, shaderSettings } from '$lib/settings';
     import AdjustmentEditor from '$lib/AdjustmentEditor.svelte';
     import {
         MAX_ADJUSTMENTS,
@@ -117,15 +117,29 @@
         update();
     }
     function resetDefaults() {
-        const defaults = defaultShaderSettings();
+        const reset = resetSettingsTab(
+            { seed: options.seed, parameters: options.parameters, adjustments: options.adjustments },
+            selectedTabId,
+        );
         options = {
             ...options,
-            seed: defaults.seed,
-            parameters: defaults.parameters,
-            adjustments: defaults.adjustments,
+            parameters: reset.parameters,
+            adjustments: reset.adjustments,
         };
-        shaderSettings.set(defaults);
-        renderer?.setOptions(options);
+        update();
+    }
+    function exportSettings() {
+        const json = serializeShaderSettings({
+            seed: options.seed,
+            parameters: options.parameters,
+            adjustments: options.adjustments,
+        });
+        const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'shaderdemo-settings.json';
+        link.click();
+        URL.revokeObjectURL(url);
     }
     function replaceAdjustment(index: number, adjustment: Adjustment) {
         options = { ...options, adjustments: options.adjustments.map((item, i) => (i === index ? adjustment : item)) };
@@ -235,6 +249,7 @@
                 <button onclick={togglePause}>{paused ? 'Play' : 'Pause'}</button>
                 <button onclick={randomize}>New seed</button>
                 <button onclick={resetDefaults}>Reset defaults</button>
+                <button onclick={exportSettings}>Export settings</button>
                 <div class="parameters">
                     <div class="tabs" role="tablist" aria-label="Parameter groups">
                         {#each parameterTabs as tab}
