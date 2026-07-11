@@ -159,7 +159,7 @@ const baseShader =
 const octaveShader =
     common +
     /* wgsl */ `
-@group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
+@group(0) @binding(1) var src: texture_2d<f32>;
 fn scatterOffset(pixel: vec2f, salt: f32, smoothness: f32, distance: f32) -> vec2f {
     // Smoothness correlates the random displacement field spatially; it never averages colour samples.
     let cellSize=mix(1.,16.,smoothness);
@@ -333,12 +333,18 @@ export class AtmosphereRenderer {
             this.options.parameters,
         );
         let passIndex = 0;
-        const draw = (target: GPUTextureView, pipeline: GPURenderPipeline, source?: GPUTexture) => {
+        const draw = (
+            target: GPUTextureView,
+            pipeline: GPURenderPipeline,
+            source?: GPUTexture,
+            usesSampler = false,
+        ) => {
             const buffer = buffers[passIndex++];
             d.queue.writeBuffer(buffer, 0, data);
             const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer } }];
             if (source) {
-                entries.push({ binding: 1, resource: source.createView() }, { binding: 2, resource: s });
+                entries.push({ binding: 1, resource: source.createView() });
+                if (usesSampler) entries.push({ binding: 2, resource: s });
             }
             const pass = enc.beginRenderPass({
                 colorAttachments: [
@@ -359,7 +365,7 @@ export class AtmosphereRenderer {
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), this.pipelines[2], this.textures[OCTAVE_COUNT]);
+        draw(c.getCurrentTexture().createView(), this.pipelines[2], this.textures[OCTAVE_COUNT], true);
         d.queue.submit([enc.finish()]);
     }
     destroy() {
