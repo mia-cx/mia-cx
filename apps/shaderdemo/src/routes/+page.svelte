@@ -360,10 +360,7 @@
                             <div class="add-adjustments">
                                 <button
                                     onclick={() => addAdjustment(newCurve())}
-                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add RGB curve</button
-                                ><button
-                                    onclick={() => addAdjustment(newHslCurve())}
-                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add HSL curve</button
+                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add curve</button
                                 ><button
                                     onclick={() => addAdjustment(newLevels())}
                                     disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add levels</button
@@ -373,18 +370,10 @@
                                 <section class="adjustment">
                                     <div class="adjustment-heading">
                                         <strong
-                                            >{adjustment.type === 'curve'
-                                                ? `${adjustment.mode.toUpperCase()} Curve`
-                                                : 'Levels'}
+                                            >{adjustment.type === 'curve' ? 'Curve' : 'Levels'}
                                             {options.adjustments
                                                 .slice(0, index + 1)
-                                                .filter(
-                                                    (a) =>
-                                                        a.type === adjustment.type &&
-                                                        (a.type !== 'curve' ||
-                                                            (adjustment.type === 'curve' &&
-                                                                a.mode === adjustment.mode)),
-                                                ).length}</strong
+                                                .filter((a) => a.type === adjustment.type).length}</strong
                                         ><label
                                             ><span>Enabled</span><input
                                                 type="checkbox"

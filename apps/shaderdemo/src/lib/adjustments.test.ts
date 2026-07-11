@@ -14,6 +14,7 @@ import {
     newLevels,
     rgbToHsl,
     sanitizeAdjustments,
+    setCurveMode,
     setLevelsChannelValue,
     setLevelsChannelsValue,
     toggleChannelMask,
@@ -212,5 +213,27 @@ describe('RGB Paint.NET adjustment semantics', () => {
                 { x: 255, y: 255 },
             ]);
         }
+    });
+    it('converts curve modes positionally with deep-copied points', () => {
+        const rgb = newCurve();
+        rgb.channels.r.splice(1, 0, { x: 10, y: 20 });
+        rgb.channels.g.splice(1, 0, { x: 30, y: 40 });
+        rgb.channels.b.splice(1, 0, { x: 50, y: 60 });
+        const hsl = setCurveMode(rgb, 'hsl');
+        expect(hsl).toMatchObject({ id: rgb.id, enabled: rgb.enabled, mode: 'hsl' });
+        expect(hsl.channels.h).toEqual(rgb.channels.r);
+        expect(hsl.channels.s).toEqual(rgb.channels.g);
+        expect(hsl.channels.l).toEqual(rgb.channels.b);
+        expect(hsl.channels.h).not.toBe(rgb.channels.r);
+        expect(hsl.channels.h[1]).not.toBe(rgb.channels.r[1]);
+        const roundTrip = setCurveMode(hsl, 'rgb');
+        expect(roundTrip.channels).toEqual(rgb.channels);
+        expect(roundTrip.channels.r).not.toBe(hsl.channels.h);
+    });
+    it('preserves curve identity when its mode is unchanged', () => {
+        const rgb = newCurve();
+        const hsl = newHslCurve();
+        expect(setCurveMode(rgb, 'rgb')).toBe(rgb);
+        expect(setCurveMode(hsl, 'hsl')).toBe(hsl);
     });
 });

@@ -75,6 +75,19 @@ export const newHslCurve = (): HslCurveAdjustment => ({
     enabled: true,
     channels: { h: identityPoints(), s: identityPoints(), l: identityPoints() },
 });
+
+/** Reinterpret the three curve paths in the requested color space without losing edits. */
+export function setCurveMode(curve: CurveAdjustment, mode: 'rgb'): RgbCurveAdjustment;
+export function setCurveMode(curve: CurveAdjustment, mode: 'hsl'): HslCurveAdjustment;
+export function setCurveMode(curve: CurveAdjustment, mode: CurveAdjustment['mode']): CurveAdjustment;
+export function setCurveMode(curve: CurveAdjustment, mode: CurveAdjustment['mode']): CurveAdjustment {
+    if (curve.mode === mode) return curve;
+    const source = curve.channels as Record<string, CurvePoint[]>;
+    const copy = (channel: string) => source[channel].map((point) => ({ ...point }));
+    return mode === 'rgb'
+        ? { ...curve, mode, channels: { r: copy('h'), g: copy('s'), b: copy('l') } }
+        : { ...curve, mode, channels: { h: copy('r'), s: copy('g'), l: copy('b') } };
+}
 export const newLevels = (): LevelsAdjustment => ({
     id: adjustmentId(),
     type: 'levels',

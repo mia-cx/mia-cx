@@ -4,6 +4,7 @@
         applyCurveEditToChannels,
         CHANNELS,
         HSL_CHANNELS,
+        setCurveMode,
         setLevelsChannelsValue,
         toggleChannelMask,
         type Adjustment,
@@ -14,10 +15,11 @@
     let { adjustment, onchange }: { adjustment: Adjustment; onchange: (value: Adjustment) => void } = $props();
     let descriptors = $derived(adjustment.type === 'curve' && adjustment.mode === 'hsl' ? HSL_CHANNELS : CHANNELS);
     let channelMask: CurveChannel[] = $state([]);
-    let priorId = $state('');
+    let priorCurveKey = $state('');
     $effect(() => {
-        if (priorId !== adjustment.id) {
-            priorId = adjustment.id;
+        const curveKey = `${adjustment.id}:${adjustment.type === 'curve' ? adjustment.mode : 'levels'}`;
+        if (priorCurveKey !== curveKey) {
+            priorCurveKey = curveKey;
             channelMask = [...descriptors];
         }
     });
@@ -34,6 +36,17 @@
 </script>
 
 <div class="channels" aria-label="Color channels">
+    {#if adjustment.type === 'curve'}
+        <label class="mode"
+            >Mode <select
+                value={adjustment.mode}
+                onchange={(event) => onchange(setCurveMode(adjustment, event.currentTarget.value as 'rgb' | 'hsl'))}
+            >
+                <option value="rgb">RGB</option>
+                <option value="hsl">HSL</option>
+            </select></label
+        >
+    {/if}
     {#each descriptors as item}<label
             ><input
                 type="checkbox"
@@ -99,6 +112,16 @@
     }
     .channels label:nth-child(3) {
         color: #8298ff;
+    }
+    .channels .mode {
+        color: #aaa;
+    }
+    .mode select {
+        border: 0;
+        border-bottom: 1px solid #ffffff24;
+        background: transparent;
+        color: #ddd;
+        font: inherit;
     }
     .parameter {
         display: grid;
