@@ -1,108 +1,58 @@
 import { describe, expect, it } from 'vitest';
 import fixture from './default-settings.json';
-import { newCurve } from './adjustments';
-import { defaultParameters, FIELD_PARAMETER_SCHEMA, PARAMETER_SCHEMA, POST_PARAMETER_SCHEMA } from './renderer';
+import { POST_KINDS } from './pipeline';
 import {
     SETTINGS_STORAGE_KEY,
     defaultShaderSettings,
+    loadPersistedSettings,
+    normalizeSavedSettings,
+    parseSettingsDocument,
     resetSettingsTab,
     serializeShaderSettings,
-    type SavedShaderSettings,
 } from './settings';
 
-const fixtureParameters = fixture.settings.parameters as Record<string, number>;
-
-function tuned(): SavedShaderSettings {
-    const parameters = defaultParameters();
-    parameters.fieldScale = 321;
-    parameters.octave1Noise = 0.25;
-    return { seed: 999, parameters, adjustments: [newCurve()] };
-}
-
-describe('canonical defaults', () => {
-    it('loads the exact complete exported settings', () => {
-        const defaults = defaultShaderSettings();
-        expect(defaults.seed).toBe(fixture.settings.seed);
-        expect(defaults.parameters).toEqual(fixture.settings.parameters);
-        expect(defaultParameters()).toEqual(fixture.settings.parameters);
-        expect(defaults.adjustments).toEqual(fixture.settings.adjustments);
-        expect(defaults.adjustments.map(({ id, type }) => ({ id, type }))).toEqual(
-            fixture.settings.adjustments.map(({ id, type }) => ({ id, type })),
-        );
-        expect(PARAMETER_SCHEMA.every(({ key, default: value }) => value === fixtureParameters[key])).toBe(true);
+describe('V2 pipeline settings', () => {
+    it('returns independent complete canonical copies', () => {
+        const a = defaultShaderSettings(),
+            b = defaultShaderSettings();
+        expect(a.seed).toEqual(fixture.settings.seed);
+        expect(a).not.toBe(b);
+        expect(a.colour).not.toBe(b.colour);
+        expect(a.colour).toHaveLength(11);
+        expect(a.colour.at(-1)?.type).toBe('colour-grade');
+        expect(a.post.map((x) => x.type)).toEqual(POST_KINDS);
     });
-
-    it('returns fresh deep copies without exposing canonical or prior state', () => {
-        const first = defaultShaderSettings();
-        const second = defaultShaderSettings();
-        expect(first).not.toBe(second);
-        expect(first.parameters).not.toBe(second.parameters);
-        expect(first.adjustments).not.toBe(second.adjustments);
-        expect(first.adjustments[0]).not.toBe(second.adjustments[0]);
-        if (first.adjustments[0].type === 'curve' && first.adjustments[0].mode === 'rgb')
-            first.adjustments[0].channels.r[0].y = 123;
-        first.parameters.fieldScale = 32;
-        expect(defaultShaderSettings()).toEqual(fixture.settings);
+    it('exports and parses the complete V2 document', () => {
+        const settings = defaultShaderSettings();
+        const doc = JSON.parse(serializeShaderSettings(settings));
+        expect(doc).toEqual({ format: 'mia-cx-shaderdemo-settings', version: 2, settings, assets: [] });
+        expect(parseSettingsDocument(doc)).toEqual(settings);
     });
-});
-
-describe('tab-scoped settings reset', () => {
-    it('uses a fresh persistence generation for the exported canonical preset', () => {
-        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v3');
+    it('uses a new persistence generation and migrates v1/v3 shapes', () => {
+        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v4');
+        const legacy = { seed: 42, parameters: { ...defaultShaderSettings().parameters }, adjustments: [] };
+        const storage = { getItem: (key: string) => (key.endsWith(':v3') ? JSON.stringify(legacy) : null) };
+        const migrated = loadPersistedSettings(storage);
+        expect(migrated.seed).toBe(42);
+        expect(migrated.colour.at(-1)?.type).toBe('colour-grade');
+        expect(migrated.post).toHaveLength(POST_KINDS.length);
     });
-
-    it('restores exactly Field without touching Octaves, adjustments, or seed', () => {
-        const settings = tuned();
-        const reset = resetSettingsTab(settings, 'field');
-        for (const { key } of FIELD_PARAMETER_SCHEMA) expect(reset.parameters[key]).toBe(fixtureParameters[key]);
-        expect(reset.parameters.octave1Noise).toBe(0.25);
-        expect(reset.adjustments).toBe(settings.adjustments);
-        expect(reset.seed).toBe(999);
+    it('preserves stable IDs and order when normalizing V2', () => {
+        const value = defaultShaderSettings();
+        value.post.reverse();
+        value.post[0].enabled = false;
+        const normalized = normalizeSavedSettings(value);
+        expect(normalized.post.map((x) => x.id)).toEqual(value.post.map((x) => x.id));
+        expect(normalized.post[0].enabled).toBe(false);
     });
-
-    it('restores exactly Octaves without touching Field, adjustments, or seed', () => {
-        const settings = tuned();
-        const reset = resetSettingsTab(settings, 'octaves');
-        for (const { key } of PARAMETER_SCHEMA.filter(({ key }) => key.startsWith('octave')))
-            expect(reset.parameters[key]).toBe(fixtureParameters[key]);
-        expect(reset.parameters.fieldScale).toBe(321);
-        expect(reset.adjustments).toBe(settings.adjustments);
-        expect(reset.seed).toBe(999);
-    });
-
-    it('restores a fresh full adjustment stack without touching parameters or seed', () => {
-        const settings = tuned();
-        const first = resetSettingsTab(settings, 'adjustments');
-        const second = resetSettingsTab(settings, 'adjustments');
-        expect(first.adjustments).toEqual(fixture.settings.adjustments);
-        expect(first.adjustments).not.toBe(second.adjustments);
-        expect(first.parameters).toBe(settings.parameters);
-        expect(first.seed).toBe(999);
-        first.adjustments.pop();
-        expect(second.adjustments).toEqual(fixture.settings.adjustments);
-        expect(defaultShaderSettings().adjustments).toEqual(fixture.settings.adjustments);
-    });
-
-    it('exports canonical settings after all tabs reset, while retaining the current seed', () => {
-        let settings = tuned();
-        settings = resetSettingsTab(settings, 'field');
-        settings = resetSettingsTab(settings, 'octaves');
-        settings = resetSettingsTab(settings, 'adjustments');
-        expect(JSON.parse(serializeShaderSettings(settings))).toEqual({
-            format: fixture.format,
-            version: fixture.version,
-            settings: { ...fixture.settings, seed: 999 },
-        });
-    });
-
-    it('resets and exports the appended post toggles as enabled', () => {
-        const keys = POST_PARAMETER_SCHEMA.slice(-5).map(({ key }) => key);
-        expect(keys.map((key) => defaultShaderSettings().parameters[key])).toEqual([1, 1, 1, 1, 1]);
-        const settings = tuned();
-        for (const key of keys) settings.parameters[key] = 0;
-        const reset = resetSettingsTab(settings, 'post');
-        expect(keys.map((key) => reset.parameters[key])).toEqual([1, 1, 1, 1, 1]);
-        const exported = JSON.parse(serializeShaderSettings(reset)) as { settings: SavedShaderSettings };
-        expect(keys.map((key) => exported.settings.parameters[key])).toEqual([1, 1, 1, 1, 1]);
+    it('resets Colour and Post independently with fresh arrays', () => {
+        const value = defaultShaderSettings();
+        const colour = resetSettingsTab(value, 'colour');
+        const post = resetSettingsTab(value, 'post');
+        expect(colour.colour).toEqual(defaultShaderSettings().colour);
+        expect(colour.colour).not.toBe(value.colour);
+        expect(post.post).toEqual(defaultShaderSettings().post);
+        expect(post.post).not.toBe(value.post);
+        expect(post.colour).toBe(value.colour);
     });
 });

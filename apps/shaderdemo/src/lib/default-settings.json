@@ -1,14 +1,14 @@
 {
     "format": "mia-cx-shaderdemo-settings",
-    "version": 1,
+    "version": 2,
     "settings": {
-        "seed": 595.0450105644413,
+        "seed": 315.71386225019984,
         "parameters": {
-            "fieldScale": 1007,
+            "fieldScale": 2048,
             "flowStretch": 2.5,
-            "billowAmount": 1.1,
+            "billowAmount": 0.8,
             "ridgeAmount": 2,
-            "ridgeSharpness": 4,
+            "ridgeSharpness": 2.9,
             "baseBlendMode": 2,
             "warpScale": 0.2,
             "warpStrength": 0,
@@ -22,85 +22,85 @@
             "thresholdEnabled": 1,
             "threshold": 0.5,
             "thresholdSoftness": 0.5,
-            "finalContrast": 1.8,
-            "animationSpeed": 0.45,
-            "centerDarkness": 0.6,
-            "centerWidth": 0.75,
+            "finalContrast": 1.6,
+            "animationSpeed": 0.35,
+            "centerDarkness": 0.35,
+            "centerWidth": 0.8,
             "centerHeight": 0.85,
             "centerRoundness": 4.7,
             "centerSoftness": 1.5,
             "octave1Noise": 0.005,
             "octave1Threshold": 0,
             "octave1Smoothness": 0.85,
-            "octave1Distance": 0.35,
+            "octave1Distance": 0,
             "octave2Noise": 0.01,
             "octave2Threshold": 0,
             "octave2Smoothness": 1,
-            "octave2Distance": 0.15,
+            "octave2Distance": 0.1,
             "octave3Noise": 0.015,
             "octave3Threshold": 0,
             "octave3Smoothness": 0.5,
-            "octave3Distance": 0.75,
+            "octave3Distance": 0.15,
             "octave4Noise": 0.015,
             "octave4Threshold": 0,
             "octave4Smoothness": 1,
-            "octave4Distance": 1.5,
+            "octave4Distance": 0.5,
             "octave5Noise": 0.015,
             "octave5Threshold": 0,
             "octave5Smoothness": 1,
-            "octave5Distance": 1,
+            "octave5Distance": 0.5,
             "octave1Pixelate": 0,
             "octave2Pixelate": 0,
             "octave3Pixelate": 0,
             "octave4Pixelate": 0,
             "octave5Pixelate": 0,
             "octave1BlurRadius": 0,
-            "octave2BlurRadius": 0.5,
-            "octave3BlurRadius": 0.3,
-            "octave4BlurRadius": 0.3,
-            "octave5BlurRadius": 0.1,
-            "colorGradeEnabled": 0,
+            "octave2BlurRadius": 0,
+            "octave3BlurRadius": 0,
+            "octave4BlurRadius": 0,
+            "octave5BlurRadius": 0,
+            "colorGradeEnabled": 1,
             "exposure": 0,
-            "temperature": 6500,
+            "temperature": 7950,
             "tint": 0,
             "contrast": 0,
             "saturation": 0,
-            "vibrance": 0,
+            "vibrance": -0.01,
             "shadows": 0,
             "highlights": 0,
-            "godRaysEnabled": 0,
-            "godRaysAmount": 0,
-            "godRaysIntensity": 0,
-            "godRaysThreshold": 0.75,
-            "godRaysSoftness": 0.25,
+            "godRaysEnabled": 1,
+            "godRaysAmount": 100,
+            "godRaysIntensity": 1.05,
+            "godRaysThreshold": 0.3,
+            "godRaysSoftness": 1,
             "godRaysCenterX": 0,
-            "godRaysCenterY": 0,
+            "godRaysCenterY": -2,
             "godRaysSamples": 64,
-            "bloomEnabled": 0,
-            "bloomThreshold": 0.75,
-            "bloomKnee": 0.25,
-            "bloomIntensity": 0,
-            "bloomRadius": 0.6,
-            "glowEnabled": 0,
-            "glowIntensity": 0,
-            "glowHue": 0.08,
-            "chromaticAberration": 0,
-            "vignetteAmount": 0,
-            "vignetteSoftness": 0.35,
-            "lensDistortion": 0,
-            "sharpen": 0,
-            "filmGrainAmount": 0,
-            "filmGrainSize": 1,
-            "godRaysBlendMode": 0,
-            "bloomBlendMode": 0,
-            "glowBlendMode": 0,
+            "bloomEnabled": 1,
+            "bloomThreshold": 0.27,
+            "bloomKnee": 0.32,
+            "bloomIntensity": 1.6,
+            "bloomRadius": 1.51,
+            "glowEnabled": 1,
+            "glowIntensity": 0.5,
+            "glowHue": 0.5,
+            "chromaticAberration": 12,
+            "vignetteAmount": 1,
+            "vignetteSoftness": 0.01,
+            "lensDistortion": 0.025,
+            "sharpen": 0.2,
+            "filmGrainAmount": 0.05,
+            "filmGrainSize": 0.5,
+            "godRaysBlendMode": 3,
+            "bloomBlendMode": 3,
+            "glowBlendMode": 3,
             "chromaticAberrationEnabled": 1,
-            "vignetteEnabled": 1,
+            "vignetteEnabled": 0,
             "lensDistortionEnabled": 1,
             "sharpenEnabled": 1,
             "filmGrainEnabled": 1
         },
-        "adjustments": [
+        "colour": [
             {
                 "id": "85f669db-f052-4019-a47e-75c0e495d227",
                 "type": "curve",
@@ -458,6 +458,99 @@
                 "hue": -6,
                 "saturation": 110,
                 "lightness": 2
+            },
+            {
+                "id": "cf34e745-b4f9-4671-9abd-9e8c12381ccb",
+                "type": "curve",
+                "enabled": false,
+                "mode": "rgb",
+                "channels": {
+                    "r": [
+                        {
+                            "x": 0,
+                            "y": 255
+                        },
+                        {
+                            "x": 255,
+                            "y": 0
+                        }
+                    ],
+                    "g": [
+                        {
+                            "x": 0,
+                            "y": 255
+                        },
+                        {
+                            "x": 255,
+                            "y": 0
+                        }
+                    ],
+                    "b": [
+                        {
+                            "x": 0,
+                            "y": 255
+                        },
+                        {
+                            "x": 255,
+                            "y": 0
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "153435b9-65d8-4761-939b-2ca522640bf4",
+                "type": "hsl",
+                "enabled": false,
+                "hue": -9,
+                "saturation": 100,
+                "lightness": 0
+            },
+            {
+                "id": "colour:colour-grade:0",
+                "type": "colour-grade",
+                "enabled": true
+            }
+        ],
+        "post": [
+            {
+                "id": "post:god-rays:0",
+                "type": "god-rays",
+                "enabled": true
+            },
+            {
+                "id": "post:bloom:0",
+                "type": "bloom",
+                "enabled": true
+            },
+            {
+                "id": "post:glow:0",
+                "type": "glow",
+                "enabled": true
+            },
+            {
+                "id": "post:chromatic-aberration:0",
+                "type": "chromatic-aberration",
+                "enabled": true
+            },
+            {
+                "id": "post:vignette:0",
+                "type": "vignette",
+                "enabled": false
+            },
+            {
+                "id": "post:lens-distortion:0",
+                "type": "lens-distortion",
+                "enabled": true
+            },
+            {
+                "id": "post:sharpen:0",
+                "type": "sharpen",
+                "enabled": true
+            },
+            {
+                "id": "post:film-grain:0",
+                "type": "film-grain",
+                "enabled": true
             }
         ]
     }

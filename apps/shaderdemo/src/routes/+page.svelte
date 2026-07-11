@@ -23,42 +23,67 @@
         shaderSettings,
     } from '$lib/settings';
     import AdjustmentEditor from '$lib/AdjustmentEditor.svelte';
+    import AddMenu from '$lib/AddMenu.svelte';
+    import ParameterEditor from '$lib/ParameterEditor.svelte';
+    import PipelineItem from '$lib/PipelineItem.svelte';
+    import ColourEffectEditor from '$lib/ColourEffectEditor.svelte';
     import {
-        MAX_ADJUSTMENTS,
-        newCurve,
-        newHslAdjustment,
-        newHslCurve,
-        newLevels,
-        type Adjustment,
-    } from '$lib/adjustments';
+        isRgbColour,
+        loadCubeAsset,
+        RGB_COLOUR_KINDS,
+        RGB_COLOUR_LABELS,
+        type CubeLut,
+        type RgbColourEffect,
+        type RgbColourKind,
+    } from '$lib/colour-effects';
+    import {
+        COLOUR_GRADE_KEYS,
+        POST_KEYS,
+        POST_KINDS,
+        POST_LABELS,
+        createColour,
+        createPost,
+        moveById,
+        removeById,
+        syncPipelineToggles,
+        type ColourEffect,
+        type PostEffect,
+        type PostEffectKind,
+    } from '$lib/pipeline';
+    import { MAX_ADJUSTMENTS, newHslCurve, type Adjustment } from '$lib/adjustments';
 
     let canvas: HTMLCanvasElement;
     let renderer: AtmosphereRenderer | undefined;
     const initialDefaults = defaultShaderSettings();
-    let options: RenderOptions = {
+    let options: RenderOptions = $state({
         seed: initialDefaults.seed,
         dprCap: Number.POSITIVE_INFINITY,
         renderScale: 1,
         parameters: initialDefaults.parameters,
-        adjustments: initialDefaults.adjustments,
-    };
-    let paused = false;
-    let controlsOpen = true;
-    let telemetryOpen = true;
-    let ready = false;
-    let status = 'Starting WebGPU…';
-    let frameStats: FrameRollingSummary | undefined;
-    let gpuStats: GpuTimingStats | null | undefined;
-    let gpuRolling: GpuRollingSummary | undefined;
+        colour: initialDefaults.colour,
+        post: initialDefaults.post,
+    });
+    let colour: ColourEffect[] = $state(initialDefaults.colour);
+    let post: PostEffect[] = $state(initialDefaults.post);
+    let expanded = $state(new Set<string>());
+    let paused = $state(false);
+    let controlsOpen = $state(true);
+    let telemetryOpen = $state(true);
+    let ready = $state(false);
+    let status = $state('Starting WebGPU…');
+    let lutGeneration = 0;
+    let frameStats: FrameRollingSummary | undefined = $state();
+    let gpuStats: GpuTimingStats | null | undefined = $state();
+    let gpuRolling: GpuRollingSummary | undefined = $state();
     const gpuTelemetry = new GpuTelemetry();
     const number = (value: number | undefined) => (value === undefined ? '…' : value.toFixed(1));
     const parameterTabs = [
         { id: 'field', label: 'Field' },
         { id: 'octaves', label: 'Octaves' },
-        { id: 'adjustments', label: 'Curves & levels' },
+        { id: 'adjustments', label: 'Colour' },
         { id: 'post', label: 'Post' },
     ] as const;
-    let selectedTabId: (typeof parameterTabs)[number]['id'] = 'field';
+    let selectedTabId: (typeof parameterTabs)[number]['id'] = $state('field');
     const fieldGroups: { label: string; keys: ParameterKey[]; toggle?: ParameterKey }[] = [
         {
             label: 'Base generator',
@@ -93,38 +118,6 @@
         },
         { label: 'Motion', keys: ['animationSpeed'] },
     ];
-    const postGroups = [
-        {
-            label: 'Color grade',
-            toggle: 'colorGradeEnabled',
-            keys: ['exposure', 'temperature', 'tint', 'contrast', 'saturation', 'vibrance', 'shadows', 'highlights'],
-        },
-        {
-            label: 'God rays',
-            toggle: 'godRaysEnabled',
-            keys: [
-                'godRaysAmount',
-                'godRaysIntensity',
-                'godRaysThreshold',
-                'godRaysSoftness',
-                'godRaysCenterX',
-                'godRaysCenterY',
-                'godRaysSamples',
-                'godRaysBlendMode',
-            ],
-        },
-        {
-            label: 'Bloom',
-            toggle: 'bloomEnabled',
-            keys: ['bloomThreshold', 'bloomKnee', 'bloomIntensity', 'bloomRadius', 'bloomBlendMode'],
-        },
-        { label: 'Glow', toggle: 'glowEnabled', keys: ['glowIntensity', 'glowHue', 'glowBlendMode'] },
-        { label: 'Chromatic aberration', toggle: 'chromaticAberrationEnabled', keys: ['chromaticAberration'] },
-        { label: 'Vignette', toggle: 'vignetteEnabled', keys: ['vignetteAmount', 'vignetteSoftness'] },
-        { label: 'Lens distortion', toggle: 'lensDistortionEnabled', keys: ['lensDistortion'] },
-        { label: 'Sharpen', toggle: 'sharpenEnabled', keys: ['sharpen'] },
-        { label: 'Film grain', toggle: 'filmGrainEnabled', keys: ['filmGrainAmount', 'filmGrainSize'] },
-    ] as const;
 
     function tabKeydown(event: KeyboardEvent) {
         if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
@@ -146,8 +139,29 @@
                     : Math.min(parameter.max, Math.max(parameter.min, value))
                 : parameter.default;
         }
-        options = { ...options, parameters };
-        shaderSettings.set({ seed: options.seed, parameters: options.parameters, adjustments: options.adjustments });
+        options = { ...options, parameters, colour, post };
+        options.parameters = syncPipelineToggles(options.parameters, colour, post);
+        shaderSettings.set({ seed: options.seed, parameters: options.parameters, colour, post });
+        renderer?.setOptions(options);
+        void resolveLuts();
+    }
+    async function resolveLuts() {
+        const generation = ++lutGeneration;
+        const items = colour.filter(
+            (x): x is RgbColourEffect => isRgbColour(x) && x.type === 'lut' && x.enabled && Boolean(x.assetId),
+        );
+        const loaded = await Promise.all(
+            items.map(async (item) => [item.assetId!, await loadCubeAsset(item.assetId!)] as const),
+        );
+        if (generation !== lutGeneration) return;
+        const lutAssets: Record<string, CubeLut> = {};
+        for (const [id, asset] of loaded) if (asset) lutAssets[id] = asset;
+        colour = colour.map((item) =>
+            isRgbColour(item) && item.type === 'lut' && item.assetId
+                ? { ...item, missing: !lutAssets[item.assetId] }
+                : item,
+        );
+        options = { ...options, colour, lutAssets };
         renderer?.setOptions(options);
     }
     function togglePause() {
@@ -160,21 +174,25 @@
     }
     function resetDefaults() {
         const reset = resetSettingsTab(
-            { seed: options.seed, parameters: options.parameters, adjustments: options.adjustments },
+            { seed: options.seed, parameters: options.parameters, colour, post },
             selectedTabId,
         );
         options = {
             ...options,
             parameters: reset.parameters,
-            adjustments: reset.adjustments,
+            colour: reset.colour,
+            post: reset.post,
         };
+        colour = reset.colour;
+        post = reset.post;
         update();
     }
     function exportSettings() {
         const json = serializeShaderSettings({
             seed: options.seed,
             parameters: options.parameters,
-            adjustments: options.adjustments,
+            colour,
+            post,
         });
         const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
         const link = document.createElement('a');
@@ -183,22 +201,74 @@
         link.click();
         URL.revokeObjectURL(url);
     }
-    function replaceAdjustment(index: number, adjustment: Adjustment) {
-        options = { ...options, adjustments: options.adjustments.map((item, i) => (i === index ? adjustment : item)) };
+    const colourLabel = (item: ColourEffect) =>
+        item.type === 'curve'
+            ? 'Curve'
+            : item.type === 'levels'
+              ? 'Levels'
+              : item.type === 'hsl'
+                ? 'Hue / saturation / lightness'
+                : isRgbColour(item)
+                  ? RGB_COLOUR_LABELS[item.type]
+                  : 'Colour grade';
+    const schemaFor = (keys: readonly ParameterKey[]) =>
+        POST_PARAMETER_SCHEMA.filter((entry) => keys.includes(entry.key));
+    function setExpanded(id: string, value = !expanded.has(id)) {
+        const next = new Set(expanded);
+        value ? next.add(id) : next.delete(id);
+        expanded = next;
+    }
+    function isScalarColour(item: ColourEffect): item is Adjustment {
+        return item.type === 'curve' || item.type === 'levels' || item.type === 'hsl';
+    }
+
+    function changeColour(next: ColourEffect[]) {
+        // The generated scene is scalar until the first RGB-native effect. Keep the legacy
+        // Curve/Levels/HSL run before that materialization boundary; everything on either side
+        // remains freely reorderable and Colour grade stays the final output transform.
+        colour = [
+            ...next.filter(isScalarColour),
+            ...next.filter((item) => !isScalarColour(item) && item.type !== 'colour-grade'),
+            ...next.filter((item) => item.type === 'colour-grade').slice(0, 1),
+        ];
         update();
     }
-    function addAdjustment(adjustment: Adjustment) {
-        if (options.adjustments.length >= MAX_ADJUSTMENTS) return;
-        options = { ...options, adjustments: [...options.adjustments, adjustment] };
+    function addColour(type: string) {
+        if (type === 'colour-grade') {
+            if (colour.some((item) => item.type === type)) return;
+            const item: ColourEffect = { id: `colour:colour-grade:0`, type, enabled: true };
+            changeColour([...colour, item]);
+            setExpanded(item.id, true);
+            return;
+        }
+        if (
+            ['curve', 'levels', 'hsl'].includes(type) &&
+            colour.filter((item) => ['curve', 'levels', 'hsl'].includes(item.type)).length >= MAX_ADJUSTMENTS
+        )
+            return;
+        const item = createColour(type as 'curve' | 'levels' | 'hsl' | RgbColourKind);
+        changeColour([
+            ...colour.filter((x) => x.type !== 'colour-grade'),
+            item,
+            ...colour.filter((x) => x.type === 'colour-grade'),
+        ]);
+        setExpanded(item.id, true);
+    }
+    function addPost(type: string) {
+        if (post.some((item) => item.type === type)) return;
+        const item = createPost(type as PostEffectKind, post);
+        post = [...post, item];
+        setExpanded(item.id, true);
         update();
     }
-    function moveAdjustment(index: number, direction: number) {
-        const target = index + direction;
-        if (target < 0 || target >= options.adjustments.length) return;
-        const adjustments = [...options.adjustments];
-        [adjustments[index], adjustments[target]] = [adjustments[target], adjustments[index]];
-        options = { ...options, adjustments };
+    function setParameter(key: ParameterKey, value: number) {
+        options = { ...options, parameters: { ...options.parameters, [key]: value } };
         update();
+    }
+    function resetParameters(keys: readonly ParameterKey[]) {
+        const parameters = { ...options.parameters };
+        for (const key of keys) parameters[key] = PARAMETER_SCHEMA.find((entry) => entry.key === key)!.default;
+        options = { ...options, parameters };
     }
     onMount(() => {
         let disposed = false;
@@ -207,7 +277,16 @@
         const stopHydration = shaderSettings.subscribe((value) => (persisted = value));
         stopHydration();
         const saved = normalizeSavedSettings(persisted);
-        options = { ...options, seed: saved.seed, parameters: saved.parameters, adjustments: saved.adjustments };
+        colour = saved.colour;
+        post = saved.post;
+        options = {
+            ...options,
+            seed: saved.seed,
+            parameters: saved.parameters,
+            colour: saved.colour,
+            post: saved.post,
+        };
+        void resolveLuts();
         if (matchMedia('(prefers-reduced-motion: reduce)').matches) paused = true;
         AtmosphereRenderer.create(canvas, options)
             .then((instance) => {
@@ -415,148 +494,141 @@
                             {/each}
                         </div>
                     {:else if selectedTabId === 'adjustments'}
-                        <div
-                            class="sliders adjustment-stack"
-                            id="panel-adjustments"
-                            role="tabpanel"
-                            aria-labelledby="tab-adjustments"
-                        >
-                            <div class="add-adjustments">
-                                <button
-                                    onclick={() => addAdjustment(newCurve())}
-                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add curve</button
-                                ><button
-                                    onclick={() => addAdjustment(newLevels())}
-                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add levels</button
-                                ><button
-                                    onclick={() => addAdjustment(newHslAdjustment())}
-                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add HSL</button
-                                >
-                            </div>
-                            {#each options.adjustments as adjustment, index (adjustment.id)}
-                                <section class="adjustment">
-                                    <div class="adjustment-heading">
-                                        <strong
-                                            >{adjustment.type === 'curve'
-                                                ? 'Curve'
-                                                : adjustment.type === 'levels'
-                                                  ? 'Levels'
-                                                  : 'Hue / saturation / lightness'}
-                                            {options.adjustments
-                                                .slice(0, index + 1)
-                                                .filter((a) => a.type === adjustment.type).length}</strong
-                                        ><label
-                                            ><span>Enabled</span><input
-                                                type="checkbox"
-                                                checked={adjustment.enabled}
-                                                onchange={(e) =>
-                                                    replaceAdjustment(index, {
-                                                        ...adjustment,
-                                                        enabled: e.currentTarget.checked,
-                                                    })}
-                                            /></label
-                                        >
-                                    </div>
-                                    <div class="adjustment-actions">
-                                        <button
-                                            aria-label="Move up"
-                                            disabled={index === 0}
-                                            onclick={() => moveAdjustment(index, -1)}>↑</button
-                                        ><button
-                                            aria-label="Move down"
-                                            disabled={index === options.adjustments.length - 1}
-                                            onclick={() => moveAdjustment(index, 1)}>↓</button
-                                        ><button
-                                            onclick={() =>
-                                                replaceAdjustment(
-                                                    index,
-                                                    adjustment.type === 'curve'
+                        <div class="sliders" id="panel-adjustments" role="tabpanel" aria-labelledby="tab-adjustments">
+                            <AddMenu
+                                label="Add colour effect"
+                                choices={[
+                                    {
+                                        id: 'curve',
+                                        label: 'Curve',
+                                        disabled:
+                                            colour.length - (colour.some((x) => x.type === 'colour-grade') ? 1 : 0) >=
+                                            MAX_ADJUSTMENTS,
+                                    },
+                                    {
+                                        id: 'levels',
+                                        label: 'Levels',
+                                        disabled:
+                                            colour.length - (colour.some((x) => x.type === 'colour-grade') ? 1 : 0) >=
+                                            MAX_ADJUSTMENTS,
+                                    },
+                                    {
+                                        id: 'hsl',
+                                        label: 'Hue / saturation / lightness',
+                                        disabled:
+                                            colour.length - (colour.some((x) => x.type === 'colour-grade') ? 1 : 0) >=
+                                            MAX_ADJUSTMENTS,
+                                    },
+                                    {
+                                        id: 'colour-grade',
+                                        label: 'Colour grade',
+                                        disabled: colour.some((x) => x.type === 'colour-grade'),
+                                    },
+                                    ...RGB_COLOUR_KINDS.map((type) => ({ id: type, label: RGB_COLOUR_LABELS[type] })),
+                                ]}
+                                onselect={addColour}
+                            />
+                            {#each colour as item, index (item.id)}
+                                <PipelineItem
+                                    id={item.id}
+                                    name={colourLabel(item)}
+                                    enabled={item.enabled}
+                                    expanded={expanded.has(item.id)}
+                                    moveUpDisabled={index === 0 || item.type === 'colour-grade'}
+                                    moveDownDisabled={index === colour.length - 1 ||
+                                        item.type === 'colour-grade' ||
+                                        colour[index + 1]?.type === 'colour-grade'}
+                                    onexpand={() => setExpanded(item.id)}
+                                    onenabled={(enabled) =>
+                                        changeColour(colour.map((x) => (x.id === item.id ? { ...x, enabled } : x)))}
+                                    onmove={(delta) => changeColour(moveById(colour, item.id, delta))}
+                                    onreset={() => {
+                                        if (item.type === 'colour-grade') resetParameters(COLOUR_GRADE_KEYS);
+                                        else
+                                            changeColour(
+                                                colour.map((x) =>
+                                                    x.id === item.id
                                                         ? {
-                                                              ...(adjustment.mode === 'hsl'
+                                                              ...(item.type === 'curve' && item.mode === 'hsl'
                                                                   ? newHslCurve()
-                                                                  : newCurve()),
-                                                              id: adjustment.id,
+                                                                  : createColour(item.type)),
+                                                              id: item.id,
                                                           }
-                                                        : adjustment.type === 'levels'
-                                                          ? { ...newLevels(), id: adjustment.id }
-                                                          : { ...newHslAdjustment(), id: adjustment.id },
-                                                )}>Reset</button
-                                        ><button
-                                            onclick={() => {
-                                                options = {
-                                                    ...options,
-                                                    adjustments: options.adjustments.filter((_, i) => i !== index),
-                                                };
-                                                update();
-                                            }}>Remove</button
-                                        >
-                                    </div>
-                                    <AdjustmentEditor
-                                        {adjustment}
-                                        onchange={(value) => replaceAdjustment(index, value)}
-                                    />
-                                </section>
+                                                        : x,
+                                                ),
+                                            );
+                                        update();
+                                    }}
+                                    onremove={() => changeColour(removeById(colour, item.id))}
+                                >
+                                    {#if item.type === 'colour-grade'}
+                                        <ParameterEditor
+                                            parameters={options.parameters}
+                                            schema={schemaFor(COLOUR_GRADE_KEYS)}
+                                            onchange={setParameter}
+                                        />
+                                    {:else if isRgbColour(item)}
+                                        <ColourEffectEditor
+                                            effect={item}
+                                            onchange={(value) =>
+                                                changeColour(colour.map((x) => (x.id === item.id ? value : x)))}
+                                        />
+                                    {:else}
+                                        <AdjustmentEditor
+                                            adjustment={item}
+                                            onchange={(value) =>
+                                                changeColour(colour.map((x) => (x.id === item.id ? value : x)))}
+                                        />
+                                    {/if}
+                                </PipelineItem>
                             {/each}
-                            {#if options.adjustments.length === 0}<p class="empty">No adjustments.</p>{/if}
+                            {#if colour.length === 0}<p class="empty">No colour effects.</p>{/if}
                         </div>
                     {:else}
                         <div class="sliders" id="panel-post" role="tabpanel" aria-labelledby="tab-post">
-                            {#each postGroups as group}
-                                <section class="field-group">
-                                    <div class="group-heading">
-                                        <span>{group.label}</span>
-                                        {#if 'toggle' in group}<label class="enabled"
-                                                ><span>Enabled</span><input
-                                                    type="checkbox"
-                                                    checked={options.parameters[group.toggle] >= 0.5}
-                                                    onchange={(event) => {
-                                                        options.parameters[group.toggle] = event.currentTarget.checked
-                                                            ? 1
-                                                            : 0;
-                                                        update();
-                                                    }}
-                                                /></label
-                                            >{/if}
-                                    </div>
-                                    {#each POST_PARAMETER_SCHEMA.filter( ({ key }) => group.keys.includes(key as never), ) as parameter}
-                                        {#if parameter.key.endsWith('BlendMode')}
-                                            <label class="blend-mode">
-                                                <span>{parameter.label}</span>
-                                                <select
-                                                    bind:value={options.parameters[parameter.key]}
-                                                    onchange={update}
-                                                >
-                                                    {#each POST_BLEND_MODES as label, value}
-                                                        <option {value}>{label}</option>
-                                                    {/each}
-                                                </select>
-                                            </label>
-                                        {:else}
-                                            <label class="parameter"
-                                                ><span>{parameter.label}</span>
-                                                <input
-                                                    class="exact-value"
-                                                    aria-label={`${parameter.label} exact value`}
-                                                    type="number"
-                                                    min={parameter.min}
-                                                    max={parameter.max}
-                                                    step={parameter.step}
-                                                    bind:value={options.parameters[parameter.key]}
-                                                    onchange={update}
-                                                />
-                                                <input
-                                                    type="range"
-                                                    min={parameter.min}
-                                                    max={parameter.max}
-                                                    step={parameter.step}
-                                                    bind:value={options.parameters[parameter.key]}
-                                                    oninput={update}
-                                                />
-                                            </label>
-                                        {/if}
-                                    {/each}
-                                </section>
+                            <AddMenu
+                                label="Add post effect"
+                                choices={POST_KINDS.map((type) => ({
+                                    id: type,
+                                    label: POST_LABELS[type],
+                                    disabled: post.some((x) => x.type === type),
+                                }))}
+                                onselect={addPost}
+                            />
+                            {#each post as item, index (item.id)}
+                                <PipelineItem
+                                    id={item.id}
+                                    name={POST_LABELS[item.type]}
+                                    enabled={item.enabled}
+                                    expanded={expanded.has(item.id)}
+                                    moveUpDisabled={index === 0}
+                                    moveDownDisabled={index === post.length - 1}
+                                    onexpand={() => setExpanded(item.id)}
+                                    onenabled={(enabled) => {
+                                        post = post.map((x) => (x.id === item.id ? { ...x, enabled } : x));
+                                        update();
+                                    }}
+                                    onmove={(delta) => {
+                                        post = moveById(post, item.id, delta);
+                                        update();
+                                    }}
+                                    onreset={() => {
+                                        resetParameters(POST_KEYS[item.type]);
+                                        update();
+                                    }}
+                                    onremove={() => {
+                                        post = removeById(post, item.id);
+                                        update();
+                                    }}
+                                >
+                                    <ParameterEditor
+                                        parameters={options.parameters}
+                                        schema={schemaFor(POST_KEYS[item.type])}
+                                        onchange={setParameter}
+                                    />
+                                </PipelineItem>
                             {/each}
+                            {#if post.length === 0}<p class="empty">No post effects.</p>{/if}
                         </div>
                     {/if}
                 </div>
@@ -773,38 +845,7 @@
         padding: 0;
         color: #aaa;
     }
-    .add-adjustments,
-    .adjustment-heading,
-    .adjustment-actions {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-    }
-    .add-adjustments {
-        justify-content: center;
-        padding: 3px;
-    }
-    .adjustment {
-        display: grid;
-        gap: 7px;
-        padding: 9px 2px;
-        border-top: 1px solid #ffffff20;
-    }
-    .adjustment-heading {
-        justify-content: space-between;
-        color: #aaa;
-    }
-    .adjustment-heading label {
-        color: #ddd;
-        text-transform: none;
-    }
-    .adjustment-actions {
-        justify-content: flex-end;
-    }
-    .adjustment-actions button:disabled {
-        opacity: 0.3;
-        cursor: default;
-    }
+
     .empty {
         margin: 8px;
         color: #888;

@@ -1,12 +1,14 @@
 import { FrameTelemetry, type FrameRollingSummary } from './telemetry';
 import { ADJUSTMENT_LUT_SIZE, composeAdjustmentLut, type Adjustment } from './adjustments';
 import defaultSettingsFixture from './default-settings.json';
+import { postRendererPlan, type ColourEffect, type PostEffect, type PostEffectKind } from './pipeline';
+import { RGB_COLOUR_KINDS, isNeutralRgb, isRgbColour, type CubeLut, type RgbColourEffect } from './colour-effects';
 
 const canonicalParameterDefaults = defaultSettingsFixture.settings.parameters;
 const withCanonicalDefaults = <T extends readonly { key: string; default: number }[]>(schema: T): T =>
     schema.map((parameter) => ({
         ...parameter,
-        default: (canonicalParameterDefaults as Record<string, number>)[parameter.key],
+        default: (canonicalParameterDefaults as Record<string, number>)[parameter.key] ?? parameter.default,
     })) as unknown as T;
 
 const FIELD_PARAMETER_SCHEMA_BASE = [
@@ -40,7 +42,7 @@ export const FIELD_PARAMETER_SCHEMA = withCanonicalDefaults(FIELD_PARAMETER_SCHE
 
 export const OCTAVE_COUNT = 5;
 export const GPU_TIMING_SAMPLE_INTERVAL = 30;
-export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 5;
+export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 32;
 const GPU_QUERY_COUNT = MAX_RENDER_PASSES * 2;
 export interface GpuTimingStats {
     totalMs: number;
@@ -162,6 +164,72 @@ export const POST_PARAMETER_SCHEMA = [
     { key: 'lensDistortionEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
     { key: 'sharpenEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
     { key: 'filmGrainEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
+    { key: 'halationEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'halationAmount', label: 'Amount', min: 0, max: 2, step: 0.01, default: 0 },
+    { key: 'halationRadius', label: 'Radius', min: 1, max: 32, step: 1, default: 8 },
+    { key: 'halationThreshold', label: 'Threshold', min: 0, max: 2, step: 0.01, default: 0.7 },
+    { key: 'streakEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'streakAmount', label: 'Amount', min: 0, max: 2, step: 0.01, default: 0 },
+    { key: 'streakLength', label: 'Length', min: 1, max: 64, step: 1, default: 24 },
+    { key: 'streakAngle', label: 'Angle', min: -3.14, max: 3.14, step: 0.01, default: 0 },
+    { key: 'streakThreshold', label: 'Threshold', min: 0, max: 2, step: 0.01, default: 0.8 },
+    { key: 'starburstEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'starburstAmount', label: 'Amount', min: 0, max: 2, step: 0.01, default: 0 },
+    { key: 'starburstRadius', label: 'Radius', min: 1, max: 32, step: 1, default: 12 },
+    { key: 'starburstBlades', label: 'Blades', min: 2, max: 12, step: 1, default: 6 },
+    { key: 'starburstThreshold', label: 'Threshold', min: 0, max: 2, step: 0.01, default: 0.8 },
+    { key: 'lensDirtEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'lensDirtAmount', label: 'Amount', min: 0, max: 2, step: 0.01, default: 0 },
+    { key: 'lensDirtScale', label: 'Scale', min: 1, max: 30, step: 0.1, default: 8 },
+    { key: 'lensDirtThreshold', label: 'Threshold', min: 0, max: 2, step: 0.01, default: 0.7 },
+    { key: 'lensGhostEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'lensGhostAmount', label: 'Amount', min: 0, max: 2, step: 0.01, default: 0 },
+    { key: 'lensGhostCount', label: 'Ghosts', min: 1, max: 8, step: 1, default: 4 },
+    { key: 'lensGhostSpacing', label: 'Spacing', min: 0.1, max: 2, step: 0.01, default: 0.7 },
+    { key: 'bokehEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'bokehAmount', label: 'Amount', min: 0, max: 2, step: 0.01, default: 0 },
+    { key: 'bokehRadius', label: 'Radius', min: 1, max: 32, step: 1, default: 8 },
+    { key: 'bokehSamples', label: 'Samples', min: 4, max: 32, step: 1, default: 16 },
+    { key: 'bokehBlades', label: 'Blades', min: 3, max: 12, step: 1, default: 6 },
+    { key: 'bokehThreshold', label: 'Threshold', min: 0, max: 2, step: 0.01, default: 0.8 },
+    { key: 'gateWeaveEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'gateWeaveAmount', label: 'Amount', min: 0, max: 20, step: 0.1, default: 0 },
+    { key: 'gateWeaveSpeed', label: 'Speed', min: 0, max: 5, step: 0.1, default: 1 },
+    { key: 'filmDamageEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'filmDamageAmount', label: 'Amount', min: 0, max: 1, step: 0.01, default: 0 },
+    { key: 'filmDust', label: 'Dust', min: 0, max: 1, step: 0.01, default: 0.3 },
+    { key: 'filmScratches', label: 'Scratches', min: 0, max: 1, step: 0.01, default: 0.3 },
+    { key: 'filmFlicker', label: 'Flicker', min: 0, max: 1, step: 0.01, default: 0.2 },
+    { key: 'radialBlurEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'radialBlurAmount', label: 'Amount', min: 0, max: 0.2, step: 0.001, default: 0 },
+    { key: 'radialBlurSamples', label: 'Samples', min: 2, max: 32, step: 1, default: 12 },
+    { key: 'spinBlurEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'spinBlurAmount', label: 'Amount', min: 0, max: 0.3, step: 0.001, default: 0 },
+    { key: 'spinBlurSamples', label: 'Samples', min: 2, max: 32, step: 1, default: 12 },
+    { key: 'directionalBlurEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'directionalBlurAmount', label: 'Amount', min: 0, max: 50, step: 0.1, default: 0 },
+    { key: 'directionalBlurAngle', label: 'Angle', min: -3.14, max: 3.14, step: 0.01, default: 0 },
+    { key: 'directionalBlurSamples', label: 'Samples', min: 2, max: 32, step: 1, default: 12 },
+    { key: 'rollingShutterEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'rollingShutterAmount', label: 'Amount', min: 0, max: 0.2, step: 0.001, default: 0 },
+    { key: 'rollingShutterSpeed', label: 'Speed', min: 0, max: 5, step: 0.1, default: 1 },
+    { key: 'heatHazeEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'heatHazeAmount', label: 'Amount', min: 0, max: 0.1, step: 0.001, default: 0 },
+    { key: 'heatHazeScale', label: 'Scale', min: 1, max: 100, step: 1, default: 30 },
+    { key: 'heatHazeSpeed', label: 'Speed', min: 0, max: 5, step: 0.1, default: 1 },
+    { key: 'prismEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'prismAmount', label: 'Amount', min: 0, max: 30, step: 0.1, default: 0 },
+    { key: 'prismAngle', label: 'Angle', min: -3.14, max: 3.14, step: 0.01, default: 0 },
+    { key: 'kaleidoscopeEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'kaleidoscopeAmount', label: 'Mix', min: 0, max: 1, step: 0.01, default: 0 },
+    { key: 'kaleidoscopeSegments', label: 'Segments', min: 2, max: 20, step: 1, default: 6 },
+    { key: 'datamoshEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'datamoshAmount', label: 'Amount', min: 0, max: 1, step: 0.01, default: 0 },
+    { key: 'datamoshBlockSize', label: 'Block size', min: 2, max: 64, step: 1, default: 16 },
+    { key: 'scanlineEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'scanlineAmount', label: 'Amount', min: 0, max: 0.2, step: 0.001, default: 0 },
+    { key: 'scanlineFrequency', label: 'Frequency', min: 1, max: 500, step: 1, default: 120 },
+    { key: 'scanlineSpeed', label: 'Speed', min: 0, max: 10, step: 0.1, default: 1 },
 ] as const;
 
 /** Numeric order is persisted; append only. */
@@ -217,7 +285,9 @@ export interface RenderOptions {
     dprCap: number;
     renderScale: number;
     parameters: ShaderParameters;
-    adjustments: Adjustment[];
+    colour: ColourEffect[];
+    post: PostEffect[];
+    lutAssets?: Record<string, CubeLut>;
 }
 
 export function renderSize(width: number, height: number, dpr: number, cap: number) {
@@ -243,7 +313,7 @@ export function fullResolutionPassSizes(width: number, height: number, renderSca
     return Array.from({ length: OCTAVE_COUNT + 1 }, () => ({ ...size }));
 }
 
-export const UNIFORM_FLOATS = 100;
+export const UNIFORM_FLOATS = 180;
 export function packUniform(
     resolution: [number, number],
     time: number,
@@ -292,6 +362,9 @@ export function octaveBlurIsActive(parameters: ShaderParameters, index: number) 
 export function godRaysIsActive(parameters: ShaderParameters) {
     return parameters.godRaysEnabled >= 0.5 && parameters.godRaysAmount !== 0 && parameters.godRaysIntensity !== 0;
 }
+export function datamoshIsActive(parameters: ShaderParameters) {
+    return parameters.datamoshEnabled >= 0.5 && parameters.datamoshAmount !== 0;
+}
 
 /** Stable identity for bind groups whose resources are all renderer-owned. */
 export function bindGroupCacheKey(pipelineIndex: number, sourceTextureIndex: number | undefined, passIndex: number) {
@@ -315,7 +388,7 @@ struct U {
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
  centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32, frameIndex: f32,
  octaves: array<vec4f, 5>,
- blurRadii: array<vec4f, 2>, post: array<vec4f, 10>
+ blurRadii: array<vec4f, 2>, post: array<vec4f, 30>
 };
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -651,6 +724,115 @@ export const BLOOM_BLUR_SHADER_SOURCE =
 @group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let o=(1.+u.post[5].y*3.)/vec2f(textureDimensions(src)); var rgb=textureSample(src,samp,uv+o).rgb+textureSample(src,samp,uv-o).rgb+textureSample(src,samp,uv+vec2f(-o.x,o.y)).rgb+textureSample(src,samp,uv+vec2f(o.x,-o.y)).rgb; return vec4f(rgb*.25,1); }`;
 
+/** Scalar-to-RGBA materialization: ordered adjustment LUT, then final grade. */
+export const MATERIALIZE_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler; @group(0) @binding(3) var lut:texture_2d<f32>;
+fn adjusted(v:f32)->vec3f { let f=clamp(v,0.,1.); let p=f*4095.; let lo=i32(floor(p)); let hi=min(lo+1,4095); return mix(textureLoad(lut,vec2i(lo,0),0).rgb,textureLoad(lut,vec2i(hi,0),0).rgb,p-f32(lo)); }
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { var rgb=adjusted(pow(clamp(textureSample(src,samp,pos.xy/u.resolution).r,0.,1.),u.finalContrast)); if(false) { rgb*=exp2(u.post[0].y); let t=(u.post[0].z-6500.)/2000.; rgb*=vec3f(1.+t*.08,1.,1.-t*.08); rgb+=vec3f(u.post[0].w*.25,u.post[0].w*.5,-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let l=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(l),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,l))+u.post[2].x*smoothstep(.5,1.,l); } return vec4f(rgb,1.); }`;
+
+/** A single literal post item; u.blurRadii[1].z selects its kind. */
+export const POST_EFFECT_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler; @group(0) @binding(3) var history:texture_2d<f32>;
+fn blend(base:vec3f,layer:vec3f,mode:f32)->vec3f { if(mode<.5){return base+layer;} if(mode<1.5){return 1.-(1.-base)*(1.-clamp(layer,vec3f(0),vec3f(1)));} return mix(base,layer,clamp(max(layer.r,max(layer.g,layer.b)),0.,1.)); }
+fn hue(c:vec3f,h:f32)->vec3f { let a=h*6.2831853; let y=dot(c,vec3f(.299,.587,.114)); let i=dot(c,vec3f(.596,-.274,-.322)); let q=dot(c,vec3f(.211,-.523,.312)); let z=vec2f(i*cos(a)-q*sin(a),i*sin(a)+q*cos(a)); return vec3f(y+.956*z.x+.621*z.y,y-.272*z.x-.647*z.y,y-1.106*z.x+1.703*z.y); }
+fn p(i:u32)->f32{return u.post[i/4u][i%4u];} fn safe(q:vec2f)->vec2f{return clamp(q,vec2f(0),vec2f(1));} fn luma(c:vec3f)->f32{return dot(max(c,vec3f(0)),vec3f(.2126,.7152,.0722));} fn hash(q:vec2f)->f32{return fract(sin(dot(q,vec2f(127.1,311.7))+u.seed)*43758.5453);}
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let px=1./u.resolution; let kind=i32(u.blurRadii[1].z); var rgb=textureSample(src,samp,uv).rgb;
+if(kind==0){let center=vec2f(.5)+u.post[3].zw*.5;let contraction=max(1.-u.post[2].z/16384.,0.);var rays=vec3f(0);let count=u32(round(u.post[4].x));for(var i=0u;i<128u;i++){if(i<count){let q=center+(uv-center)*pow(contraction,f32(i)/max(f32(count-1u),1.)*64.);let c=textureSampleLevel(src,samp,q,0.).rgb;let l=dot(max(c,vec3f(0)),vec3f(.2126,.7152,.0722));rays+=c*smoothstep(u.post[3].x-u.post[3].y,u.post[3].x+u.post[3].y,l);}}rgb=blend(rgb,rays/max(f32(count),1.)*u.post[2].w,u.post[8].x);}
+else if(kind==1 || kind==2){var b=vec3f(0);let radius=(1.+u.post[5].y*3.)*px;for(var x=-2;x<=2;x++){for(var y=-2;y<=2;y++){let c=textureSample(src,samp,uv+vec2f(f32(x),f32(y))*radius).rgb;let l=dot(max(c,vec3f(0)),vec3f(.2126,.7152,.0722));b+=c*smoothstep(u.post[4].z-u.post[4].w,u.post[4].z+u.post[4].w,l);}}b/=25.;if(kind==1){rgb=blend(rgb,b*u.post[5].x,u.post[8].y);}else{rgb=blend(rgb,hue(b,u.post[6].x)*u.post[5].w,u.post[8].z);}}
+else if(kind==3){let d=p(25)*.001;rgb=vec3f(textureSample(src,samp,safe(uv+vec2f(d,0))).r,rgb.g,textureSample(src,samp,safe(uv-vec2f(d,0))).b);}else if(kind==4){let e=smoothstep(1.-p(27),1.,length(uv*2.-1.)*.707);rgb*=1.-e*p(26);}else if(kind==5){let c=uv*2.-1.;let k=p(28);let fit=1.+2.*max(k,0.);rgb=textureSample(src,samp,safe(.5+c*((1.+k*dot(c,c))/fit)*.5)).rgb;}else if(kind==6){let n=textureSample(src,samp,safe(uv+vec2f(px.x,0))).rgb+textureSample(src,samp,safe(uv-vec2f(px.x,0))).rgb+textureSample(src,samp,safe(uv+vec2f(0,px.y))).rgb+textureSample(src,samp,safe(uv-vec2f(0,px.y))).rgb;rgb+=(rgb*4.-n)*p(29);}else if(kind==7){let g=hash(floor(pos.xy/p(31))+vec2f(u.frameIndex))-.5;rgb+=g*p(30);}
+else if(kind==8){var b=vec3f(0);for(var i=1;i<=8;i++){let o=vec2f(f32(i)*p(42),0)*px;let c=textureSample(src,samp,safe(uv+o)).rgb+textureSample(src,samp,safe(uv-o)).rgb;b+=max(c-vec3f(p(43)),vec3f(0));}rgb+=b/16.*vec3f(1,.25,.05)*p(41);}
+else if(kind==9||kind==10){var b=vec3f(0);for(var i=0;i<32;i++){let blades=max(p(52),2.);let a=select(p(47),6.2831853*f32(i%i32(blades))/blades,kind==10);let o=vec2f(cos(a),sin(a))*f32(i/4)*select(p(46),p(51),kind==10)*px;let c=textureSample(src,samp,safe(uv+o)).rgb;b+=max(c-vec3f(select(p(48),p(53),kind==10)),vec3f(0));}rgb+=b/32.*select(p(45),p(50),kind==10);}
+else if(kind==11){let dirt=smoothstep(.72,.98,hash(floor(uv*p(56)*23.)))+smoothstep(.8,1.,sin((uv.x+uv.y)*p(56)*40.)*.5+.5);rgb+=rgb*smoothstep(p(57),p(57)+.2,luma(rgb))*dirt*p(55);}
+else if(kind==12){var g=vec3f(0);for(var i=1;i<=8;i++){if(f32(i)<=p(60)){let q=.5-(uv-.5)*(f32(i)*p(61));g+=textureSample(src,samp,safe(q)).rgb;}}rgb+=g/max(p(60),1.)*p(59);}
+else if(kind==13){var b=vec3f(0);let n=u32(p(65));for(var i=0u;i<32u;i++){if(i<n){let r=sqrt((f32(i)+.5)/f32(n))*p(64);let a=f32(i)*2.399963;let q=uv+vec2f(cos(a),sin(a))*r*px;let c=textureSample(src,samp,safe(q)).rgb;b+=c*smoothstep(p(67),p(67)+.2,luma(c));}}rgb+=b/max(f32(n),1.)*p(63);}
+else if(kind==14){let q=uv+vec2f(sin(u.time*p(70)*17.),cos(u.time*p(70)*13.))*p(69)*px;rgb=textureSample(src,samp,safe(q)).rgb;}
+else if(kind==15){let h=hash(floor(pos.xy/vec2f(5,19))+vec2f(u.frameIndex));let dust=step(1.-p(73)*.02,h);let scratch=step(1.-p(74)*.01,hash(vec2f(floor(pos.x),floor(u.time*12.))));rgb=(rgb+vec3f(dust-scratch))*mix(1.,.8+hash(vec2f(u.frameIndex,3.))*.4,p(75))*p(72)+rgb*(1.-p(72));}
+else if(kind>=16&&kind<=18){var b=vec3f(0);let n=u32(select(select(p(78),p(81),kind==17),p(85),kind==18));for(var i=0u;i<32u;i++){if(i<n){let t=(f32(i)/max(f32(n-1u),1.)-.5);var q=uv;if(kind==16){q=.5+(uv-.5)*(1.+t*p(77));}else if(kind==17){let a=t*p(80);let c=cos(a);let s=sin(a);let d=uv-.5;q=.5+vec2f(c*d.x-s*d.y,s*d.x+c*d.y);}else{q+=vec2f(cos(p(84)),sin(p(84)))*t*p(83)*px;}b+=textureSample(src,samp,safe(q)).rgb;}}rgb=b/max(f32(n),1.);}
+else if(kind==19){rgb=textureSample(src,samp,safe(uv+vec2f(sin(uv.y*30.+u.time*p(88))*p(87),0))).rgb;}
+else if(kind==20){let w=vec2f(sin(uv.y*p(91)+u.time*p(92)),cos(uv.x*p(91)*.7+u.time*p(92)))*p(90);rgb=textureSample(src,samp,safe(uv+w)).rgb;}
+else if(kind==21){let d=vec2f(cos(p(95)),sin(p(95)))*p(94)*px;rgb=vec3f(textureSample(src,samp,safe(uv+d)).r,rgb.g,textureSample(src,samp,safe(uv-d)).b);}
+else if(kind==22){let d=uv-.5;let seg=6.2831853/p(98);let a=abs(fract((atan2(d.y,d.x)+seg*.5)/seg)*seg-seg*.5);let q=.5+length(d)*vec2f(cos(a),sin(a));rgb=mix(rgb,textureSample(src,samp,safe(q)).rgb,p(97));}
+else if(kind==23){let bs=p(101);let block=floor(pos.xy/bs);let shift=(hash(block+vec2f(u.frameIndex))-.5)*p(100)*.2;let q=safe(uv+vec2f(shift,0));let current=textureSample(src,samp,q).rgb;let previous=textureSample(history,samp,q).rgb;rgb=mix(current,previous,clamp(p(100),0.,1.));}
+else{let line=floor(pos.y);let tear=(hash(vec2f(line,floor(u.time*p(105))))-.5)*step(.92,hash(vec2f(line,7.)));let shift=(sin(uv.y*p(104)+u.time*p(105))+tear)*p(103);rgb=textureSample(src,samp,safe(uv+vec2f(shift,0))).rgb;}return vec4f(rgb,1.);}`;
+export const PRESENT_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `@group(0) @binding(1) var src:texture_2d<f32>;@group(0) @binding(2) var samp:sampler;@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f{return vec4f(textureSample(src,samp,pos.xy/u.resolution).rgb,1.);}`;
+export const COLOUR_EFFECT_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1)var src:texture_2d<f32>;@group(0) @binding(2)var samp:sampler;
+fn p(i:u32)->f32{return u.post[i/4u][i%4u];} fn lum(c:vec3f)->f32{return dot(c,vec3f(.2126,.7152,.0722));} fn aces(x:vec3f)->vec3f{return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),vec3f(0),vec3f(1));} fn agx(x:vec3f)->vec3f{let y=clamp((log2(max(x,vec3f(1e-6)))+10.)/16.,vec3f(0),vec3f(1));return y*y*(3.-2.*y);}
+@fragment fn fs(@builtin(position)pos:vec4f)->@location(0)vec4f{let uv=pos.xy/u.resolution;var c=textureSample(src,samp,uv).rgb;let k=i32(u.blurRadii[1].z);
+if(k==0){c=pow(max(c+vec3f(p(0),p(1),p(2)),vec3f(0)),1./max(vec3f(p(3),p(4),p(5)),vec3f(.001)))*vec3f(p(6),p(7),p(8));}
+else if(k==1){let l=lum(c);let sw=1.-smoothstep(.2,.55,l);let hw=smoothstep(.45,.8,l);let mw=max(0.,1.-sw-hw);c+=vec3f(p(0),p(1),p(2))*sw+vec3f(p(3),p(4),p(5))*mw+vec3f(p(6),p(7),p(8))*hw;c*=exp2(p(9));}
+else if(k==2){c=mat3x3f(p(0),p(3),p(6),p(1),p(4),p(7),p(2),p(5),p(8))*c+vec3f(p(9),p(10),p(11));}
+else if(k==3){let l=lum(c);c+=vec3f(p(0),p(1),p(2))*(1.-smoothstep(.2,.5,l))+vec3f(p(3),p(4),p(5))*(1.-abs(l-.5)*2.)+vec3f(p(6),p(7),p(8))*smoothstep(.5,.8,l);}
+else if(k==4){let mx=max(c.r,max(c.g,c.b));let mn=min(c.r,min(c.g,c.b));let sat=mx-mn;var range=8u;if(mx==c.r&&sat>.05){range=0u;}else if(mx==c.g&&sat>.05){range=2u;}else if(mx==c.b&&sat>.05){range=4u;}else if(lum(c)>.75){range=6u;}else if(lum(c)>.25){range=7u;}let q=range*4u;c=c*(1.-vec3f(p(q),p(q+1u),p(q+2u)))-vec3f(p(q+3u));}
+else if(k==6){let n=max(p(0),2.);c=round(clamp(c,vec3f(0),vec3f(1))*(n-1.))/(n-1.);}else if(k==7){c=mix(c,1.-c,vec3f(c>=vec3f(p(1)))*p(0));}
+else if(k==8){let levels=max(p(0),2.);var n:f32;if(p(2)<.5){let b=array<f32,16>(0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);n=b[(u32(pos.x)&3u)+(u32(pos.y)&3u)*4u]/16.-.5;}else if(p(2)<1.5){n=fract(sin(dot(floor(pos.xy),vec2f(12.9898,78.233)))*43758.5453)-.5;}else{n=fract(sin(dot(floor(pos.xy)+vec2f(f32(u32(pos.y)&1u)*.37,0),vec2f(91.7,17.3)))*41371.1)-.5;}c=round(clamp(c+n*p(1)/levels,vec3f(0),vec3f(1))*(levels-1.))/(levels-1.);}
+else if(k==9){if(p(3)<.5){}else if(p(3)<1.5){c=c/(1.+c);}else if(p(3)<2.5){c=aces(c);}else if(p(3)<3.5){c=agx(c);}else{c=pow(max(c*p(0),vec3f(0)),vec3f(1./max(p(1),.01)));c=c/(vec3f(p(2))+c);}}
+else if(k==10){c*=exp2(p(0));let t=(p(1)-6500.)/2000.;c*=vec3f(1.+t*.08,1.,1.-t*.08);c+=vec3f(p(2)*.25,p(2)*.5,-p(2)*.25);c=(c-.5)*(1.+p(3))+.5;let l=lum(c);let range=clamp(max(c.r,max(c.g,c.b))-min(c.r,min(c.g,c.b)),0.,1.);c=mix(vec3f(l),c,1.+p(4)+p(5)*(1.-range));c+=p(6)*(1.-smoothstep(0.,.5,l))+p(7)*smoothstep(.5,1.,l);}return vec4f(c,1);}`;
+export const COLOUR_KIND_INDEX = Object.fromEntries(RGB_COLOUR_KINDS.map((x, i) => [x, i])) as Record<
+    RgbColourEffect['type'],
+    number
+>;
+export const LUT_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1)var src:texture_2d<f32>;@group(0) @binding(2)var samp:sampler;@group(0) @binding(3)var cube:texture_3d<f32>;
+fn p(i:u32)->f32{return u.post[i/4u][i%4u];}
+@fragment fn fs(@builtin(position)pos:vec4f)->@location(0)vec4f{let uv=pos.xy/u.resolution;let source=textureSample(src,samp,uv).rgb;let domainMin=vec3f(p(0),p(1),p(2));let domainMax=vec3f(p(3),p(4),p(5));let coordinate=clamp((source-domainMin)/(domainMax-domainMin),vec3f(0),vec3f(1));let mapped=textureSample(cube,samp,coordinate).rgb;return vec4f(mix(source,mapped,clamp(p(6),0.,1.)),1);}`;
+export function cubeRgba16Data(data: Float32Array) {
+    const result = new Uint16Array((data.length / 3) * 4),
+        bits = new Uint32Array(1),
+        float = new Float32Array(bits.buffer);
+    const half = (value: number) => {
+        float[0] = Number.isFinite(value) ? value : 0;
+        const x = bits[0],
+            sign = (x >>> 16) & 0x8000,
+            exponent = ((x >>> 23) & 255) - 112;
+        return exponent <= 0 ? sign : exponent >= 31 ? sign | 0x7c00 : sign | (exponent << 10) | ((x >>> 13) & 0x3ff);
+    };
+    for (let i = 0, j = 0; i < data.length; i += 3, j += 4) {
+        result[j] = half(data[i]);
+        result[j + 1] = half(data[i + 1]);
+        result[j + 2] = half(data[i + 2]);
+        result[j + 3] = 0x3c00;
+    }
+    return result;
+}
+export const POST_KIND_INDEX: Record<PostEffectKind, number> = {
+    'god-rays': 0,
+    bloom: 1,
+    glow: 2,
+    'chromatic-aberration': 3,
+    vignette: 4,
+    'lens-distortion': 5,
+    sharpen: 6,
+    'film-grain': 7,
+    halation: 8,
+    'anamorphic-streaks': 9,
+    'diffraction-starburst': 10,
+    'lens-dirt': 11,
+    'lens-ghosts': 12,
+    'bokeh-bloom': 13,
+    'gate-weave': 14,
+    'film-damage': 15,
+    'radial-blur': 16,
+    'spin-blur': 17,
+    'directional-blur': 18,
+    'rolling-shutter': 19,
+    'heat-haze': 20,
+    'prism-dispersion': 21,
+    kaleidoscope: 22,
+    datamosh: 23,
+    'scanline-displacement': 24,
+};
+
 export class AtmosphereRenderer {
     private device?: GPUDevice;
     private context: GPUCanvasContext | null = null;
@@ -661,6 +843,11 @@ export class AtmosphereRenderer {
     private adjustmentTexture?: GPUTexture;
     private adjustmentView?: GPUTextureView;
     private adjustmentsKey = '';
+    private lutTextures = new Map<string, { texture: GPUTexture; view: GPUTextureView; asset: CubeLut }>();
+    private historyTexture?: GPUTexture;
+    private historyView?: GPUTextureView;
+    private historyValid = false;
+    private datamoshWasActive = false;
     private buffers: GPUBuffer[] = [];
     private bindGroups = new Map<string, GPUBindGroup>();
     private observer: ResizeObserver;
@@ -734,6 +921,11 @@ export class AtmosphereRenderer {
             make(BLOOM_EXTRACT_SHADER_SOURCE, BLOOM_TEXTURE_FORMAT),
             make(BLOOM_BLUR_SHADER_SOURCE, BLOOM_TEXTURE_FORMAT),
             make(GOD_RAYS_SHADER_SOURCE, GOD_RAYS_TEXTURE_FORMAT),
+            make(MATERIALIZE_SHADER_SOURCE, 'rgba16float'),
+            make(POST_EFFECT_SHADER_SOURCE, 'rgba16float'),
+            make(PRESENT_SHADER_SOURCE, format),
+            make(COLOUR_EFFECT_SHADER_SOURCE, 'rgba16float'),
+            make(LUT_SHADER_SOURCE, 'rgba16float'),
         ]);
         self.buffers = Array.from({ length: MAX_RENDER_PASSES }, () =>
             self.device!.createBuffer({
@@ -749,6 +941,7 @@ export class AtmosphereRenderer {
         });
         self.adjustmentView = self.adjustmentTexture.createView();
         self.updateAdjustmentLut();
+        self.updateCubeLuts();
         if (gpuTimingSupported) {
             self.querySet = self.device.createQuerySet({ type: 'timestamp', count: GPU_QUERY_COUNT });
             const size = GPU_QUERY_COUNT * BigUint64Array.BYTES_PER_ELEMENT;
@@ -782,47 +975,57 @@ export class AtmosphereRenderer {
     private recreateTargets() {
         if (!this.device) return;
         this.textures.forEach((texture) => texture.destroy());
+        this.historyTexture?.destroy();
         this.textureViews = [];
         this.bindGroups.clear();
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
-        // Two full-resolution targets ping-pong through each octave's blur and effect passes.
+        // Scalar field ping-pong, followed by non-aliasing RGBA16F colour/post ping-pong.
         const size = scaledSize(this.canvas.width, this.canvas.height, this.options.renderScale);
-        this.textures = Array.from({ length: 2 }, () => {
-            return this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage });
-        });
-        const bloomSize = scaledSize(size.width, size.height, 0.25);
-        this.textures.push(
+        this.textures = [
+            ...Array.from({ length: 2 }, () =>
+                this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage }),
+            ),
             ...Array.from({ length: 2 }, () =>
                 this.device!.createTexture({
-                    size: [bloomSize.width, bloomSize.height],
-                    format: BLOOM_TEXTURE_FORMAT,
-                    usage,
+                    size: [size.width, size.height],
+                    format: 'rgba16float',
+                    usage: usage | GPUTextureUsage.COPY_SRC,
                 }),
             ),
-        );
-        // A single quarter-resolution RGBA gather target preserves the Zoom Blur's source colors.
-        this.textures.push(
-            this.device.createTexture({
-                size: [bloomSize.width, bloomSize.height],
-                format: GOD_RAYS_TEXTURE_FORMAT,
-                usage,
-            }),
-        );
+        ];
         this.textureViews = this.textures.map((texture) => texture.createView());
+        this.historyTexture = this.device.createTexture({
+            size: [size.width, size.height],
+            format: 'rgba16float',
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        });
+        this.historyView = this.historyTexture.createView();
+        this.historyValid = false;
     }
     setOptions(options: RenderOptions) {
         const changed = this.options.renderScale !== options.renderScale;
+        const resetHistory =
+            this.options.seed !== options.seed || (datamoshIsActive(options.parameters) && !this.datamoshWasActive);
         this.options = options;
+        this.datamoshWasActive = datamoshIsActive(options.parameters);
         this.updateAdjustmentLut();
+        this.updateCubeLuts();
         if (changed) this.recreateTargets();
+        else if (resetHistory) {
+            this.historyValid = false;
+            this.bindGroups.clear();
+        }
         this.invalidate();
     }
     private updateAdjustmentLut() {
         if (!this.device || !this.adjustmentTexture) return;
-        const key = JSON.stringify(this.options.adjustments);
+        const adjustments = this.options.colour.filter((x): x is Adjustment =>
+            ['curve', 'levels', 'hsl'].includes(x.type),
+        );
+        const key = JSON.stringify(adjustments);
         if (key === this.adjustmentsKey) return;
         this.adjustmentsKey = key;
-        const lut = composeAdjustmentLut(this.options.adjustments);
+        const lut = composeAdjustmentLut(adjustments);
         // Copy into an ArrayBuffer-backed view (WebGPU deliberately rejects SharedArrayBuffer views).
         const upload = new Uint16Array(new ArrayBuffer(lut.byteLength));
         upload.set(lut);
@@ -832,6 +1035,32 @@ export class AtmosphereRenderer {
             { bytesPerRow: ADJUSTMENT_LUT_SIZE * 4 * 2 },
             [ADJUSTMENT_LUT_SIZE, 1],
         );
+    }
+    private updateCubeLuts() {
+        if (!this.device) return;
+        const assets = this.options.lutAssets ?? {};
+        for (const [id, r] of this.lutTextures)
+            if (assets[id] !== r.asset) {
+                r.texture.destroy();
+                this.lutTextures.delete(id);
+            }
+        for (const [id, asset] of Object.entries(assets)) {
+            if (this.lutTextures.has(id)) continue;
+            const texture = this.device.createTexture({
+                dimension: '3d',
+                size: [asset.size, asset.size, asset.size],
+                format: 'rgba16float',
+                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+            });
+            this.device.queue.writeTexture(
+                { texture },
+                cubeRgba16Data(asset.data),
+                { bytesPerRow: asset.size * 8, rowsPerImage: asset.size },
+                [asset.size, asset.size, asset.size],
+            );
+            this.lutTextures.set(id, { texture, view: texture.createView({ dimension: '3d' }), asset });
+        }
+        this.bindGroups.clear();
     }
     setPaused(value: boolean) {
         this.paused = value;
@@ -883,9 +1112,9 @@ export class AtmosphereRenderer {
             !c ||
             buffers.length < MAX_RENDER_PASSES ||
             !s ||
-            this.pipelines.length < 7 ||
-            this.textures.length < 5 ||
-            this.textureViews.length < 5
+            this.pipelines.length < 12 ||
+            this.textures.length < 4 ||
+            this.textureViews.length < 4
         )
             return;
         const enc = d.createCommandEncoder();
@@ -908,19 +1137,22 @@ export class AtmosphereRenderer {
             sourceTextureIndex?: number,
             usesSampler = false,
             gpuLabel = '',
+            lutId?: string,
         ) => {
             const uniformSlot = passIndex++;
             const buffer = buffers[uniformSlot];
             d.queue.writeBuffer(buffer, 0, data);
             const pipeline = this.pipelines[pipelineIndex];
-            const cacheKey = bindGroupCacheKey(pipelineIndex, sourceTextureIndex, uniformSlot);
+            const cacheKey = `${bindGroupCacheKey(pipelineIndex, sourceTextureIndex, uniformSlot)}:${lutId ?? ''}`;
             let bindGroup = this.bindGroups.get(cacheKey);
             if (!bindGroup) {
                 const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer } }];
                 if (sourceTextureIndex !== undefined) {
                     entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
                     if (usesSampler) entries.push({ binding: 2, resource: s });
-                    if (pipelineIndex === 3) {
+                    if (pipelineIndex === 7) {
+                        entries.push({ binding: 3, resource: this.adjustmentView! });
+                    } else if (pipelineIndex === 3) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
                         entries.push({ binding: 4, resource: this.textureViews[3] });
                         entries.push({ binding: 5, resource: this.textureViews[4] });
@@ -929,6 +1161,10 @@ export class AtmosphereRenderer {
                         entries.push({ binding: 4, resource: this.textureViews[4] });
                     } else if (pipelineIndex === 6) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
+                    } else if (pipelineIndex === 8) {
+                        entries.push({ binding: 3, resource: this.historyView! });
+                    } else if (pipelineIndex === 11 && lutId) {
+                        entries.push({ binding: 3, resource: this.lutTextures.get(lutId)!.view });
                     }
                 }
                 bindGroup = d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
@@ -970,29 +1206,79 @@ export class AtmosphereRenderer {
                 current = scratch;
             }
         }
+        data[0] = this.textures[2].width;
+        data[1] = this.textures[2].height;
+        draw(this.textureViews[2], 7, current, true, 'colour-materialize');
+        let rgbaCurrent = 2;
+        for (const effect of this.options.colour) {
+            if (!effect.enabled || (isRgbColour(effect) && isNeutralRgb(effect))) continue;
+            let values: number[];
+            let kind: number;
+            if (isRgbColour(effect)) {
+                if (effect.type === 'lut') {
+                    const lut = effect.assetId && this.lutTextures.get(effect.assetId);
+                    if (!lut) continue;
+                    data.fill(0, 60, UNIFORM_FLOATS);
+                    data.set([...lut.asset.domainMin, ...lut.asset.domainMax, effect.values[0]], 60);
+                    const destination = rgbaCurrent === 2 ? 3 : 2;
+                    draw(
+                        this.textureViews[destination],
+                        11,
+                        rgbaCurrent,
+                        true,
+                        `colour:${effect.type}`,
+                        effect.assetId,
+                    );
+                    rgbaCurrent = destination;
+                    continue;
+                }
+                values = effect.values;
+                kind = COLOUR_KIND_INDEX[effect.type];
+                if (effect.type === 'dither')
+                    values = [...values, effect.mode === 'bayer' ? 0 : effect.mode === 'blue-noise' ? 1 : 2];
+                if (effect.type === 'tone-mapping')
+                    values = [...values, ['none', 'reinhard', 'aces', 'agx', 'custom'].indexOf(effect.mode ?? 'none')];
+            } else if (effect.type === 'colour-grade') {
+                values = [
+                    this.options.parameters.exposure,
+                    this.options.parameters.temperature,
+                    this.options.parameters.tint,
+                    this.options.parameters.contrast,
+                    this.options.parameters.saturation,
+                    this.options.parameters.vibrance,
+                    this.options.parameters.shadows,
+                    this.options.parameters.highlights,
+                ];
+                kind = 10;
+            } else continue;
+            data.fill(0, 60, UNIFORM_FLOATS);
+            data.set(values.slice(0, 40), 60);
+            data[58] = kind;
+            const destination = rgbaCurrent === 2 ? 3 : 2;
+            draw(this.textureViews[destination], 10, rgbaCurrent, true, `colour:${effect.type}`);
+            rgbaCurrent = destination;
+        }
+        data.set(
+            POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
+            60,
+        );
+        for (const effect of postRendererPlan(this.options.post, this.options.parameters)) {
+            if (effect.kind === 'datamosh' && !this.historyValid) continue;
+            const destination = rgbaCurrent === 2 ? 3 : 2;
+            data[58] = POST_KIND_INDEX[effect.kind];
+            draw(this.textureViews[destination], 8, rgbaCurrent, true, `post:${effect.kind}`);
+            rgbaCurrent = destination;
+        }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        data[59] = this.options.adjustments.some((adjustment) => adjustment.enabled) ? 1 : 0;
-        const p = this.options.parameters;
-        const godRaysActive = godRaysIsActive(p);
-        if (godRaysActive) {
-            data[0] = this.textures[4].width;
-            data[1] = this.textures[4].height;
-            draw(this.textureViews[4], 6, current, true, 'god-rays');
-            data[0] = this.canvas.width;
-            data[1] = this.canvas.height;
+        draw(c.getCurrentTexture().createView(), 9, rgbaCurrent, true, 'display');
+        if (!this.paused && this.historyTexture) {
+            enc.copyTextureToTexture({ texture: this.textures[rgbaCurrent] }, { texture: this.historyTexture }, [
+                this.textures[rgbaCurrent].width,
+                this.textures[rgbaCurrent].height,
+            ]);
+            this.historyValid = true;
         }
-        const bloomActive =
-            (p.bloomEnabled >= 0.5 && p.bloomIntensity !== 0) || (p.glowEnabled >= 0.5 && p.glowIntensity !== 0);
-        if (bloomActive) {
-            data[0] = this.textures[2].width;
-            data[1] = this.textures[2].height;
-            draw(this.textureViews[2], 4, current, true, 'bloom-extract');
-            draw(this.textureViews[3], 5, 2, true, 'bloom-blur');
-            data[0] = this.canvas.width;
-            data[1] = this.canvas.height;
-        }
-        draw(c.getCurrentTexture().createView(), 3, current, true, 'display');
         if (sampleGpu) {
             const bytes = gpuLabels!.length * 16;
             enc.resolveQuerySet(this.querySet!, 0, gpuLabels!.length * 2, this.queryResolveBuffer!, 0);
@@ -1029,6 +1315,8 @@ export class AtmosphereRenderer {
         this.observer.disconnect();
         this.textures.forEach((texture) => texture.destroy());
         this.adjustmentTexture?.destroy();
+        this.lutTextures.forEach(({ texture }) => texture.destroy());
+        this.historyTexture?.destroy();
         this.textureViews = [];
         this.bindGroups.clear();
         this.buffers.forEach((buffer) => buffer.destroy());
