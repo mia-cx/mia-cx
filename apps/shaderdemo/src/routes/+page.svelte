@@ -106,10 +106,10 @@
         {
             label: 'Lens / camera',
             keys: [
+                'lensDistortion',
                 'chromaticAberration',
                 'vignetteAmount',
                 'vignetteSoftness',
-                'lensDistortion',
                 'sharpen',
                 'filmGrainAmount',
                 'filmGrainSize',

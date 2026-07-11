@@ -488,7 +488,7 @@ fn adjusted(v:f32)->vec3f {
 fn sourceValue(uv:vec2f)->f32 { return pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); }
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f {
  var uv=pos.xy/u.resolution; let centered=uv*2.-1.;
- if(u.post[5].x!=0.) { uv=.5+centered*(1.+u.post[5].x*dot(centered,centered))*.5; }
+ if(u.post[5].x!=0.) { let distortion=u.post[5].x; let fit=1.+2.*max(distortion,0.); uv=.5+centered*((1.+distortion*dot(centered,centered))/fit)*.5; }
  var f=sourceValue(uv);
  if(u.post[5].y!=0.) { let px=1./u.resolution; let n=sourceValue(uv+vec2f(px.x,0))+sourceValue(uv-vec2f(px.x,0))+sourceValue(uv+vec2f(0,px.y))+sourceValue(uv-vec2f(0,px.y)); f+=(f*4.-n)*u.post[5].y; }
  var rgb=adjusted(f); let ca=u.post[4].y/u.resolution.x;

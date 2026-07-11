@@ -38,6 +38,8 @@ describe('field configuration', () => {
         expect(DISPLAY_SHADER_SOURCE).toContain('mix(textureLoad');
         expect(DISPLAY_SHADER_SOURCE).toContain('adjusted(sourceValue(uv+dir)).r');
         expect(DISPLAY_SHADER_SOURCE).toContain('adjusted(sourceValue(uv-dir)).b');
+        expect(DISPLAY_SHADER_SOURCE).toContain('let fit=1.+2.*max(distortion,0.)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('(1.+distortion*dot(centered,centered))/fit');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('f*255');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('/255.');
         expect(DISPLAY_SHADER_SOURCE).toContain('if(u.blurRadii[1].w<=.5)');
