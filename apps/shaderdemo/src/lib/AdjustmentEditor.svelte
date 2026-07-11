@@ -33,6 +33,8 @@
 {#if adjustment.type === 'curve'}
     <CurveEditor
         points={adjustment.channels[channel]}
+        channels={adjustment.channels}
+        {channelMask}
         onedit={(edit) => onchange(applyCurveEditToChannels(adjustment, channelMask, edit))}
     />
 {:else}
@@ -77,6 +79,15 @@
         gap: 3px;
         color: #aaa;
         text-transform: none;
+    }
+    .channels label:nth-child(1) {
+        color: #ff7777;
+    }
+    .channels label:nth-child(2) {
+        color: #77ff91;
+    }
+    .channels label:nth-child(3) {
+        color: #8298ff;
     }
     .parameter {
         display: grid;

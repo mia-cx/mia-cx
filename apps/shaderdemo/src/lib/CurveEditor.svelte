@@ -1,11 +1,27 @@
 <script lang="ts">
-    import { curveLut, MAX_CURVE_POINTS, type CurveEdit, type CurvePoint } from './adjustments';
+    import {
+        CHANNELS,
+        curveLut,
+        MAX_CURVE_POINTS,
+        type Channel,
+        type CurveChannels,
+        type CurveEdit,
+        type CurvePoint,
+    } from './adjustments';
     export let points: CurvePoint[];
+    export let channels: CurveChannels;
+    export let channelMask: Channel[];
     export let onedit: (edit: CurveEdit) => void;
     let selected = 0;
     let graph: SVGSVGElement;
     $: selected = Math.min(selected, points.length - 1);
-    $: path = Array.from(curveLut(points), (y, x) => `${x},${255 - y}`).join(' ');
+    $: channelPaths = Object.fromEntries(
+        CHANNELS.map((channel) => [
+            channel,
+            Array.from(curveLut(channels[channel]), (y, x) => `${x},${255 - y}`).join(' '),
+        ]),
+    ) as Record<Channel, string>;
+    $: primaryChannel = CHANNELS.find((channel) => channels[channel] === points) ?? channelMask[0];
 
     function commit(index: number, x: number, y: number) {
         const old = points[index];
@@ -78,7 +94,25 @@
     <rect width="255" height="255" />
     {#each [51, 102, 153, 204] as n}<path class="grid" d={`M${n} 0V255M0 ${n}H255`} />{/each}
     <path class="identity" d="M0 255L255 0" />
-    <polyline points={path} />
+    {#each CHANNELS as channel}
+        <polyline
+            class="channel channel-{channel}"
+            class:checked={channelMask.includes(channel)}
+            class:primary={channel === primaryChannel}
+            points={channelPaths[channel]}
+        />
+        {#if channel !== primaryChannel}
+            {#each channels[channel] as point}
+                <circle
+                    class="channel-point channel-{channel}"
+                    class:checked={channelMask.includes(channel)}
+                    cx={point.x}
+                    cy={255 - point.y}
+                    r="2.5"
+                />
+            {/each}
+        {/if}
+    {/each}
     {#each points as point, index}
         <!-- Selection and keyboard editing are provided by the focusable graph. -->
         <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
@@ -141,10 +175,35 @@
         stroke: #ffffff35;
         stroke-width: 1;
     }
-    polyline {
+    .channel {
         fill: none;
-        stroke: #eee;
-        stroke-width: 2;
+        stroke-width: 1.5;
+        opacity: 0.25;
+    }
+    .channel.checked {
+        opacity: 0.85;
+    }
+    .channel.primary {
+        stroke-width: 2.5;
+        opacity: 1;
+    }
+    .channel-r {
+        stroke: #ff5d5d;
+    }
+    .channel-g {
+        stroke: #5dff81;
+    }
+    .channel-b {
+        stroke: #6d8cff;
+    }
+    .channel-point {
+        fill: #111;
+        stroke-width: 1.5;
+        opacity: 0.25;
+        pointer-events: none;
+    }
+    .channel-point.checked {
+        opacity: 0.85;
     }
     circle {
         fill: #111;
