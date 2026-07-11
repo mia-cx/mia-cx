@@ -6,6 +6,7 @@
         OCTAVE_PARAMETER_SCHEMA,
         OCTAVE_PIXELATE_SCHEMA,
         defaultParameters,
+        type ParameterKey,
         type RenderOptions,
     } from '$lib/renderer';
     import { normalizeSavedSettings, shaderSettings } from '$lib/settings';
@@ -27,6 +28,28 @@
         { id: 'octaves', label: 'Octaves' },
     ] as const;
     let selectedTabId: (typeof parameterTabs)[number]['id'] = 'field';
+    const fieldGroups: { label: string; keys: ParameterKey[]; toggle?: ParameterKey }[] = [
+        {
+            label: 'Base generator',
+            keys: [
+                'fieldScale',
+                'flowStretch',
+                'billowAmount',
+                'ridgeAmount',
+                'ridgeSharpness',
+                'warpScale',
+                'warpStrength',
+            ],
+        },
+        { label: 'Secondary detail', toggle: 'secondaryEnabled', keys: ['secondaryScale', 'secondaryMix'] },
+        { label: 'Tertiary detail', toggle: 'tertiaryEnabled', keys: ['tertiaryScale', 'tertiaryAmount'] },
+        { label: 'Field shaping', keys: ['threshold', 'thresholdSoftness', 'finalContrast'] },
+        {
+            label: 'Center attenuation',
+            keys: ['centerDarkness', 'centerWidth', 'centerHeight', 'centerRoundness', 'centerSoftness'],
+        },
+        { label: 'Motion', keys: ['animationSpeed'] },
+    ];
 
     function tabKeydown(event: KeyboardEvent) {
         if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
@@ -113,20 +136,42 @@
                     </div>
                     {#if selectedTabId === 'field'}
                         <div class="sliders" id="panel-field" role="tabpanel" aria-labelledby="tab-field">
-                            {#each FIELD_PARAMETER_SCHEMA as parameter}
-                                <label class="parameter">
-                                    <span>{parameter.label}</span><output
-                                        >{options.parameters[parameter.key].toFixed(2)}</output
-                                    >
-                                    <input
-                                        type="range"
-                                        min={parameter.min}
-                                        max={parameter.max}
-                                        step={parameter.step}
-                                        bind:value={options.parameters[parameter.key]}
-                                        oninput={update}
-                                    />
-                                </label>
+                            {#each fieldGroups as group}
+                                <section class="field-group">
+                                    <div class="group-heading">
+                                        <span>{group.label}</span>
+                                        {#if group.toggle}
+                                            <label class="enabled">
+                                                <span>Enabled</span>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={options.parameters[group.toggle] >= 0.5}
+                                                    onchange={(event) => {
+                                                        options.parameters[group.toggle!] = event.currentTarget.checked
+                                                            ? 1
+                                                            : 0;
+                                                        update();
+                                                    }}
+                                                />
+                                            </label>
+                                        {/if}
+                                    </div>
+                                    {#each FIELD_PARAMETER_SCHEMA.filter( ({ key }) => group.keys.includes(key), ) as parameter}
+                                        <label class="parameter">
+                                            <span>{parameter.label}</span><output
+                                                >{options.parameters[parameter.key].toFixed(2)}</output
+                                            >
+                                            <input
+                                                type="range"
+                                                min={parameter.min}
+                                                max={parameter.max}
+                                                step={parameter.step}
+                                                bind:value={options.parameters[parameter.key]}
+                                                oninput={update}
+                                            />
+                                        </label>
+                                    {/each}
+                                </section>
                             {/each}
                         </div>
                     {:else}
@@ -301,6 +346,25 @@
         cursor: default;
         letter-spacing: 0.03em;
         text-transform: none;
+    }
+    .field-group {
+        display: grid;
+        gap: 7px;
+        padding: 8px 0 2px;
+    }
+    .field-group + .field-group {
+        border-top: 1px solid #ffffff20;
+    }
+    .group-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: #aaa;
+    }
+    .controls .enabled {
+        color: #ddd;
+        text-transform: none;
+        letter-spacing: 0.03em;
     }
     .octave {
         display: grid;

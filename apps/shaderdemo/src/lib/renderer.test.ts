@@ -41,12 +41,12 @@ describe('field configuration', () => {
         expect(advanceSimulationTime(12, 0.5, 3)).toBe(13.5);
     });
     it('defines seven independent groups of four valid controls', () => {
-        expect(FIELD_PARAMETER_SCHEMA).toHaveLength(18);
+        expect(FIELD_PARAMETER_SCHEMA).toHaveLength(22);
         expect(OCTAVE_PARAMETER_SCHEMA).toHaveLength(7);
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(7);
-        expect(PARAMETER_SCHEMA).toHaveLength(53);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(53);
+        expect(PARAMETER_SCHEMA).toHaveLength(57);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(57);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -55,6 +55,14 @@ describe('field configuration', () => {
             expect(defaultParameters()[parameter.key]).toBe(parameter.default);
         }
         expect(defaultParameters().centerDarkness).toBe(0);
+        expect(defaultParameters()).toMatchObject({
+            secondaryEnabled: 1,
+            secondaryScale: 1.1,
+            secondaryMix: 1,
+            tertiaryEnabled: 1,
+            tertiaryScale: 2.035,
+            tertiaryAmount: 0.35,
+        });
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual(Array(7).fill(0));
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual(Array(7).fill(0));
         expect(OCTAVE_PIXELATE_SCHEMA.map(({ default: value }) => value)).toEqual(Array(7).fill(0));
@@ -65,10 +73,11 @@ describe('field configuration', () => {
         parameters.octave3Pixelate = 1;
         const data = packUniform([320, 180], 2, 9, parameters, 6);
         expect(data).toHaveLength(UNIFORM_FLOATS);
-        expect(data.byteLength).toBe(208);
-        expect(data[22]).toBe(6);
-        expect(data[23]).toBe(5);
-        expect(Array.from(data.slice(24, 28))).toEqual(
+        expect(data.byteLength).toBe(224);
+        expect(Array.from(data.slice(11, 17))).toEqual(Array.from(new Float32Array([1, 1.1, 1, 1, 2.035, 0.35])));
+        expect(data[26]).toBe(6);
+        expect(data[27]).toBe(5);
+        expect(Array.from(data.slice(28, 32))).toEqual(
             Array.from(
                 new Float32Array([
                     parameters.octave1Noise,
