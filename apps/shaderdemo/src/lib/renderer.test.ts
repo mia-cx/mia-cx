@@ -32,6 +32,8 @@ import defaultSettingsFixture from './default-settings.json';
 
 describe('field configuration', () => {
     it('samples Paint.NET Zoom Blur’s 64-step contraction path at bounded quarter-resolution taps', () => {
+        const distance = PARAMETER_SCHEMA.find(({ key }) => key === 'godRaysAmount');
+        expect(distance).toMatchObject({ label: 'Distance', min: -100, max: 100, default: 0 });
         expect(GOD_RAYS_SHADER_SOURCE).toContain('1.-u.post[2].z/16384.');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('pow(contraction,progress*64.)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('for(var i=0u;i<24u;i++)');
