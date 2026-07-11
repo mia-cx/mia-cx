@@ -621,11 +621,7 @@
                             {#each post as item, index (item.id)}
                                 {#if index === 0 || isLightingKind(item.type) !== isLightingKind(post[index - 1].type)}
                                     <div class="group-heading pipeline-stage">
-                                        <span
-                                            >{isLightingKind(item.type)
-                                                ? 'Lighting — after Colour'
-                                                : 'Post — before Octaves'}</span
-                                        >
+                                        <span>{isLightingKind(item.type) ? 'Lighting' : 'Post'}</span>
                                     </div>
                                 {/if}
                                 <PipelineItem
