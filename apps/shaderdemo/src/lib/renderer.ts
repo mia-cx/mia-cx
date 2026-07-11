@@ -31,7 +31,7 @@ export const FIELD_PARAMETER_SCHEMA = [
     { key: 'centerSoftness', label: 'Center softness', min: 0.01, max: 1.5, step: 0.01, default: 1.5 },
 ] as const;
 
-export const OCTAVE_COUNT = 7;
+export const OCTAVE_COUNT = 5;
 const noiseDefaults = Array<number>(OCTAVE_COUNT).fill(0);
 const distanceDefaults = Array<number>(OCTAVE_COUNT).fill(0);
 export const OCTAVE_PARAMETER_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, index) => {
@@ -99,13 +99,13 @@ export function octavePixelSizes() {
     return Array.from({ length: OCTAVE_COUNT }, (_, index) => 2 ** (OCTAVE_COUNT - 1 - index));
 }
 
-/** The base and seven octave stages all have the same full render dimensions. */
+/** The base and five octave effect stages all have the same full render dimensions. */
 export function fullResolutionPassSizes(width: number, height: number, renderScale: number) {
     const size = scaledSize(width, height, renderScale);
     return Array.from({ length: OCTAVE_COUNT + 1 }, () => ({ ...size }));
 }
 
-export const UNIFORM_FLOATS = 64;
+export const UNIFORM_FLOATS = 56;
 export function packUniform(
     resolution: [number, number],
     time: number,
@@ -144,7 +144,7 @@ struct U {
  animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
  centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32,
- octaves: array<vec4f, 7>
+ octaves: array<vec4f, 5>
 };
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -261,7 +261,25 @@ export const BASE_SHADER_SOURCE =
     return vec4f(fieldOutput,0.,0.,1.);
 }`;
 
-const octaveShader =
+export const BLUR_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
+@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let uv=pos.xy/u.resolution;
+    let sourceSize=vec2f(textureDimensions(src));
+    // A strongly centered cross gently joins detail inherited from the previous, coarser octave.
+    let octavePixelSize=exp2(4.-u.octaveIndex);
+    let offset=vec2f(octavePixelSize)/sourceSize;
+    var value=textureSample(src,samp,uv).r*.76;
+    value+=textureSample(src,samp,uv+vec2f(offset.x,0.)).r*.06;
+    value+=textureSample(src,samp,uv-vec2f(offset.x,0.)).r*.06;
+    value+=textureSample(src,samp,uv+vec2f(0.,offset.y)).r*.06;
+    value+=textureSample(src,samp,uv-vec2f(0.,offset.y)).r*.06;
+    return vec4f(value,0.,0.,1.);
+}`;
+
+export const OCTAVE_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
@@ -276,7 +294,7 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
     let sourceSize=vec2f(textureDimensions(src));
     let settings=u.octaves[u32(u.octaveIndex)];
     let pixel=floor(pos.xy);
-    let octavePixelSize=exp2(6.-u.octaveIndex);
+    let octavePixelSize=exp2(4.-u.octaveIndex);
     let tile=floor(pixel/octavePixelSize);
     let pixelationBit=floor(u.octavePixelationMask/exp2(u.octaveIndex))%2.;
     let tiledUv=(tile+.5)*octavePixelSize/sourceSize;
@@ -369,10 +387,11 @@ export class AtmosphereRenderer {
         };
         self.pipelines = await Promise.all([
             make(BASE_SHADER_SOURCE, 'r16float'),
-            make(octaveShader, 'r16float'),
+            make(BLUR_SHADER_SOURCE, 'r16float'),
+            make(OCTAVE_SHADER_SOURCE, 'r16float'),
             make(displayShader, format),
         ]);
-        self.buffers = Array.from({ length: 9 }, () =>
+        self.buffers = Array.from({ length: 2 * OCTAVE_COUNT + 2 }, () =>
             self.device!.createBuffer({
                 size: UNIFORM_FLOATS * 4,
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -401,7 +420,7 @@ export class AtmosphereRenderer {
         if (!this.device) return;
         this.textures.forEach((texture) => texture.destroy());
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
-        // Two full-resolution targets ping-pong through the base and all seven octave effects.
+        // Two full-resolution targets ping-pong through each octave's blur and effect passes.
         const size = scaledSize(this.canvas.width, this.canvas.height, this.options.renderScale);
         this.textures = Array.from({ length: 2 }, () => {
             return this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage });
@@ -444,7 +463,15 @@ export class AtmosphereRenderer {
             c = this.context,
             buffers = this.buffers,
             s = this.sampler;
-        if (!d || !c || buffers.length < 9 || !s || this.pipelines.length < 3 || this.textures.length < 2) return;
+        if (
+            !d ||
+            !c ||
+            buffers.length < 2 * OCTAVE_COUNT + 2 ||
+            !s ||
+            this.pipelines.length < 4 ||
+            this.textures.length < 2
+        )
+            return;
         const enc = d.createCommandEncoder();
         const data = packUniform(
             [this.textures[0].width, this.textures[0].height],
@@ -478,16 +505,17 @@ export class AtmosphereRenderer {
         };
         draw(this.textures[0].createView(), this.pipelines[0]);
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
-            const source = this.textures[octave % 2];
-            const target = this.textures[(octave + 1) % 2];
-            data[0] = target.width;
-            data[1] = target.height;
             data[34] = octave;
-            draw(target.createView(), this.pipelines[1], source, true);
+            data[0] = this.textures[1].width;
+            data[1] = this.textures[1].height;
+            draw(this.textures[1].createView(), this.pipelines[1], this.textures[0], true);
+            data[0] = this.textures[0].width;
+            data[1] = this.textures[0].height;
+            draw(this.textures[0].createView(), this.pipelines[2], this.textures[1], true);
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), this.pipelines[2], this.textures[OCTAVE_COUNT % 2], true);
+        draw(c.getCurrentTexture().createView(), this.pipelines[3], this.textures[0], true);
         d.queue.submit([enc.finish()]);
     }
     destroy() {

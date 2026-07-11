@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     BASE_SHADER_SOURCE,
+    BLUR_SHADER_SOURCE,
     COMMON_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
     OCTAVE_COUNT,
@@ -50,14 +51,14 @@ describe('field configuration', () => {
         expect(scaledSize(1202, 901, 0.5)).toEqual({ width: 601, height: 450 });
         expect(scaledSize(0, 0, 0.5)).toEqual({ width: 1, height: 1 });
     });
-    it('keeps the base and all seven octave stages full resolution', () => {
-        expect(OCTAVE_COUNT).toBe(7);
-        expect(octavePixelSizes()).toEqual([64, 32, 16, 8, 4, 2, 1]);
+    it('keeps the base and all five octave effect stages full resolution', () => {
+        expect(OCTAVE_COUNT).toBe(5);
+        expect(octavePixelSizes()).toEqual([16, 8, 4, 2, 1]);
         expect(fullResolutionPassSizes(1202, 901, 1)).toEqual(
-            Array.from({ length: 8 }, () => ({ width: 1202, height: 901 })),
+            Array.from({ length: 6 }, () => ({ width: 1202, height: 901 })),
         );
         expect(fullResolutionPassSizes(1202, 901, 0.5)).toEqual(
-            Array.from({ length: 8 }, () => ({ width: 601, height: 450 })),
+            Array.from({ length: 6 }, () => ({ width: 601, height: 450 })),
         );
     });
     it('changes evolution rate without changing the current phase', () => {
@@ -65,13 +66,13 @@ describe('field configuration', () => {
         expect(advanceSimulationTime(12, 0.5, 1)).toBe(12.5);
         expect(advanceSimulationTime(12, 0.5, 3)).toBe(13.5);
     });
-    it('defines seven independent groups of four valid controls', () => {
+    it('defines five independent groups of four valid controls', () => {
         expect(FIELD_PARAMETER_SCHEMA).toHaveLength(30);
-        expect(OCTAVE_PARAMETER_SCHEMA).toHaveLength(7);
+        expect(OCTAVE_PARAMETER_SCHEMA).toHaveLength(5);
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
-        expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(7);
-        expect(PARAMETER_SCHEMA).toHaveLength(65);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(65);
+        expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
+        expect(PARAMETER_SCHEMA).toHaveLength(55);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(55);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -106,9 +107,19 @@ describe('field configuration', () => {
         ] as const) {
             expect(FIELD_PARAMETER_SCHEMA.find((parameter) => parameter.key === key)?.min).toBe(-2);
         }
-        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual(Array(7).fill(0));
-        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual(Array(7).fill(0));
-        expect(OCTAVE_PIXELATE_SCHEMA.map(({ default: value }) => value)).toEqual(Array(7).fill(0));
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual(Array(5).fill(0));
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual(Array(5).fill(0));
+        expect(OCTAVE_PIXELATE_SCHEMA.map(({ default: value }) => value)).toEqual(Array(5).fill(0));
+    });
+    it('ignores stale persisted sixth and seventh octave keys', () => {
+        const saved = {
+            ...defaultParameters(),
+            octave6Noise: 0.4,
+            octave7Pixelate: 1,
+        } as ReturnType<typeof defaultParameters>;
+        const normalized = normalizeSavedSettings({ seed: 7, parameters: saved });
+        expect('octave6Noise' in normalized.parameters).toBe(false);
+        expect('octave7Pixelate' in normalized.parameters).toBe(false);
     });
     it('defaults old saved settings to Add and normalizes categorical modes', () => {
         const old = normalizeSavedSettings({ seed: 7, parameters: {} as ReturnType<typeof defaultParameters> });
@@ -127,17 +138,17 @@ describe('field configuration', () => {
             normalized.parameters.tertiaryBlendMode,
         ]).toEqual([2, 0, 2]);
     });
-    it('packs the aligned uniform header and array<vec4f, 7>', () => {
+    it('packs the aligned uniform header and array<vec4f, 5>', () => {
         const parameters = defaultParameters();
         parameters.octave1Pixelate = 1;
         parameters.octave3Pixelate = 1;
-        const data = packUniform([320, 180], 2, 9, parameters, 6);
+        const data = packUniform([320, 180], 2, 9, parameters, 4);
         expect(data).toHaveLength(UNIFORM_FLOATS);
-        expect(data.byteLength).toBe(256);
+        expect(data.byteLength).toBe(224);
         expect(Array.from(data.slice(12, 24))).toEqual(
             Array.from(new Float32Array([1, 1.1, 0, 0, 1.76, 0, 1, 2.035, 0, 0, 1.76, 0])),
         );
-        expect(data[34]).toBe(6);
+        expect(data[34]).toBe(4);
         expect(data[35]).toBe(5);
         expect(Array.from(data.slice(36, 40))).toEqual(
             Array.from(
@@ -149,6 +160,10 @@ describe('field configuration', () => {
                 ]),
             ),
         );
+    });
+    it('uses the current 16-to-1 octave scale for the subtle pre-blur', () => {
+        expect(BLUR_SHADER_SOURCE).toContain('exp2(4.-u.octaveIndex)');
+        expect(BLUR_SHADER_SOURCE).toContain('textureSample(src,samp,uv).r*.76');
     });
     it('composes each generator with real signed blend modes before attenuation and threshold', () => {
         expect(BASE_SHADER_SOURCE).toContain('fn screen01');
