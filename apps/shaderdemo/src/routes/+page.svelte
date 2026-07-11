@@ -5,6 +5,7 @@
         FIELD_PARAMETER_SCHEMA,
         OCTAVE_PARAMETER_SCHEMA,
         OCTAVE_PIXELATE_SCHEMA,
+        PARAMETER_SCHEMA,
         defaultParameters,
         type ParameterKey,
         type RenderOptions,
@@ -59,7 +60,12 @@
     }
 
     function update() {
-        options = { ...options, parameters: { ...options.parameters } };
+        const parameters = { ...options.parameters };
+        for (const parameter of PARAMETER_SCHEMA) {
+            const value = Number(parameters[parameter.key]);
+            parameters[parameter.key] = Number.isFinite(value) ? value : parameter.default;
+        }
+        options = { ...options, parameters };
         shaderSettings.set({ seed: options.seed, parameters: options.parameters });
         renderer?.setOptions(options);
     }
@@ -159,7 +165,7 @@
                                     {#each FIELD_PARAMETER_SCHEMA.filter( ({ key }) => group.keys.includes(key), ) as parameter}
                                         <label class="parameter">
                                             <span>{parameter.label}</span><output
-                                                >{options.parameters[parameter.key].toFixed(2)}</output
+                                                >{Number(options.parameters[parameter.key]).toFixed(2)}</output
                                             >
                                             <input
                                                 type="range"
@@ -196,7 +202,7 @@
                                     {#each parameters as parameter}
                                         <label class="parameter">
                                             <span>{parameter.label}</span><output
-                                                >{options.parameters[parameter.key].toFixed(2)}</output
+                                                >{Number(options.parameters[parameter.key]).toFixed(2)}</output
                                             >
                                             <input
                                                 type="range"
