@@ -22,9 +22,17 @@ import {
     renderSize,
     scaledSize,
 } from './renderer';
-import { normalizeSavedSettings } from './settings';
+import { defaultShaderSettings, normalizeSavedSettings } from './settings';
 
 describe('field configuration', () => {
+    it('creates fresh complete settings for reset-to-defaults', () => {
+        const first = defaultShaderSettings();
+        const second = defaultShaderSettings();
+        expect(first.seed).toBe(4.2);
+        expect(first.parameters).toEqual(defaultParameters());
+        first.parameters.fieldScale = 32;
+        expect(second.parameters.fieldScale).toBe(1007);
+    });
     it('uses seeded 3D simplex gradients instead of synchronized Z-slice interpolation', () => {
         expect(COMMON_SHADER_SOURCE).toContain('fn simplexGradient');
         expect(COMMON_SHADER_SOURCE).toContain('fn simplexCorner');

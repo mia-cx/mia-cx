@@ -11,6 +11,8 @@ const initialSettings = (): SavedShaderSettings => ({
     parameters: defaultParameters(),
 });
 
+export const defaultShaderSettings = initialSettings;
+
 export const shaderSettings = persistentAtom<SavedShaderSettings>('shaderdemo:settings:v1', initialSettings(), {
     encode: JSON.stringify,
     decode: JSON.parse,

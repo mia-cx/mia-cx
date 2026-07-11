@@ -11,7 +11,7 @@
         type ParameterKey,
         type RenderOptions,
     } from '$lib/renderer';
-    import { normalizeSavedSettings, shaderSettings } from '$lib/settings';
+    import { defaultShaderSettings, normalizeSavedSettings, shaderSettings } from '$lib/settings';
 
     let canvas: HTMLCanvasElement;
     let renderer: AtmosphereRenderer | undefined;
@@ -95,6 +95,12 @@
         options.seed = Math.random() * 1000;
         update();
     }
+    function resetDefaults() {
+        const defaults = defaultShaderSettings();
+        options = { ...options, seed: defaults.seed, parameters: defaults.parameters };
+        shaderSettings.set(defaults);
+        renderer?.setOptions(options);
+    }
     onMount(() => {
         let disposed = false;
         // Mounting the persistent atom synchronously hydrates it from localStorage.
@@ -145,6 +151,7 @@
             <div class="controls">
                 <button onclick={togglePause}>{paused ? 'Play' : 'Pause'}</button>
                 <button onclick={randomize}>New seed</button>
+                <button onclick={resetDefaults}>Reset defaults</button>
                 <div class="parameters">
                     <div class="tabs" role="tablist" aria-label="Parameter groups">
                         {#each parameterTabs as tab}
@@ -362,7 +369,7 @@
     }
     .controls {
         display: grid;
-        grid-template-columns: repeat(2, auto);
+        grid-template-columns: repeat(3, auto);
         align-items: center;
         gap: 10px;
         padding: 5px 6px 5px 10px;
