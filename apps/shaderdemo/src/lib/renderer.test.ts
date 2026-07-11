@@ -10,6 +10,7 @@ import {
     FIELD_PARAMETER_SCHEMA,
     FIELD_BLEND_MODES,
     POST_BLEND_MODES,
+    POST_EFFECT_SHADER_SOURCE,
     POST_PARAMETER_SCHEMA,
     DISPLAY_SHADER_SOURCE,
     GOD_RAYS_SHADER_SOURCE,
@@ -41,6 +42,12 @@ import { defaultShaderSettings, normalizeSavedSettings } from './settings';
 import defaultSettingsFixture from './default-settings.json';
 
 describe('field configuration', () => {
+    it('re-hashes film grain independently every rendered frame instead of translating a fixed field', () => {
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('frameHash(floor(pos.xy/p(31)),u32(u.frameIndex))');
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('frame*0xc2b2ae35u');
+        expect(POST_EFFECT_SHADER_SOURCE).not.toContain('floor(pos.xy/p(31))+vec2f(u.frameIndex)');
+    });
+
     it('binds and samples a hardware-filtered 3D LUT with domain and intensity', () => {
         expect(LUT_SHADER_SOURCE).toContain('var cube:texture_3d<f32>');
         expect(LUT_SHADER_SOURCE).toContain('textureSample(cube,samp,coordinate)');
