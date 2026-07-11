@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
     BASE_SHADER_SOURCE,
+    BLOOM_BLUR_SHADER_SOURCE,
     BLOOM_EXTRACT_SHADER_SOURCE,
+    BLOOM_TEXTURE_FORMAT,
     BLUR_SHADER_SOURCE,
     COMMON_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
@@ -51,7 +53,7 @@ describe('field configuration', () => {
         expect(DISPLAY_SHADER_SOURCE).toContain('textureSample(godRays,samp,uv).rgb');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('vec3f(1),textureSample(godRays');
         expect(BLOOM_EXTRACT_SHADER_SOURCE).toContain('textureSample(godRays,samp,uv).rgb');
-        expect(BLOOM_EXTRACT_SHADER_SOURCE).toContain('max(rays.r,max(rays.g,rays.b))');
+        expect(BLOOM_EXTRACT_SHADER_SOURCE).not.toContain('max(rays.r,max(rays.g,rays.b))');
 
         const parameters = defaultParameters();
         expect(godRaysIsActive(parameters)).toBe(false);
@@ -61,6 +63,23 @@ describe('field configuration', () => {
         expect(godRaysIsActive(parameters)).toBe(true);
         parameters.godRaysIntensity = 0;
         expect(godRaysIsActive(parameters)).toBe(false);
+    });
+    it('preserves adjusted scene RGB through bloom and glow', () => {
+        expect(BLOOM_TEXTURE_FORMAT).toBe('rgba16float');
+        expect(BLOOM_EXTRACT_SHADER_SOURCE).toContain('var adjustmentLut:texture_2d<f32>');
+        expect(BLOOM_EXTRACT_SHADER_SOURCE.match(/textureLoad\(adjustmentLut/g)).toHaveLength(2);
+        expect(BLOOM_EXTRACT_SHADER_SOURCE).toContain('rgb*=exp2(u.post[0].y)');
+        expect(BLOOM_EXTRACT_SHADER_SOURCE).toContain('rgb=blendLayer(rgb,textureSample(godRays,samp,uv).rgb');
+        expect(BLOOM_EXTRACT_SHADER_SOURCE).toContain('let luminance=dot(max(rgb');
+        expect(BLOOM_EXTRACT_SHADER_SOURCE).toContain('return vec4f(rgb*weight,1)');
+        expect(BLOOM_BLUR_SHADER_SOURCE).toContain('textureSample(src,samp,uv+o).rgb');
+        expect(BLOOM_BLUR_SHADER_SOURCE).toContain('return vec4f(rgb*.25,1)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('bloomRgb=textureSample(bloom,samp,uv).rgb');
+        expect(DISPLAY_SHADER_SOURCE).toContain('bloomRgb*u.post[5].x');
+        expect(DISPLAY_SHADER_SOURCE).toContain('hueRotate(bloomRgb,u.post[6].x)*u.post[5].w');
+        expect(DISPLAY_SHADER_SOURCE).toContain('if(h==0.) { return rgb; }');
+        expect(DISPLAY_SHADER_SOURCE).not.toContain('hueColor');
+        expect(DISPLAY_SHADER_SOURCE).not.toContain('var b=0.');
     });
     it('linearly interpolates the high-depth adjustment LUT in the existing display shader', () => {
         expect(DISPLAY_SHADER_SOURCE.match(/textureLoad\(adjustmentLut/g)).toHaveLength(2);

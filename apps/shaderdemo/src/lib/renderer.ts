@@ -490,6 +490,7 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
 }`;
 
 export const GOD_RAYS_TEXTURE_FORMAT: GPUTextureFormat = 'rgba16float';
+export const BLOOM_TEXTURE_FORMAT: GPUTextureFormat = 'rgba16float';
 
 export const GOD_RAYS_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
@@ -520,7 +521,13 @@ export const DISPLAY_SHADER_SOURCE =
     /* wgsl */ `
 @group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
 @group(0) @binding(3) var adjustmentLut:texture_2d<f32>; @group(0) @binding(4) var bloom:texture_2d<f32>; @group(0) @binding(5) var godRays:texture_2d<f32>;
-fn hueColor(h:f32)->vec3f { return clamp(abs(fract(h+vec3f(0.,.667,.333))*6.-3.)-1.,vec3f(0),vec3f(1)); }
+fn hueRotate(rgb:vec3f,h:f32)->vec3f {
+ if(h==0.) { return rgb; }
+ // Rotate YIQ chroma while retaining the sampled layer's Rec.601 luminance and color variation.
+ let angle=h*6.28318530718; let y=dot(rgb,vec3f(.299,.587,.114)); let i=dot(rgb,vec3f(.596,-.274,-.322)); let q=dot(rgb,vec3f(.211,-.523,.312));
+ let rotated=vec2f(i*cos(angle)-q*sin(angle),i*sin(angle)+q*cos(angle));
+ return vec3f(y+.956*rotated.x+.621*rotated.y,y-.272*rotated.x-.647*rotated.y,y-1.106*rotated.x+1.703*rotated.y);
+}
 fn overlayChannel(base:f32,blend:f32)->f32 { return select(2.*base*blend,1.-2.*(1.-base)*(1.-blend),base>.5); }
 fn softLightChannel(base:f32,blend:f32)->f32 { return select(base-(1.-2.*blend)*base*(1.-base),base+(2.*blend-1.)*(sqrt(base)-base),blend>.5); }
 fn blendLight(base:vec3f,color:vec3f,amount:f32,mode:f32)->vec3f {
@@ -544,21 +551,31 @@ fn lensUv(centered:vec2f,coefficient:f32,fit:f32)->vec2f { return .5+centered*((
  var rgb=adjusted(f); if(dispersion!=0.) { rgb=vec3f(adjusted(sourceValue(redUv)).r,rgb.g,adjusted(sourceValue(blueUv)).b); }
  if(u.post[0].x>.5) { rgb*=exp2(u.post[0].y); let temp=(u.post[0].z-6500.)/2000.; rgb*=vec3f(1.+temp*.08,1.,1.-temp*.08); rgb+=vec3f(u.post[0].w*.25,u.post[0].w*.5,-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let l=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(l),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,l))+u.post[2].x*smoothstep(.5,1.,l); }
  if(u.post[2].y>.5 && u.post[2].z!=0. && u.post[2].w!=0.) { rgb=blendLayer(rgb,textureSample(godRays,samp,uv).rgb,u.post[8].x); }
- var b=0.; if((u.post[4].y>.5 && u.post[5].x!=0.) || (u.post[5].z>.5 && u.post[5].w!=0.)) { b=textureSample(bloom,samp,uv).r; }
- if(u.post[4].y>.5 && u.post[5].x!=0.) { rgb=blendLight(rgb,vec3f(1),b*u.post[5].x,u.post[8].y); } if(u.post[5].z>.5 && u.post[5].w!=0.) { rgb=blendLight(rgb,hueColor(u.post[6].x),b*u.post[5].w,u.post[8].z); }
+ var bloomRgb=vec3f(0); if((u.post[4].y>.5 && u.post[5].x!=0.) || (u.post[5].z>.5 && u.post[5].w!=0.)) { bloomRgb=textureSample(bloom,samp,uv).rgb; }
+ if(u.post[4].y>.5 && u.post[5].x!=0.) { rgb=blendLayer(rgb,bloomRgb*u.post[5].x,u.post[8].y); } if(u.post[5].z>.5 && u.post[5].w!=0.) { rgb=blendLayer(rgb,hueRotate(bloomRgb,u.post[6].x)*u.post[5].w,u.post[8].z); }
  if(u.post[6].z!=0.) { let edge=smoothstep(1.-u.post[6].w,1.,length(centered)*.707); rgb*=1.-edge*u.post[6].z; } if(u.post[7].z!=0.) { let grain=fract(sin(dot(floor(pos.xy/u.post[7].w),vec2f(12.9898,78.233))+u.frameIndex)*43758.5453)-.5; rgb+=grain*u.post[7].z; }
  return vec4f(rgb,1.);
 }`;
 export const BLOOM_EXTRACT_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
-@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler; @group(0) @binding(3) var godRays:texture_2d<f32>;
-@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; var v=pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); if(u.post[2].y>.5 && u.post[2].z!=0. && u.post[2].w!=0.) { let rays=textureSample(godRays,samp,uv).rgb; v+=max(rays.r,max(rays.g,rays.b)); } let t=u.post[4].z; let k=max(u.post[4].w,.00001); let soft=clamp((v-t+k)/(2.*k),0.,1.); return vec4f(max(v-t,0.)+soft*soft*k,0,0,1); }`;
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler; @group(0) @binding(3) var adjustmentLut:texture_2d<f32>; @group(0) @binding(4) var godRays:texture_2d<f32>;
+fn adjusted(v:f32)->vec3f { let f=clamp(v,0.,1.); if(u.blurRadii[1].w<=.5) { return vec3f(f); } let p=f*4095.; let lo=i32(floor(p)); let hi=min(lo+1,4095); return mix(textureLoad(adjustmentLut,vec2i(lo,0),0).rgb,textureLoad(adjustmentLut,vec2i(hi,0),0).rgb,p-f32(lo)); }
+fn overlayChannel(base:f32,blend:f32)->f32 { return select(2.*base*blend,1.-2.*(1.-base)*(1.-blend),base>.5); }
+fn softLightChannel(base:f32,blend:f32)->f32 { return select(base-(1.-2.*blend)*base*(1.-base),base+(2.*blend-1.)*(sqrt(base)-base),blend>.5); }
+fn blendLight(base:vec3f,color:vec3f,amount:f32,mode:f32)->vec3f { if(amount==0.) { return base; } if(mode<.5) { return base+color*amount; } let bounded=clamp(base,vec3f(0),vec3f(1)); let excess=max(base-vec3f(1),vec3f(0)); if(mode<1.5) { return 1.-(1.-bounded)*(1.-clamp(color*amount,vec3f(0),vec3f(1)))+excess; } let strength=clamp(amount,0.,1.); var blended:vec3f; if(mode<2.5) { blended=vec3f(overlayChannel(bounded.r,color.r),overlayChannel(bounded.g,color.g),overlayChannel(bounded.b,color.b)); } else { blended=vec3f(softLightChannel(bounded.r,color.r),softLightChannel(bounded.g,color.g),softLightChannel(bounded.b,color.b)); } return mix(bounded,blended,strength)+excess; }
+fn blendLayer(base:vec3f,layer:vec3f,mode:f32)->vec3f { if(mode<.5) { return base+layer; } let strength=max(layer.r,max(layer.g,layer.b)); if(strength<=0.) { return base; } return blendLight(base,layer/strength,strength,mode); }
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f {
+ let uv=pos.xy/u.resolution; let v=pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); var rgb=adjusted(v);
+ if(u.post[0].x>.5) { rgb*=exp2(u.post[0].y); let temp=(u.post[0].z-6500.)/2000.; rgb*=vec3f(1.+temp*.08,1.,1.-temp*.08); rgb+=vec3f(u.post[0].w*.25,u.post[0].w*.5,-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let gradeLuma=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(gradeLuma),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,gradeLuma))+u.post[2].x*smoothstep(.5,1.,gradeLuma); }
+ if(u.post[2].y>.5 && u.post[2].z!=0. && u.post[2].w!=0.) { rgb=blendLayer(rgb,textureSample(godRays,samp,uv).rgb,u.post[8].x); }
+ let luminance=dot(max(rgb,vec3f(0)),vec3f(.2126,.7152,.0722)); let t=u.post[4].z; let k=max(u.post[4].w,.00001); let soft=clamp((luminance-t+k)/(2.*k),0.,1.); let contribution=max(luminance-t,0.)+soft*soft*k; let weight=select(0.,contribution/max(luminance,.00001),luminance>0.); return vec4f(rgb*weight,1);
+}`;
 export const BLOOM_BLUR_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
-@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let o=(1.+u.post[5].y*3.)/vec2f(textureDimensions(src)); var v=textureSample(src,samp,uv+o).r+textureSample(src,samp,uv-o).r+textureSample(src,samp,uv+vec2f(-o.x,o.y)).r+textureSample(src,samp,uv+vec2f(o.x,-o.y)).r; return vec4f(v*.25,0,0,1); }`;
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let o=(1.+u.post[5].y*3.)/vec2f(textureDimensions(src)); var rgb=textureSample(src,samp,uv+o).rgb+textureSample(src,samp,uv-o).rgb+textureSample(src,samp,uv+vec2f(-o.x,o.y)).rgb+textureSample(src,samp,uv+vec2f(o.x,-o.y)).rgb; return vec4f(rgb*.25,1); }`;
 
 export class AtmosphereRenderer {
     private device?: GPUDevice;
@@ -640,8 +657,8 @@ export class AtmosphereRenderer {
             make(BLUR_SHADER_SOURCE, 'r16float'),
             make(OCTAVE_SHADER_SOURCE, 'r16float'),
             make(DISPLAY_SHADER_SOURCE, format),
-            make(BLOOM_EXTRACT_SHADER_SOURCE, 'r16float'),
-            make(BLOOM_BLUR_SHADER_SOURCE, 'r16float'),
+            make(BLOOM_EXTRACT_SHADER_SOURCE, BLOOM_TEXTURE_FORMAT),
+            make(BLOOM_BLUR_SHADER_SOURCE, BLOOM_TEXTURE_FORMAT),
             make(GOD_RAYS_SHADER_SOURCE, GOD_RAYS_TEXTURE_FORMAT),
         ]);
         self.buffers = Array.from({ length: MAX_RENDER_PASSES }, () =>
@@ -702,7 +719,11 @@ export class AtmosphereRenderer {
         const bloomSize = scaledSize(size.width, size.height, 0.25);
         this.textures.push(
             ...Array.from({ length: 2 }, () =>
-                this.device!.createTexture({ size: [bloomSize.width, bloomSize.height], format: 'r16float', usage }),
+                this.device!.createTexture({
+                    size: [bloomSize.width, bloomSize.height],
+                    format: BLOOM_TEXTURE_FORMAT,
+                    usage,
+                }),
             ),
         );
         // A single quarter-resolution RGBA gather target preserves the Zoom Blur's source colors.
@@ -830,7 +851,8 @@ export class AtmosphereRenderer {
                         entries.push({ binding: 4, resource: this.textureViews[3] });
                         entries.push({ binding: 5, resource: this.textureViews[4] });
                     } else if (pipelineIndex === 4) {
-                        entries.push({ binding: 3, resource: this.textureViews[4] });
+                        entries.push({ binding: 3, resource: this.adjustmentView! });
+                        entries.push({ binding: 4, resource: this.textureViews[4] });
                     } else if (pipelineIndex === 6) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
                     }
