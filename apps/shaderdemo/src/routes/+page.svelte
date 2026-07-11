@@ -25,6 +25,7 @@
     };
     let paused = false;
     let controlsOpen = true;
+    let telemetryOpen = true;
     let ready = false;
     let status = 'Starting WebGPU…';
     let frameStats: FrameRollingSummary | undefined;
@@ -156,24 +157,39 @@
 
 <main>
     <canvas class:ready bind:this={canvas} aria-label="Animated monochrome noise field"></canvas>
-    {#if ready}<output class="fps">
-            {#if paused}
-                FPS paused/reset<br />frame RMS paused/reset
-            {:else}
-                FPS .5s {number(frameStats?.windows[500]?.fps)} · 2s {number(frameStats?.windows[2000]?.fps)} · 10s
-                {number(frameStats?.windows[10000]?.fps)}<br />frame RMS {number(frameStats?.rms2sMs)}ms
-            {/if}<br />
-            {#if gpuStats === null}
-                GPU timing unavailable
-            {:else if gpuRolling}
-                GPU 1s {number(gpuRolling.windows[1000]?.totalMs)} · 5s {number(gpuRolling.windows[5000]?.totalMs)} · 30s
-                {number(gpuRolling.windows[30000]?.totalMs)}ms · RMS {number(gpuRolling.rms5sMs)}<br />
-                base {number(gpuRolling.windows[5000]?.baseMs)} · blur {number(gpuRolling.windows[5000]?.blurMs)} · oct
-                {number(gpuRolling.windows[5000]?.octaveMs)} · out {number(gpuRolling.windows[5000]?.displayMs)}
-            {:else}
-                GPU timing…
-            {/if}
-        </output>{/if}
+    {#if ready}<div class="telemetry">
+            <button
+                class="telemetry-toggle"
+                onclick={() => (telemetryOpen = !telemetryOpen)}
+                aria-expanded={telemetryOpen}
+                aria-controls="performance-telemetry"
+                >{telemetryOpen ? '×' : 'FPS'}<span class="sr-only"
+                    >{telemetryOpen ? 'Hide' : 'Show'} performance telemetry</span
+                ></button
+            >
+            {#if telemetryOpen}<output class="fps" id="performance-telemetry">
+                    {#if paused}
+                        FPS paused/reset<br />frame RMS paused/reset
+                    {:else}
+                        FPS .5s {number(frameStats?.windows[500]?.fps)} · 2s {number(frameStats?.windows[2000]?.fps)} · 10s
+                        {number(frameStats?.windows[10000]?.fps)}<br />frame RMS {number(frameStats?.rms2sMs)}ms
+                    {/if}<br />
+                    {#if gpuStats === null}
+                        GPU timing unavailable
+                    {:else if gpuRolling}
+                        GPU 1s {number(gpuRolling.windows[1000]?.totalMs)} · 5s {number(
+                            gpuRolling.windows[5000]?.totalMs,
+                        )} · 30s
+                        {number(gpuRolling.windows[30000]?.totalMs)}ms · RMS {number(gpuRolling.rms5sMs)}<br />
+                        base {number(gpuRolling.windows[5000]?.baseMs)} · blur {number(
+                            gpuRolling.windows[5000]?.blurMs,
+                        )} · oct
+                        {number(gpuRolling.windows[5000]?.octaveMs)} · out {number(gpuRolling.windows[5000]?.displayMs)}
+                    {:else}
+                        GPU timing…
+                    {/if}
+                </output>{/if}
+        </div>{/if}
     <nav aria-label="Study controls" data-disabled={!ready} inert={!ready}>
         <button class="reveal" onclick={() => (controlsOpen = !controlsOpen)} aria-expanded={controlsOpen}
             >{controlsOpen ? '×' : '+'}<span class="sr-only">{controlsOpen ? 'Hide' : 'Show'} controls</span></button
@@ -341,11 +357,16 @@
         opacity: 1;
         transition: opacity 0.35s ease;
     }
-    .fps {
+    .telemetry {
         position: fixed;
         left: 14px;
         bottom: 12px;
         z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px;
+        background: #000c;
         color: #ffffff99;
         font:
             10px ui-monospace,
@@ -355,6 +376,20 @@
         letter-spacing: 0.08em;
         text-transform: uppercase;
         text-shadow: 0 1px 3px #000;
+    }
+    .telemetry-toggle {
+        min-width: 20px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        letter-spacing: inherit;
+        text-transform: inherit;
+        cursor: pointer;
+    }
+    .fps {
+        line-height: 1.45;
     }
     nav {
         position: fixed;
