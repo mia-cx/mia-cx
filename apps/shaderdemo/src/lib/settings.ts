@@ -23,9 +23,9 @@ const initialSettings = (): SavedShaderSettings => JSON.parse(JSON.stringify(can
 
 export const defaultShaderSettings = initialSettings;
 
-// v2 intentionally starts every existing browser from the new exported canonical preset once,
+// v3 intentionally starts every existing browser from the newest exported canonical preset once,
 // then continues persisting edits normally from that point onward.
-export const SETTINGS_STORAGE_KEY = 'shaderdemo:settings:v2';
+export const SETTINGS_STORAGE_KEY = 'shaderdemo:settings:v3';
 export const shaderSettings = persistentAtom<SavedShaderSettings>(SETTINGS_STORAGE_KEY, initialSettings(), {
     encode: JSON.stringify,
     decode: JSON.parse,

@@ -22,7 +22,7 @@ function tuned(): SavedShaderSettings {
 describe('canonical defaults', () => {
     it('loads the exact complete exported settings', () => {
         const defaults = defaultShaderSettings();
-        expect(defaults.seed).toBe(496.02595502997605);
+        expect(defaults.seed).toBe(fixture.settings.seed);
         expect(defaults.parameters).toEqual(fixture.settings.parameters);
         expect(defaultParameters()).toEqual(fixture.settings.parameters);
         expect(defaults.adjustments).toEqual(fixture.settings.adjustments);
@@ -48,7 +48,7 @@ describe('canonical defaults', () => {
 
 describe('tab-scoped settings reset', () => {
     it('uses a fresh persistence generation for the exported canonical preset', () => {
-        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v2');
+        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v3');
     });
 
     it('restores exactly Field without touching Octaves, adjustments, or seed', () => {

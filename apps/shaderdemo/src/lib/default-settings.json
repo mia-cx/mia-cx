@@ -2,7 +2,7 @@
     "format": "mia-cx-shaderdemo-settings",
     "version": 1,
     "settings": {
-        "seed": 496.02595502997605,
+        "seed": 595.0450105644413,
         "parameters": {
             "fieldScale": 1007,
             "flowStretch": 2.5,
@@ -417,7 +417,7 @@
                 "enabled": true,
                 "hue": -6,
                 "saturation": 110,
-                "lightness": -10
+                "lightness": 2
             }
         ]
     }

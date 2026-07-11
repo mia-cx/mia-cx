@@ -26,6 +26,7 @@ import {
     scaledSize,
 } from './renderer';
 import { defaultShaderSettings, normalizeSavedSettings } from './settings';
+import defaultSettingsFixture from './default-settings.json';
 
 describe('field configuration', () => {
     it('linearly interpolates the high-depth adjustment LUT in the existing display shader', () => {
@@ -62,7 +63,7 @@ describe('field configuration', () => {
     it('creates fresh complete settings for reset-to-defaults', () => {
         const first = defaultShaderSettings();
         const second = defaultShaderSettings();
-        expect(first.seed).toBe(496.02595502997605);
+        expect(first.seed).toBe(defaultSettingsFixture.settings.seed);
         expect(first.parameters).toEqual(defaultParameters());
         expect(first.adjustments).toHaveLength(8);
         expect(first.adjustments).not.toBe(second.adjustments);
