@@ -120,6 +120,7 @@ export const POST_KEYS: Record<PostEffectKind, readonly ParameterKey[]> = {
         'godRaysCenterX',
         'godRaysCenterY',
         'godRaysSamples',
+        'godRaysFalloff',
         'godRaysBlendMode',
     ],
     bloom: ['bloomThreshold', 'bloomKnee', 'bloomIntensity', 'bloomRadius', 'bloomBlendMode'],

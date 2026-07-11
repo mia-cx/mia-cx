@@ -81,6 +81,13 @@ describe('field configuration', () => {
             max: 128,
             default: 64,
         });
+        expect(PARAMETER_SCHEMA.find(({ key }) => key === 'godRaysFalloff')).toMatchObject({
+            min: 0,
+            max: 16,
+            default: 4,
+        });
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('let attenuation=1./(1.+p(106)*dot(rayOffset,rayOffset))');
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('*attenuation');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('for(var i=0u;i<128u;i++)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('center+(startUv-center)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('textureSampleLevel(src,samp,uv,0.)');
@@ -233,7 +240,7 @@ describe('field configuration', () => {
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
         expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(161);
+        expect(PARAMETER_SCHEMA).toHaveLength(162);
         expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(PARAMETER_SCHEMA.length);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
@@ -523,7 +530,7 @@ describe('field configuration', () => {
             'sharpenEnabled',
             'filmGrainEnabled',
         ] as const;
-        expect(POST_PARAMETER_SCHEMA).toHaveLength(106);
+        expect(POST_PARAMETER_SCHEMA).toHaveLength(107);
         expect(POST_PARAMETER_SCHEMA.slice(35, 40).map(({ key }) => key)).toEqual(toggleKeys);
         expect(POST_PARAMETER_SCHEMA.slice(35, 40).every(({ default: value }) => value === 1)).toBe(true);
         const parameters = defaultParameters();
