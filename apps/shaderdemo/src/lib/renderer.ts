@@ -159,25 +159,23 @@ const baseShader =
 const octaveShader =
     common +
     /* wgsl */ `
-@group(0) @binding(1) var src: texture_2d<f32>;
+@group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
 fn scatterOffset(pixel: vec2f, salt: f32, smoothness: f32, distance: f32) -> vec2f {
-    // Smoothness correlates the random displacement field spatially; it never averages colour samples.
-    let cellSize=mix(1.,16.,smoothness);
-    let fieldPixel=pixel/cellSize;
-    let angle=noise(fieldPixel+vec2f(salt*17.13,salt*5.71))*6.2831853;
-    let radius=sqrt(noise(fieldPixel+vec2f(salt*3.37+41.9,salt*11.73-19.4)))*distance;
-    return vec2f(cos(angle),sin(angle))*radius;
+    // Smoothness controls rigid section size. Every section moves by a whole source-pixel offset.
+    let sectionSize=exp2(mix(0.,6.,smoothness));
+    let section=floor(pixel/sectionSize);
+    let angle=hash(section+vec2f(salt*17.13,salt*5.71))*6.2831853;
+    let radius=sqrt(hash(section+vec2f(salt*3.37+41.9,salt*11.73-19.4)))*distance;
+    return round(vec2f(cos(angle),sin(angle))*radius);
 }
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
-    let sourceDimensions=textureDimensions(src);
-    let sourceSize=vec2f(sourceDimensions);
+    let sourceSize=vec2f(textureDimensions(src));
     let settings=u.octaves[u32(u.octaveIndex)];
     let pixel=floor(pos.xy);
     let offset=scatterOffset(pixel,1.+u.octaveIndex*7.,settings.z,settings.w);
-    let sourcePixel=clamp(vec2i(floor(uv*sourceSize+offset)),vec2i(0),vec2i(sourceDimensions)-vec2i(1));
-    // One exact source pixel: literal frosted-glass scatter, with no blur or filtered averaging.
-    let scattered=textureLoad(src,sourcePixel,0).r;
+    // Linear reconstruction preserves the image while the quantized offset moves whole pixel sections.
+    let scattered=textureSample(src,samp,uv+offset/sourceSize).r;
     // Literal 1:1 static pixel noise is layered on top of the scattered previous stage.
     let detail=hash(pixel+vec2f(u.octaveIndex*37.7,u.octaveIndex*91.3))-.5;
     let injected=scattered+detail*settings.x;
@@ -361,7 +359,7 @@ export class AtmosphereRenderer {
             data[0] = this.textures[octave + 1].width;
             data[1] = this.textures[octave + 1].height;
             data[20] = octave;
-            draw(this.textures[octave + 1].createView(), this.pipelines[1], this.textures[octave]);
+            draw(this.textures[octave + 1].createView(), this.pipelines[1], this.textures[octave], true);
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
