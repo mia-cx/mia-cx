@@ -30,6 +30,10 @@ export interface LevelsAdjustment extends AdjustmentBase {
 }
 export type Adjustment = CurveAdjustment | LevelsAdjustment;
 export type LevelsKey = keyof LevelsChannel;
+export type CurveEdit =
+    | { type: 'add'; x: number; y: number }
+    | { type: 'move'; oldX: number; x: number; y: number }
+    | { type: 'remove'; x: number };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const finite = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
@@ -127,6 +131,46 @@ export function setLevelsChannelValue(
     raw: number,
 ): LevelsAdjustment {
     return { ...a, channels: { ...a.channels, [channel]: setLevelsValue(a.channels[channel], key, raw) } };
+}
+export function setLevelsChannelsValue(
+    a: LevelsAdjustment,
+    channels: readonly Channel[],
+    key: LevelsKey,
+    raw: number,
+): LevelsAdjustment {
+    return channels.reduce((next, channel) => setLevelsChannelValue(next, channel, key, raw), a);
+}
+
+/** Toggle a Paint.NET-style channel mask while ensuring it can never be empty. */
+export function toggleChannelMask(mask: readonly Channel[], channel: Channel): Channel[] {
+    if (!mask.includes(channel)) return CHANNELS.filter((item) => item === channel || mask.includes(item));
+    if (mask.length === 1) return [...mask];
+    return CHANNELS.filter((item) => item !== channel && mask.includes(item));
+}
+
+/** Apply a semantic curve operation without disturbing unrelated control points. */
+export function applyCurveEdit(points: CurvePoint[], edit: CurveEdit): CurvePoint[] {
+    const x = Math.round(clamp(edit.x, 0, 255));
+    if (edit.type === 'remove') {
+        if (x === 0 || x === 255) return points;
+        return points.some((point) => point.x === x)
+            ? points.filter((point) => point.x !== x).map((point) => ({ ...point }))
+            : points;
+    }
+    const y = Math.round(clamp(edit.y, 0, 255));
+    const targetX = edit.type === 'move' && (edit.oldX === 0 || edit.oldX === 255) ? edit.oldX : x;
+    const retained = points.filter((point) => point.x !== targetX && (edit.type !== 'move' || point.x !== edit.oldX));
+    return [...retained.map((point) => ({ ...point })), { x: targetX, y }].sort((a, b) => a.x - b.x);
+}
+
+export function applyCurveEditToChannels(
+    a: CurveAdjustment,
+    channels: readonly Channel[],
+    edit: CurveEdit,
+): CurveAdjustment {
+    const next = { ...a.channels };
+    for (const channel of channels) next[channel] = applyCurveEdit(a.channels[channel], edit);
+    return { ...a, channels: next };
 }
 export function setLevelsValue(a: LevelsChannel, key: LevelsKey, raw: number): LevelsChannel {
     const n = finite(raw, a[key]);

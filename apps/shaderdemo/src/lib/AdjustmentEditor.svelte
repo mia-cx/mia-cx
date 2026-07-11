@@ -1,8 +1,17 @@
 <script lang="ts">
     import CurveEditor from './CurveEditor.svelte';
-    import { CHANNELS, setLevelsChannelValue, type Adjustment, type Channel, type LevelsKey } from './adjustments';
+    import {
+        applyCurveEditToChannels,
+        CHANNELS,
+        setLevelsChannelsValue,
+        toggleChannelMask,
+        type Adjustment,
+        type Channel,
+        type LevelsKey,
+    } from './adjustments';
     let { adjustment, onchange }: { adjustment: Adjustment; onchange: (value: Adjustment) => void } = $props();
-    let channel: Channel = $state('r');
+    let channelMask: Channel[] = $state([...CHANNELS]);
+    let channel = $derived(CHANNELS.find((item) => channelMask.includes(item)) ?? 'r');
     const rows = [
         ['inputLow', 'Input black', 0, 254, 1],
         ['inputHigh', 'Input white', 1, 255, 1],
@@ -12,18 +21,19 @@
     ] as const;
 </script>
 
-<div class="channels" role="tablist" aria-label="Color channel">
-    {#each CHANNELS as item}<button
-            type="button"
-            role="tab"
-            aria-selected={channel === item}
-            onclick={() => (channel = item)}>{item.toUpperCase()}</button
+<div class="channels" aria-label="Color channels">
+    {#each CHANNELS as item}<label
+            ><input
+                type="checkbox"
+                checked={channelMask.includes(item)}
+                onchange={() => (channelMask = toggleChannelMask(channelMask, item))}
+            />{item.toUpperCase()}</label
         >{/each}
 </div>
 {#if adjustment.type === 'curve'}
     <CurveEditor
         points={adjustment.channels[channel]}
-        onchange={(points) => onchange({ ...adjustment, channels: { ...adjustment.channels, [channel]: points } })}
+        onedit={(edit) => onchange(applyCurveEditToChannels(adjustment, channelMask, edit))}
     />
 {:else}
     {#each rows as row}
@@ -37,7 +47,9 @@
                 step={row[4]}
                 value={adjustment.channels[channel][row[0]]}
                 onchange={(e) =>
-                    onchange(setLevelsChannelValue(adjustment, channel, row[0] as LevelsKey, +e.currentTarget.value))}
+                    onchange(
+                        setLevelsChannelsValue(adjustment, channelMask, row[0] as LevelsKey, +e.currentTarget.value),
+                    )}
             /><input
                 type="range"
                 min={row[2]}
@@ -45,7 +57,9 @@
                 step={row[4]}
                 value={adjustment.channels[channel][row[0]]}
                 oninput={(e) =>
-                    onchange(setLevelsChannelValue(adjustment, channel, row[0] as LevelsKey, +e.currentTarget.value))}
+                    onchange(
+                        setLevelsChannelsValue(adjustment, channelMask, row[0] as LevelsKey, +e.currentTarget.value),
+                    )}
             /></label
         >
     {/each}
@@ -55,15 +69,14 @@
     .channels {
         display: flex;
         justify-content: center;
-        gap: 2px;
+        gap: 12px;
     }
-    .channels button {
-        padding: 3px 12px;
-        color: #888;
-    }
-    .channels button[aria-selected='true'] {
-        background: #ffffff18;
-        color: #fff;
+    .channels label {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        color: #aaa;
+        text-transform: none;
     }
     .parameter {
         display: grid;

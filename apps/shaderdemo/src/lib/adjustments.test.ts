@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
     CHANNELS,
+    applyCurveEdit,
+    applyCurveEditToChannels,
     composeAdjustmentLut,
     curveLut,
     identityLevels,
@@ -10,6 +12,8 @@ import {
     newLevels,
     sanitizeAdjustments,
     setLevelsChannelValue,
+    setLevelsChannelsValue,
+    toggleChannelMask,
 } from './adjustments';
 
 describe('RGB Paint.NET adjustment semantics', () => {
@@ -107,5 +111,42 @@ describe('RGB Paint.NET adjustment semantics', () => {
         expect(b.channels.g).toEqual(identityLevels());
         expect(b.channels.g).toBe(a.channels.g);
         expect(b.channels.r).not.toBe(a.channels.r);
+    });
+    it('applies curve operations to selected channels while preserving unrelated points', () => {
+        const a = newCurve();
+        a.channels.r.splice(1, 0, { x: 40, y: 50 });
+        a.channels.g.splice(1, 0, { x: 80, y: 90 });
+        const added = applyCurveEditToChannels(a, ['r', 'g'], { type: 'add', x: 100, y: 110 });
+        expect(added.channels.r).toContainEqual({ x: 40, y: 50 });
+        expect(added.channels.g).toContainEqual({ x: 80, y: 90 });
+        expect(added.channels.b).toBe(a.channels.b);
+        const moved = applyCurveEditToChannels(added, ['r', 'g'], { type: 'move', oldX: 100, x: 120, y: 130 });
+        expect(moved.channels.r).toContainEqual({ x: 120, y: 130 });
+        expect(moved.channels.g).toContainEqual({ x: 120, y: 130 });
+        const removed = applyCurveEditToChannels(moved, ['r'], { type: 'remove', x: 120 });
+        expect(removed.channels.r.some((point) => point.x === 120)).toBe(false);
+        expect(removed.channels.g).toBe(moved.channels.g);
+    });
+    it('locks endpoint x during curve movement', () => {
+        expect(applyCurveEdit(newCurve().channels.r, { type: 'move', oldX: 0, x: 90, y: 25 })[0]).toEqual({
+            x: 0,
+            y: 25,
+        });
+        expect(applyCurveEdit(newCurve().channels.r, { type: 'remove', x: 255 })).toHaveLength(2);
+    });
+    it('applies levels constraints independently to selected channels only', () => {
+        const a = newLevels();
+        a.channels.r.inputHigh = 20;
+        a.channels.g.inputHigh = 40;
+        a.channels.g.gamma = 2;
+        const b = setLevelsChannelsValue(a, ['r', 'g'], 'inputLow', 30);
+        expect(b.channels.r).toMatchObject({ inputLow: 30, inputHigh: 31 });
+        expect(b.channels.g).toMatchObject({ inputLow: 30, inputHigh: 40, gamma: 2 });
+        expect(b.channels.b).toBe(a.channels.b);
+    });
+    it('does not allow the channel mask to become empty', () => {
+        expect(toggleChannelMask(['r'], 'r')).toEqual(['r']);
+        expect(toggleChannelMask(['r', 'b'], 'r')).toEqual(['b']);
+        expect(toggleChannelMask(['b'], 'g')).toEqual(['g', 'b']);
     });
 });

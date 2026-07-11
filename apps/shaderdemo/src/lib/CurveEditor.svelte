@@ -1,7 +1,7 @@
 <script lang="ts">
-    import { curveLut, MAX_CURVE_POINTS, type CurvePoint } from './adjustments';
+    import { curveLut, MAX_CURVE_POINTS, type CurveEdit, type CurvePoint } from './adjustments';
     export let points: CurvePoint[];
-    export let onchange: (points: CurvePoint[]) => void;
+    export let onedit: (edit: CurveEdit) => void;
     let selected = 0;
     let graph: SVGSVGElement;
     $: selected = Math.min(selected, points.length - 1);
@@ -11,12 +11,8 @@
         const old = points[index];
         const nx = index === 0 ? 0 : index === points.length - 1 ? 255 : Math.max(1, Math.min(254, Math.round(x)));
         const ny = Math.max(0, Math.min(255, Math.round(y)));
-        const collision = points.findIndex((p, i) => i !== index && p.x === nx);
-        if (collision >= 0) return;
-        const marker = { ...old, x: nx, y: ny };
-        const next = points.map((p, i) => (i === index ? marker : { ...p })).sort((a, b) => a.x - b.x);
-        selected = next.indexOf(marker);
-        onchange(next);
+        onedit({ type: 'move', oldX: old.x, x: nx, y: ny });
+        selected = points.filter((point) => point.x < nx && point.x !== old.x).length;
     }
     function coordinates(event: PointerEvent) {
         const box = graph.getBoundingClientRect();
@@ -31,10 +27,9 @@
         if (index < 0 && points.length < MAX_CURVE_POINTS) {
             const marker = { x: Math.max(1, Math.min(254, Math.round(c.x))), y: Math.round(c.y) };
             if (points.some((p) => p.x === marker.x)) return;
-            const next = [...points.map((p) => ({ ...p })), marker].sort((a, b) => a.x - b.x);
-            index = next.indexOf(marker);
-            selected = index;
-            onchange(next);
+            onedit({ type: 'add', ...marker });
+            index = points.findIndex((point) => point.x === marker.x);
+            selected = index < 0 ? points.filter((point) => point.x < marker.x).length : index;
         } else if (index >= 0) selected = index;
         if (index < 0) return;
         graph.setPointerCapture(event.pointerId);
@@ -51,7 +46,7 @@
     }
     function removeSelected() {
         if (selected <= 0 || selected >= points.length - 1) return;
-        onchange(points.filter((_, i) => i !== selected).map((p) => ({ ...p })));
+        onedit({ type: 'remove', x: points[selected].x });
         selected = Math.max(0, selected - 1);
     }
     function keydown(event: KeyboardEvent) {
