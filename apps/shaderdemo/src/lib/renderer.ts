@@ -1,5 +1,4 @@
 export const FIELD_PARAMETER_SCHEMA = [
-    { key: 'baseScale', label: 'Base scale', min: 0.45, max: 4, step: 0.01, default: 1.51 },
     { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 2.5 },
     { key: 'ridgeMix', label: 'Billow / ridge mix', min: 0, max: 1, step: 0.01, default: 1 },
     { key: 'ridgeSharpness', label: 'Ridge sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
@@ -83,7 +82,7 @@ export function packUniform(
 ) {
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set([resolution[0], resolution[1], time, seed, ...FIELD_PARAMETER_SCHEMA.map(({ key }) => parameters[key])]);
-    data[21] = octaveIndex;
+    data[20] = octaveIndex;
     data.set(
         OCTAVE_PARAMETER_SCHEMA.flatMap((group) => group.map(({ key }) => parameters[key])),
         24,
@@ -98,7 +97,7 @@ export function advanceSimulationTime(time: number, deltaSeconds: number, speed:
 const common = /* wgsl */ `
 struct U {
  resolution: vec2f, time: f32, seed: f32,
- baseScale: f32, flowStretch: f32, ridgeMix: f32, ridgeSharpness: f32,
+ flowStretch: f32, ridgeMix: f32, ridgeSharpness: f32,
  warpScale: f32, warpStrength: f32, threshold: f32, thresholdSoftness: f32,
  secondaryScale: f32, secondaryMix: f32, finalContrast: f32, animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
@@ -133,9 +132,11 @@ const baseShader =
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
-    let flow=mat2x2f(.89,.45,-.45,.89)*vec2f(q.x,q.y*u.flowStretch);
+    // Procedural noise is sampled in this target's real texel coordinates: one noise unit per pixel.
+    let centeredPixel=pos.xy-u.resolution*.5;
+    let flow=mat2x2f(.89,.45,-.45,.89)*vec2f(centeredPixel.x,centeredPixel.y*u.flowStretch);
     let drift=noise3v(flow*u.warpScale,t*.11)-.5;
-    let p=(flow+drift*u.warpStrength)*u.baseScale;
+    let p=flow+drift*u.warpStrength;
     let primary=noise3(vec3f(p,t*.075));
     let secondary=noise3(vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-drift*.41,t*.12+7.1));
     let tertiary=noise3(vec3f(p*u.secondaryScale*1.85+vec2f(-4.1,19.3)+drift*.23,t*.18+19.7));
@@ -168,10 +169,9 @@ const octaveShader =
         textureSample(src,samp,uv+offset*vec2f(-1.,1.)).r+
         textureSample(src,samp,uv+offset).r)*.25;
     let diffused=mix(center,blurred,settings.z);
-    var q=uv*2.-1.; q.x*=u.resolution.x/u.resolution.y;
-    let frequency=u.baseScale*pow(2.,u.octaveIndex+1.);
     let phase=u.time*(.17+u.octaveIndex*.047)+u.octaveIndex*13.71;
-    let detail=noise3(vec3f(q*frequency+vec2f(u.octaveIndex*7.3,-u.octaveIndex*4.9),phase))-.5;
+    // Every iteration injects 1:1 texel noise; earlier levels naturally become larger in final pixels.
+    let detail=noise3(vec3f(pos.xy+vec2f(u.octaveIndex*7.3,-u.octaveIndex*4.9),phase))-.5;
     let injected=diffused+detail*settings.x;
     // Signed soft density bias: zero is neutral and continuity is preserved for the next level.
     let remapped=clamp((injected-settings.y*.35)/(1.-abs(settings.y)*.35),-1.,2.);
@@ -347,7 +347,7 @@ export class AtmosphereRenderer {
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
             data[0] = this.textures[octave + 1].width;
             data[1] = this.textures[octave + 1].height;
-            data[21] = octave;
+            data[20] = octave;
             draw(this.textures[octave + 1].createView(), this.pipelines[1], this.textures[octave]);
         }
         data[0] = this.canvas.width;
