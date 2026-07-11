@@ -66,6 +66,15 @@ describe('field configuration', () => {
             'let fit=1.+2.*max(0.,max(redCoefficient,max(greenCoefficient,blueCoefficient)))',
         );
         expect(DISPLAY_SHADER_SOURCE).toContain('coefficient*dot(centered,centered)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('fn blendLight');
+        expect(DISPLAY_SHADER_SOURCE).toContain('u.post[8].x');
+        expect(DISPLAY_SHADER_SOURCE).toContain('u.post[8].y');
+        expect(DISPLAY_SHADER_SOURCE).toContain('u.post[8].z');
+        expect(
+            ['godRaysBlendMode', 'bloomBlendMode', 'glowBlendMode'].map(
+                (key) => defaultParameters()[key as keyof ReturnType<typeof defaultParameters>],
+            ),
+        ).toEqual([0, 0, 0]);
         expect(DISPLAY_SHADER_SOURCE).not.toContain('f*255');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('/255.');
         expect(DISPLAY_SHADER_SOURCE).toContain('if(u.blurRadii[1].w<=.5)');
@@ -152,8 +161,8 @@ describe('field configuration', () => {
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
         expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(87);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(87);
+        expect(PARAMETER_SCHEMA).toHaveLength(90);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(90);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -258,7 +267,7 @@ describe('field configuration', () => {
         parameters.octave3Pixelate = 1;
         const data = packUniform([320, 180], 2, 9, parameters, 4, 73);
         expect(data).toHaveLength(UNIFORM_FLOATS);
-        expect(data.byteLength).toBe(368);
+        expect(data.byteLength).toBe(384);
         expect(Array.from(data.slice(12, 18))).toEqual(Array.from(new Float32Array([1, 0.45, -0.25, -1, 4, 2])));
         expect(data[29]).toBe(4);
         expect(data[30]).toBe(5);

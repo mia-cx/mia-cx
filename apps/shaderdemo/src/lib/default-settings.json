@@ -90,7 +90,10 @@
             "lensDistortion": 0,
             "sharpen": 0,
             "filmGrainAmount": 0,
-            "filmGrainSize": 1
+            "filmGrainSize": 1,
+            "godRaysBlendMode": 0,
+            "bloomBlendMode": 0,
+            "glowBlendMode": 0
         },
         "adjustments": [
             {

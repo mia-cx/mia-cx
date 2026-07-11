@@ -108,14 +108,15 @@
                 'godRaysCenterX',
                 'godRaysCenterY',
                 'godRaysSamples',
+                'godRaysBlendMode',
             ],
         },
         {
             label: 'Bloom',
             toggle: 'bloomEnabled',
-            keys: ['bloomThreshold', 'bloomKnee', 'bloomIntensity', 'bloomRadius'],
+            keys: ['bloomThreshold', 'bloomKnee', 'bloomIntensity', 'bloomRadius', 'bloomBlendMode'],
         },
-        { label: 'Glow', toggle: 'glowEnabled', keys: ['glowIntensity', 'glowHue'] },
+        { label: 'Glow', toggle: 'glowEnabled', keys: ['glowIntensity', 'glowHue', 'glowBlendMode'] },
         {
             label: 'Lens / camera',
             keys: [
@@ -523,27 +524,42 @@
                                             >{/if}
                                     </div>
                                     {#each POST_PARAMETER_SCHEMA.filter( ({ key }) => group.keys.includes(key as never), ) as parameter}
-                                        <label class="parameter"
-                                            ><span>{parameter.label}</span>
-                                            <input
-                                                class="exact-value"
-                                                aria-label={`${parameter.label} exact value`}
-                                                type="number"
-                                                min={parameter.min}
-                                                max={parameter.max}
-                                                step={parameter.step}
-                                                bind:value={options.parameters[parameter.key]}
-                                                onchange={update}
-                                            />
-                                            <input
-                                                type="range"
-                                                min={parameter.min}
-                                                max={parameter.max}
-                                                step={parameter.step}
-                                                bind:value={options.parameters[parameter.key]}
-                                                oninput={update}
-                                            />
-                                        </label>
+                                        {#if parameter.key.endsWith('BlendMode')}
+                                            <label class="blend-mode">
+                                                <span>{parameter.label}</span>
+                                                <select
+                                                    bind:value={options.parameters[parameter.key]}
+                                                    onchange={update}
+                                                >
+                                                    <option value={0}>Add</option>
+                                                    <option value={1}>Screen</option>
+                                                    <option value={2}>Overlay</option>
+                                                    <option value={3}>Soft light</option>
+                                                </select>
+                                            </label>
+                                        {:else}
+                                            <label class="parameter"
+                                                ><span>{parameter.label}</span>
+                                                <input
+                                                    class="exact-value"
+                                                    aria-label={`${parameter.label} exact value`}
+                                                    type="number"
+                                                    min={parameter.min}
+                                                    max={parameter.max}
+                                                    step={parameter.step}
+                                                    bind:value={options.parameters[parameter.key]}
+                                                    onchange={update}
+                                                />
+                                                <input
+                                                    type="range"
+                                                    min={parameter.min}
+                                                    max={parameter.max}
+                                                    step={parameter.step}
+                                                    bind:value={options.parameters[parameter.key]}
+                                                    oninput={update}
+                                                />
+                                            </label>
+                                        {/if}
                                     {/each}
                                 </section>
                             {/each}
