@@ -5,11 +5,14 @@ import {
     applyCurveEditToChannels,
     composeAdjustmentLut,
     curveLut,
+    hslToRgb,
     identityLevels,
     interpolateNatural,
     levelsValue,
     newCurve,
+    newHslCurve,
     newLevels,
+    rgbToHsl,
     sanitizeAdjustments,
     setLevelsChannelValue,
     setLevelsChannelsValue,
@@ -63,7 +66,7 @@ describe('RGB Paint.NET adjustment semantics', () => {
         ]);
         expect(curve.type).toBe('curve');
         expect(levels.type).toBe('levels');
-        if (curve.type === 'curve') expect(curve.channels.r).toEqual(curve.channels.g);
+        if (curve.type === 'curve' && curve.mode === 'rgb') expect(curve.channels.r).toEqual(curve.channels.g);
         if (levels.type === 'levels') expect(levels.channels.r).toEqual(levels.channels.b);
     });
     it('sanitizes malformed partial channels independently', () => {
@@ -155,5 +158,59 @@ describe('RGB Paint.NET adjustment semantics', () => {
         const levels = newLevels();
         expect(applyCurveEditToChannels(curve, [], { type: 'add', x: 100, y: 110 })).toBe(curve);
         expect(setLevelsChannelsValue(levels, [], 'gamma', 2)).toBe(levels);
+    });
+    it('converts known RGB primaries and grayscale through standard HSL', () => {
+        expect(rgbToHsl(1, 0, 0)).toEqual({ h: 0, s: 1, l: 0.5 });
+        expect(rgbToHsl(0, 1, 0)).toMatchObject({ s: 1, l: 0.5 });
+        expect(rgbToHsl(0, 1, 0).h).toBeCloseTo(1 / 3);
+        expect(rgbToHsl(0, 0, 1)).toMatchObject({ s: 1, l: 0.5 });
+        expect(rgbToHsl(0, 0, 1).h).toBeCloseTo(2 / 3);
+        expect(rgbToHsl(0.4, 0.4, 0.4)).toEqual({ h: 0, s: 0, l: 0.4 });
+        expect(hslToRgb(0, 1, 0.5)).toEqual([1, 0, 0]);
+        const green = hslToRgb(1 / 3, 1, 0.5);
+        const blue = hslToRgb(2 / 3, 1, 0.5);
+        green.forEach((value, index) => expect(value).toBeCloseTo([0, 1, 0][index]));
+        blue.forEach((value, index) => expect(value).toBeCloseTo([0, 0, 1][index]));
+    });
+    it('keeps every grayscale byte exact through an identity HSL curve', () => {
+        const lut = composeAdjustmentLut([newHslCurve()]);
+        for (let value = 0; value < 256; value++) {
+            expect([...lut.slice(value * 4, value * 4 + 4)]).toEqual([value, value, value, 255]);
+        }
+    });
+    it('interleaves RGB and HSL curves in literal stack order', () => {
+        const rgb = newCurve();
+        rgb.channels.g = [
+            { x: 0, y: 0 },
+            { x: 255, y: 0 },
+        ];
+        rgb.channels.b = [
+            { x: 0, y: 0 },
+            { x: 255, y: 0 },
+        ];
+        const hsl = newHslCurve();
+        hsl.channels.h = [
+            { x: 0, y: 85 },
+            { x: 255, y: 85 },
+        ];
+        const forward = composeAdjustmentLut([rgb, hsl]);
+        const reverse = composeAdjustmentLut([hsl, rgb]);
+        expect([...forward.slice(128 * 4, 128 * 4 + 4)]).toEqual([0, 128, 0, 255]);
+        expect([...reverse.slice(128 * 4, 128 * 4 + 4)]).toEqual([128, 0, 0, 255]);
+    });
+    it('migrates legacy curves to RGB and sanitizes HSL channels independently', () => {
+        const [legacy, hsl] = sanitizeAdjustments([
+            { type: 'curve', points: [{ x: 20, y: 30 }] },
+            { type: 'curve', mode: 'hsl', channels: { h: [{ x: 64, y: 128 }], s: null } },
+        ]);
+        expect(legacy).toMatchObject({ type: 'curve', mode: 'rgb' });
+        expect(hsl).toMatchObject({ type: 'curve', mode: 'hsl' });
+        if (hsl.type === 'curve' && hsl.mode === 'hsl') {
+            expect(hsl.channels.h).toContainEqual({ x: 64, y: 128 });
+            expect(hsl.channels.s).toEqual([
+                { x: 0, y: 0 },
+                { x: 255, y: 255 },
+            ]);
+        }
     });
 });

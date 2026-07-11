@@ -3,15 +3,27 @@
     import {
         applyCurveEditToChannels,
         CHANNELS,
+        HSL_CHANNELS,
         setLevelsChannelsValue,
         toggleChannelMask,
         type Adjustment,
+        type CurveChannel,
         type Channel,
         type LevelsKey,
     } from './adjustments';
     let { adjustment, onchange }: { adjustment: Adjustment; onchange: (value: Adjustment) => void } = $props();
-    let channelMask: Channel[] = $state([...CHANNELS]);
-    let channel = $derived(CHANNELS.find((item) => channelMask.includes(item)) ?? 'r');
+    let descriptors = $derived(adjustment.type === 'curve' && adjustment.mode === 'hsl' ? HSL_CHANNELS : CHANNELS);
+    let channelMask: CurveChannel[] = $state([]);
+    let priorId = $state('');
+    $effect(() => {
+        if (priorId !== adjustment.id) {
+            priorId = adjustment.id;
+            channelMask = [...descriptors];
+        }
+    });
+    let channel = $derived(descriptors.find((item) => channelMask.includes(item)) ?? descriptors[0]);
+    let rgbChannel = $derived(channel as Channel);
+    let rgbMask = $derived(channelMask as Channel[]);
     const rows = [
         ['inputLow', 'Input black', 0, 254, 1],
         ['inputHigh', 'Input white', 1, 255, 1],
@@ -22,18 +34,19 @@
 </script>
 
 <div class="channels" aria-label="Color channels">
-    {#each CHANNELS as item}<label
+    {#each descriptors as item}<label
             ><input
                 type="checkbox"
                 checked={channelMask.includes(item)}
-                onchange={() => (channelMask = toggleChannelMask(channelMask, item))}
+                onchange={() => (channelMask = toggleChannelMask(channelMask, item, descriptors))}
             />{item.toUpperCase()}</label
         >{/each}
 </div>
 {#if adjustment.type === 'curve'}
     <CurveEditor
-        points={adjustment.channels[channel]}
-        channels={adjustment.channels}
+        points={adjustment.channels[channel as keyof typeof adjustment.channels]}
+        channels={adjustment.channels as Record<string, import('./adjustments').CurvePoint[]>}
+        {descriptors}
         {channelMask}
         onedit={(edit) => onchange(applyCurveEditToChannels(adjustment, channelMask, edit))}
     />
@@ -47,23 +60,19 @@
                 min={row[2]}
                 max={row[3]}
                 step={row[4]}
-                value={adjustment.channels[channel][row[0]]}
+                value={adjustment.channels[rgbChannel][row[0]]}
                 disabled={channelMask.length === 0}
                 onchange={(e) =>
-                    onchange(
-                        setLevelsChannelsValue(adjustment, channelMask, row[0] as LevelsKey, +e.currentTarget.value),
-                    )}
+                    onchange(setLevelsChannelsValue(adjustment, rgbMask, row[0] as LevelsKey, +e.currentTarget.value))}
             /><input
                 type="range"
                 min={row[2]}
                 max={row[3]}
                 step={row[4]}
-                value={adjustment.channels[channel][row[0]]}
+                value={adjustment.channels[rgbChannel][row[0]]}
                 disabled={channelMask.length === 0}
                 oninput={(e) =>
-                    onchange(
-                        setLevelsChannelsValue(adjustment, channelMask, row[0] as LevelsKey, +e.currentTarget.value),
-                    )}
+                    onchange(setLevelsChannelsValue(adjustment, rgbMask, row[0] as LevelsKey, +e.currentTarget.value))}
             /></label
         >
     {/each}

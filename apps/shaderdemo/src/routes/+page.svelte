@@ -15,7 +15,7 @@
     import { GpuTelemetry, type FrameRollingSummary, type GpuRollingSummary } from '$lib/telemetry';
     import { defaultShaderSettings, normalizeSavedSettings, shaderSettings } from '$lib/settings';
     import AdjustmentEditor from '$lib/AdjustmentEditor.svelte';
-    import { MAX_ADJUSTMENTS, newCurve, newLevels, type Adjustment } from '$lib/adjustments';
+    import { MAX_ADJUSTMENTS, newCurve, newHslCurve, newLevels, type Adjustment } from '$lib/adjustments';
 
     let canvas: HTMLCanvasElement;
     let renderer: AtmosphereRenderer | undefined;
@@ -360,7 +360,10 @@
                             <div class="add-adjustments">
                                 <button
                                     onclick={() => addAdjustment(newCurve())}
-                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add curve</button
+                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add RGB curve</button
+                                ><button
+                                    onclick={() => addAdjustment(newHslCurve())}
+                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add HSL curve</button
                                 ><button
                                     onclick={() => addAdjustment(newLevels())}
                                     disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add levels</button
@@ -370,10 +373,18 @@
                                 <section class="adjustment">
                                     <div class="adjustment-heading">
                                         <strong
-                                            >{adjustment.type === 'curve' ? 'Curve' : 'Levels'}
+                                            >{adjustment.type === 'curve'
+                                                ? `${adjustment.mode.toUpperCase()} Curve`
+                                                : 'Levels'}
                                             {options.adjustments
                                                 .slice(0, index + 1)
-                                                .filter((a) => a.type === adjustment.type).length}</strong
+                                                .filter(
+                                                    (a) =>
+                                                        a.type === adjustment.type &&
+                                                        (a.type !== 'curve' ||
+                                                            (adjustment.type === 'curve' &&
+                                                                a.mode === adjustment.mode)),
+                                                ).length}</strong
                                         ><label
                                             ><span>Enabled</span><input
                                                 type="checkbox"
@@ -400,7 +411,12 @@
                                                 replaceAdjustment(
                                                     index,
                                                     adjustment.type === 'curve'
-                                                        ? { ...newCurve(), id: adjustment.id }
+                                                        ? {
+                                                              ...(adjustment.mode === 'hsl'
+                                                                  ? newHslCurve()
+                                                                  : newCurve()),
+                                                              id: adjustment.id,
+                                                          }
                                                         : { ...newLevels(), id: adjustment.id },
                                                 )}>Reset</button
                                         ><button

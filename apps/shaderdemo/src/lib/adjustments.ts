@@ -2,6 +2,9 @@ export const MAX_ADJUSTMENTS = 128;
 export const MAX_CURVE_POINTS = 256;
 export const CHANNELS = ['r', 'g', 'b'] as const;
 export type Channel = (typeof CHANNELS)[number];
+export const HSL_CHANNELS = ['h', 's', 'l'] as const;
+export type HslChannel = (typeof HSL_CHANNELS)[number];
+export type CurveChannel = Channel | HslChannel;
 
 export interface CurvePoint {
     x: number;
@@ -15,15 +18,23 @@ export interface LevelsChannel {
     outputHigh: number;
 }
 export type CurveChannels = Record<Channel, CurvePoint[]>;
+export type HslCurveChannels = Record<HslChannel, CurvePoint[]>;
 export type LevelsChannels = Record<Channel, LevelsChannel>;
 interface AdjustmentBase {
     id: string;
     enabled: boolean;
 }
-export interface CurveAdjustment extends AdjustmentBase {
+export interface RgbCurveAdjustment extends AdjustmentBase {
     type: 'curve';
+    mode: 'rgb';
     channels: CurveChannels;
 }
+export interface HslCurveAdjustment extends AdjustmentBase {
+    type: 'curve';
+    mode: 'hsl';
+    channels: HslCurveChannels;
+}
+export type CurveAdjustment = RgbCurveAdjustment | HslCurveAdjustment;
 export interface LevelsAdjustment extends AdjustmentBase {
     type: 'levels';
     channels: LevelsChannels;
@@ -50,11 +61,19 @@ export const identityLevels = (): LevelsChannel => ({
 });
 export const adjustmentId = () =>
     globalThis.crypto?.randomUUID?.() ?? `adjustment-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-export const newCurve = (): CurveAdjustment => ({
+export const newCurve = (): RgbCurveAdjustment => ({
     id: adjustmentId(),
     type: 'curve',
     enabled: true,
+    mode: 'rgb',
     channels: { r: identityPoints(), g: identityPoints(), b: identityPoints() },
+});
+export const newHslCurve = (): HslCurveAdjustment => ({
+    id: adjustmentId(),
+    type: 'curve',
+    mode: 'hsl',
+    enabled: true,
+    channels: { h: identityPoints(), s: identityPoints(), l: identityPoints() },
 });
 export const newLevels = (): LevelsAdjustment => ({
     id: adjustmentId(),
@@ -109,19 +128,71 @@ export function levelsValue(a: LevelsChannel, input: number): number {
 export function levelsLut(a: LevelsChannel): Uint8Array {
     return Uint8Array.from({ length: 256 }, (_, i) => levelsValue(a, i));
 }
-/** Interleaved RGBA8 LUT; byte quantization occurs after every enabled instance. */
+export interface Hsl {
+    h: number;
+    s: number;
+    l: number;
+}
+export function rgbToHsl(r: number, g: number, b: number): Hsl {
+    const max = Math.max(r, g, b),
+        min = Math.min(r, g, b),
+        d = max - min,
+        l = (max + min) / 2;
+    if (d === 0) return { h: 0, s: 0, l };
+    const s = d / (1 - Math.abs(2 * l - 1));
+    let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h = (((h / 6) % 1) + 1) % 1;
+    return { h, s, l };
+}
+export function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+    h = ((h % 1) + 1) % 1;
+    s = clamp(s, 0, 1);
+    l = clamp(l, 0, 1);
+    const c = (1 - Math.abs(2 * l - 1)) * s,
+        x = c * (1 - Math.abs(((h * 6) % 2) - 1)),
+        m = l - c / 2;
+    const rgb =
+        h < 1 / 6
+            ? [c, x, 0]
+            : h < 2 / 6
+              ? [x, c, 0]
+              : h < 3 / 6
+                ? [0, c, x]
+                : h < 4 / 6
+                  ? [0, x, c]
+                  : h < 5 / 6
+                    ? [x, 0, c]
+                    : [c, 0, x];
+    return [rgb[0] + m, rgb[1] + m, rgb[2] + m];
+}
+const normalizedByte = (v: number) => Math.floor(clamp(v, 0, 1) * 255 + 0.5);
+/** One RGBA8 LUT. This is valid because the shader's pre-adjustment output is scalar grayscale. */
 export function composeAdjustmentLut(stack: Adjustment[]): Uint8Array {
-    const channelLuts = CHANNELS.map((channel) => {
-        let result = Uint8Array.from({ length: 256 }, (_, i) => i);
-        for (const a of stack)
-            if (a.enabled) {
-                const next = a.type === 'curve' ? curveLut(a.channels[channel]) : levelsLut(a.channels[channel]);
-                result = Uint8Array.from(result, (v) => next[v]);
-            }
-        return result;
-    });
     const rgba = new Uint8Array(1024);
-    for (let i = 0; i < 256; i++) rgba.set([channelLuts[0][i], channelLuts[1][i], channelLuts[2][i], 255], i * 4);
+    const prepared = stack.map((a) =>
+        a.type === 'levels'
+            ? { a, luts: CHANNELS.map((c) => levelsLut(a.channels[c])) }
+            : a.mode === 'rgb'
+              ? { a, luts: CHANNELS.map((c) => curveLut(a.channels[c])) }
+              : { a, luts: HSL_CHANNELS.map((c) => curveLut(a.channels[c])) },
+    );
+    for (let i = 0; i < 256; i++) {
+        let rgb: [number, number, number] = [i, i, i];
+        for (const { a, luts } of prepared)
+            if (a.enabled) {
+                if (a.type !== 'curve' || a.mode === 'rgb') rgb = [luts[0][rgb[0]], luts[1][rgb[1]], luts[2][rgb[2]]];
+                else {
+                    const hsl = rgbToHsl(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
+                    const mapped = [
+                        luts[0][normalizedByte(hsl.h)] / 255,
+                        luts[1][normalizedByte(hsl.s)] / 255,
+                        luts[2][normalizedByte(hsl.l)] / 255,
+                    ];
+                    rgb = hslToRgb(mapped[0], mapped[1], mapped[2]).map(normalizedByte) as [number, number, number];
+                }
+            }
+        rgba.set([...rgb, 255], i * 4);
+    }
     return rgba;
 }
 export function setLevelsChannelValue(
@@ -142,9 +213,10 @@ export function setLevelsChannelsValue(
 }
 
 /** Toggle a Paint.NET-style channel mask, preserving canonical channel order. */
-export function toggleChannelMask(mask: readonly Channel[], channel: Channel): Channel[] {
-    if (!mask.includes(channel)) return CHANNELS.filter((item) => item === channel || mask.includes(item));
-    return CHANNELS.filter((item) => item !== channel && mask.includes(item));
+export function toggleChannelMask<T extends string>(mask: readonly T[], channel: T, order?: readonly T[]): T[] {
+    const ordered = order ?? (CHANNELS as unknown as readonly T[]);
+    if (!mask.includes(channel)) return ordered.filter((item) => item === channel || mask.includes(item));
+    return ordered.filter((item) => item !== channel && mask.includes(item));
 }
 
 /** Apply a semantic curve operation without disturbing unrelated control points. */
@@ -162,15 +234,15 @@ export function applyCurveEdit(points: CurvePoint[], edit: CurveEdit): CurvePoin
     return [...retained.map((point) => ({ ...point })), { x: targetX, y }].sort((a, b) => a.x - b.x);
 }
 
-export function applyCurveEditToChannels(
-    a: CurveAdjustment,
-    channels: readonly Channel[],
+export function applyCurveEditToChannels<T extends CurveAdjustment>(
+    a: T,
+    channels: readonly CurveChannel[],
     edit: CurveEdit,
-): CurveAdjustment {
+): T {
     if (channels.length === 0) return a;
-    const next = { ...a.channels };
-    for (const channel of channels) next[channel] = applyCurveEdit(a.channels[channel], edit);
-    return { ...a, channels: next };
+    const next: Record<string, CurvePoint[]> = { ...a.channels };
+    for (const channel of channels) if (channel in next) next[channel] = applyCurveEdit(next[channel], edit);
+    return { ...a, channels: next } as T;
 }
 export function setLevelsValue(a: LevelsChannel, key: LevelsKey, raw: number): LevelsChannel {
     const n = finite(raw, a[key]);
@@ -237,16 +309,25 @@ export function sanitizeAdjustments(value: unknown): Adjustment[] {
                 },
             });
         } else if (r.type === 'curve' && (channels || Array.isArray(r.points))) {
+            const mode = r.mode === 'hsl' ? 'hsl' : 'rgb';
             out.push({
                 id: idFor(r.id),
                 type: 'curve',
                 enabled,
-                channels: {
-                    r: sanitizePoints(channels?.r ?? r.points),
-                    g: sanitizePoints(channels?.g ?? r.points),
-                    b: sanitizePoints(channels?.b ?? r.points),
-                },
-            });
+                mode,
+                channels:
+                    mode === 'hsl'
+                        ? {
+                              h: sanitizePoints(channels?.h),
+                              s: sanitizePoints(channels?.s),
+                              l: sanitizePoints(channels?.l),
+                          }
+                        : {
+                              r: sanitizePoints(channels?.r ?? r.points),
+                              g: sanitizePoints(channels?.g ?? r.points),
+                              b: sanitizePoints(channels?.b ?? r.points),
+                          },
+            } as CurveAdjustment);
         }
     }
     return out;

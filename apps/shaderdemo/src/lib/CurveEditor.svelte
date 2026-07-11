@@ -1,16 +1,9 @@
 <script lang="ts">
-    import {
-        CHANNELS,
-        curveLut,
-        MAX_CURVE_POINTS,
-        type Channel,
-        type CurveChannels,
-        type CurveEdit,
-        type CurvePoint,
-    } from './adjustments';
+    import { curveLut, MAX_CURVE_POINTS, type CurveEdit, type CurvePoint } from './adjustments';
     export let points: CurvePoint[];
-    export let channels: CurveChannels;
-    export let channelMask: Channel[];
+    export let descriptors: readonly string[];
+    export let channels: Record<string, CurvePoint[]>;
+    export let channelMask: string[];
     export let onedit: (edit: CurveEdit) => void;
     let selectedX = 0;
     let graph: SVGSVGElement;
@@ -19,13 +12,13 @@
         points.findIndex((point) => point.x === selectedX),
     );
     $: channelPaths = Object.fromEntries(
-        CHANNELS.map((channel) => [
+        descriptors.map((channel) => [
             channel,
             Array.from(curveLut(channels[channel]), (y, x) => `${x},${255 - y}`).join(' '),
         ]),
-    ) as Record<Channel, string>;
+    ) as Record<string, string>;
     $: primaryChannel = channelMask.length
-        ? (CHANNELS.find((channel) => channels[channel] === points) ?? channelMask[0])
+        ? (descriptors.find((channel) => channels[channel] === points) ?? channelMask[0])
         : undefined;
 
     function commit(oldX: number, x: number, y: number) {
@@ -117,7 +110,7 @@
     <rect width="255" height="255" />
     {#each [51, 102, 153, 204] as n}<path class="grid" d={`M${n} 0V255M0 ${n}H255`} />{/each}
     <path class="identity" d="M0 255L255 0" />
-    {#each CHANNELS as channel}
+    {#each descriptors as channel}
         <polyline
             class="channel channel-{channel}"
             class:checked={channelMask.includes(channel)}
@@ -224,6 +217,15 @@
     }
     .channel-b {
         stroke: #6d8cff;
+    }
+    .channel-h {
+        stroke: #ff5de1;
+    }
+    .channel-s {
+        stroke: #5defff;
+    }
+    .channel-l {
+        stroke: #fff28a;
     }
     .channel-point {
         fill: #111;
