@@ -16,6 +16,7 @@ import {
 describe('field configuration', () => {
     it('caps DPR and rounds down to stable physical dimensions', () => {
         expect(renderSize(801.9, 600.8, 3, 1.5)).toEqual({ width: 1202, height: 901 });
+        expect(renderSize(801.9, 600.8, 3, Number.POSITIVE_INFINITY)).toEqual({ width: 2405, height: 1802 });
         expect(renderSize(0, 0, 2, 1)).toEqual({ width: 1, height: 1 });
     });
     it('keeps low-resolution render targets valid', () => {

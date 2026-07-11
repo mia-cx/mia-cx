@@ -12,7 +12,7 @@
     let renderer: AtmosphereRenderer | undefined;
     let options: RenderOptions = {
         seed: 4.2,
-        dprCap: 1.5,
+        dprCap: Number.POSITIVE_INFINITY,
         renderScale: 1,
         parameters: defaultParameters(),
     };
