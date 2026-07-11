@@ -99,10 +99,12 @@ describe('field configuration', () => {
         for (const key of ['billowAmount', 'ridgeAmount', 'secondaryCloudAmount', 'secondaryRibbonAmount'] as const) {
             expect(FIELD_PARAMETER_SCHEMA.find((parameter) => parameter.key === key)?.min).toBe(-2);
         }
-        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual(Array(5).fill(0));
-        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual(Array(5).fill(0));
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual(Array(5).fill(0.005));
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[1].default)).toEqual(Array(5).fill(0));
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[2].default)).toEqual([0.85, 1, 0.5, 1, 1]);
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual([0.5, 0.1, 2, 1, 2]);
         expect(OCTAVE_PIXELATE_SCHEMA.map(({ default: value }) => value)).toEqual(Array(5).fill(0));
-        expect(OCTAVE_BLUR_SCHEMA.map(({ default: value }) => value)).toEqual(Array(5).fill(0.25));
+        expect(OCTAVE_BLUR_SCHEMA.map(({ default: value }) => value)).toEqual([0, 0.5, 0.3, 0.3, 0.1]);
     });
     it('ignores stale persisted sixth and seventh octave keys', () => {
         const saved = {
@@ -145,13 +147,13 @@ describe('field configuration', () => {
         const parameters = defaultParameters();
         parameters.octave1Pixelate = 1;
         parameters.octave3Pixelate = 1;
-        const data = packUniform([320, 180], 2, 9, parameters, 4);
+        const data = packUniform([320, 180], 2, 9, parameters, 4, 73);
         expect(data).toHaveLength(UNIFORM_FLOATS);
         expect(data.byteLength).toBe(240);
         expect(Array.from(data.slice(12, 18))).toEqual(Array.from(new Float32Array([1, 1.1, 0, 0, 1.76, 0])));
         expect(data[29]).toBe(4);
         expect(data[30]).toBe(5);
-        expect(data[31]).toBe(0);
+        expect(data[31]).toBe(73);
         expect(Array.from(data.slice(32, 36))).toEqual(
             Array.from(
                 new Float32Array([
@@ -162,7 +164,7 @@ describe('field configuration', () => {
                 ]),
             ),
         );
-        expect(Array.from(data.slice(52, 57))).toEqual(Array(5).fill(0.25));
+        expect(Array.from(data.slice(52, 57))).toEqual(Array.from(new Float32Array([0, 0.5, 0.3, 0.3, 0.1])));
         expect(Array.from(data.slice(57, 60))).toEqual([0, 0, 0]);
     });
     it('uses a dynamic radius and four diagonal samples with an exact zero-radius identity', () => {
@@ -173,6 +175,8 @@ describe('field configuration', () => {
     });
     it('skips neutral octave work while smoothness alone remains neutral', () => {
         const parameters = defaultParameters();
+        parameters.octave1Noise = 0;
+        parameters.octave1Distance = 0;
         expect(octaveEffectIsActive(parameters, 0)).toBe(false);
         parameters.octave1Smoothness = 1;
         expect(octaveEffectIsActive(parameters, 0)).toBe(false);
@@ -180,9 +184,10 @@ describe('field configuration', () => {
             const active = { ...parameters, [key]: key === 'octave1Threshold' ? -0.1 : 1 };
             expect(octaveEffectIsActive(active, 0)).toBe(true);
         }
+        expect(octaveBlurIsActive(parameters, 0)).toBe(false);
+        parameters.octave1BlurRadius = 0.1;
         expect(octaveBlurIsActive(parameters, 0)).toBe(true);
         parameters.octave1BlurRadius = 0;
-        expect(octaveBlurIsActive(parameters, 0)).toBe(false);
         parameters.octave1BlurRadius = 0.00001;
         expect(octaveBlurIsActive(parameters, 0)).toBe(true);
         parameters.octave1Threshold = 0.00001;
@@ -234,6 +239,18 @@ describe('field configuration', () => {
         expect(OCTAVE_SHADER_SOURCE).toContain('if(settings.w>0.)');
         expect(OCTAVE_SHADER_SOURCE).toContain('settings.y!=0.');
         expect(OCTAVE_SHADER_SOURCE).not.toContain('abs(settings.y)>.001');
+    });
+    it('uses fast static scatter and frame-varying tile noise', () => {
+        expect(OCTAVE_SHADER_SOURCE).toContain('fn avalanche(value: u32)');
+        expect(OCTAVE_SHADER_SOURCE).toContain('array<vec2f,16>');
+        expect(OCTAVE_SHADER_SOURCE).toContain('sampleIndex<4u');
+        expect(OCTAVE_SHADER_SOURCE).toContain('mix(1.,4.,settings.z)');
+        expect(OCTAVE_SHADER_SOURCE).toContain('u32(u.frameIndex)');
+        expect(OCTAVE_SHADER_SOURCE.match(/u\.frameIndex/g)).toHaveLength(1);
+        expect(OCTAVE_SHADER_SOURCE).toContain('if(settings.x!=0.)');
+        expect(OCTAVE_SHADER_SOURCE).not.toContain('cos(');
+        expect(OCTAVE_SHADER_SOURCE).not.toContain('sin(angle)');
+        expect(OCTAVE_SHADER_SOURCE).not.toContain('hash(pixel');
     });
     it('can bypass the stage-one threshold to expose the raw field', () => {
         expect(BASE_SHADER_SOURCE).toContain('if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }');

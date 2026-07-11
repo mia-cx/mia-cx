@@ -27,8 +27,10 @@ export const FIELD_PARAMETER_SCHEMA = [
 ] as const;
 
 export const OCTAVE_COUNT = 5;
-const noiseDefaults = Array<number>(OCTAVE_COUNT).fill(0);
-const distanceDefaults = Array<number>(OCTAVE_COUNT).fill(0);
+const noiseDefaults = Array<number>(OCTAVE_COUNT).fill(0.005);
+const smoothnessDefaults = [0.85, 1, 0.5, 1, 1];
+const distanceDefaults = [0.5, 0.1, 2, 1, 2];
+const blurDefaults = [0, 0.5, 0.3, 0.3, 0.1];
 export const OCTAVE_PARAMETER_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, index) => {
     const octave = index + 1;
     return [
@@ -41,7 +43,14 @@ export const OCTAVE_PARAMETER_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, 
             default: noiseDefaults[index],
         },
         { key: `octave${octave}Threshold`, label: 'Threshold', min: -0.4, max: 0.4, step: 0.01, default: 0 },
-        { key: `octave${octave}Smoothness`, label: 'Diffusion smoothness', min: 0, max: 1, step: 0.01, default: 0.35 },
+        {
+            key: `octave${octave}Smoothness`,
+            label: 'Diffusion smoothness',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            default: smoothnessDefaults[index],
+        },
         {
             key: `octave${octave}Distance`,
             label: 'Diffusion distance',
@@ -66,7 +75,7 @@ export const OCTAVE_BLUR_SCHEMA = Array.from({ length: OCTAVE_COUNT }, (_, index
     min: 0,
     max: 2,
     step: 0.01,
-    default: 0.25,
+    default: blurDefaults[index],
 }));
 export const PARAMETER_SCHEMA = [
     ...FIELD_PARAMETER_SCHEMA,
@@ -116,6 +125,7 @@ export function packUniform(
     seed: number,
     parameters: ShaderParameters,
     octaveIndex = 0,
+    frameIndex = 0,
 ) {
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set([resolution[0], resolution[1], time, seed, ...FIELD_PARAMETER_SCHEMA.map(({ key }) => parameters[key])]);
@@ -124,6 +134,7 @@ export function packUniform(
         (mask, { key }, index) => mask + (parameters[key] >= 0.5 ? 2 ** index : 0),
         0,
     );
+    data[31] = frameIndex;
     data.set(
         OCTAVE_PARAMETER_SCHEMA.flatMap((group) => group.map(({ key }) => parameters[key])),
         32,
@@ -164,7 +175,7 @@ struct U {
  thresholdEnabled: f32, threshold: f32, thresholdSoftness: f32, finalContrast: f32,
  animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
- centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32,
+ centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32, frameIndex: f32,
  octaves: array<vec4f, 5>,
  blurRadii: array<vec4f, 2>
 };
@@ -172,12 +183,6 @@ struct U {
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
     let p = array(vec2f(-1,-1), vec2f(3,-1), vec2f(-1,3)); return vec4f(p[i],0,1);
 }
-fn hash(p: vec2f) -> f32 { return fract(sin(dot(p,vec2f(127.1,311.7)) + u.seed*19.19)*43758.5453); }
-fn noise(p: vec2f) -> f32 {
-    let i=floor(p); let f=fract(p); let s=f*f*(3.-2.*f);
-    return mix(mix(hash(i),hash(i+vec2f(1,0)),s.x),mix(hash(i+vec2f(0,1)),hash(i+vec2f(1)),s.x),s.y);
-}
-fn n2(p: vec2f) -> vec2f { return vec2f(noise(p),noise(p+vec2f(17.7,43.2))); }
 fn hash3(p: vec3f, seedSalt: f32) -> f32 {
     return fract(sin(dot(p,vec3f(127.1,311.7,74.7)) + u.seed*19.19 + seedSalt*53.17)*43758.5453);
 }
@@ -320,11 +325,26 @@ export const OCTAVE_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
-fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
-    // Paint.NET Frosted Glass: independent random angle and uniform radius for every pixel/sample.
-    let angle=hash(pixel+vec2f(salt*17.13,salt*5.71))*6.2831853;
-    let radius=hash(pixel+vec2f(salt*3.37+41.9,salt*11.73-19.4))*distance;
-    return vec2f(cos(angle),sin(angle))*radius;
+fn avalanche(value: u32) -> u32 {
+    var x=value;
+    x^=x>>16u; x*=0x7feb352du; x^=x>>15u; x*=0x846ca68bu; x^=x>>16u;
+    return x;
+}
+fn tileHash(tile: vec2f, salt: u32) -> u32 {
+    let coordinate=vec2u(tile);
+    return avalanche(coordinate.x*0x9e3779b9u ^ coordinate.y*0x85ebca6bu ^ u32(u.seed)*0xc2b2ae35u ^ salt);
+}
+fn scatterOffset(tile: vec2f, sampleIndex: u32, distance: f32) -> vec2f {
+    // Paint.NET Frosted Glass: one hash supplies an independent quantized direction and radius per sample.
+    let directions=array<vec2f,16>(
+        vec2f(1.,0.),vec2f(.9238795,.3826834),vec2f(.7071068,.7071068),vec2f(.3826834,.9238795),
+        vec2f(0.,1.),vec2f(-.3826834,.9238795),vec2f(-.7071068,.7071068),vec2f(-.9238795,.3826834),
+        vec2f(-1.,0.),vec2f(-.9238795,-.3826834),vec2f(-.7071068,-.7071068),vec2f(-.3826834,-.9238795),
+        vec2f(0.,-1.),vec2f(.3826834,-.9238795),vec2f(.7071068,-.7071068),vec2f(.9238795,-.3826834)
+    );
+    let bits=tileHash(tile,u32(u.octaveIndex)*0x27d4eb2du ^ sampleIndex*0x165667b1u);
+    let radius=f32(bits>>8u)*(1./16777215.)*distance;
+    return directions[bits&15u]*radius;
 }
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
@@ -336,27 +356,30 @@ fn scatterOffset(pixel: vec2f, salt: f32, distance: f32) -> vec2f {
     let pixelationBit=floor(u.octavePixelationMask/exp2(u.octaveIndex))%2.;
     let tiledUv=(tile+.5)*octavePixelSize/sourceSize;
     let sourceUv=select(uv,tiledUv,pixelationBit>.5);
-    let sampleCount=u32(round(mix(1.,8.,settings.z)));
+    let sampleCount=u32(round(mix(1.,4.,settings.z)));
     // Radius zero is an exact identity operation: no random resampling and no accumulated softening.
     var scattered=textureSample(src,samp,sourceUv).r;
     if(settings.w>0.) {
         scattered=0.;
-        for(var sampleIndex=0u;sampleIndex<8u;sampleIndex++) {
+        for(var sampleIndex=0u;sampleIndex<4u;sampleIndex++) {
             if(sampleIndex<sampleCount) {
-                let salt=1.+u.octaveIndex*8.+f32(sampleIndex);
                 // Run Frosted Glass in this octave's virtual pixel grid. Every real pixel inside a tile
                 // receives the same whole-tile displacement while retaining its local detail.
-                let tileOffset=round(scatterOffset(tile,salt,settings.w));
+                let tileOffset=round(scatterOffset(tile,sampleIndex,settings.w));
                 let offset=tileOffset*octavePixelSize;
                 scattered+=textureSample(src,samp,sourceUv+offset/sourceSize).r;
             }
         }
         scattered/=f32(sampleCount);
     }
-    // Paint.NET's smoothness is sample count: 1–8 randomly displaced bilinear samples blended together.
-    // Literal noise is constant in effect-space cells while the source underneath stays full resolution.
-    let detail=hash(tile+vec2f(u.octaveIndex*37.7,u.octaveIndex*91.3))-.5;
-    let injected=scattered+detail*settings.x;
+    // Paint.NET's smoothness is sample count: 1–4 randomly displaced bilinear samples blended together.
+    // Literal noise is constant per effect-space tile, but independently salted for each rendered frame.
+    var injected=scattered;
+    if(settings.x!=0.) {
+        let noiseBits=tileHash(tile,u32(u.octaveIndex)*0x27d4eb2du ^ u32(u.frameIndex)*0x165667b1u ^ 0xa511e9b3u);
+        let detail=f32(noiseBits)*(1./4294967295.)-.5;
+        injected+=detail*settings.x;
+    }
     let thresholdWidth=max(.015,fwidth(injected)*1.5);
     let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,injected);
     let output=select(injected,thresholded,settings.y!=0.);
@@ -384,6 +407,7 @@ export class AtmosphereRenderer {
     private observer: ResizeObserver;
     private rafId = 0;
     private simTime = 0;
+    private frameIndex = 0;
     private lastTime = performance.now();
     private destroyed = false;
     private invalid = true;
@@ -515,6 +539,8 @@ export class AtmosphereRenderer {
             this.simTime,
             this.options.seed,
             this.options.parameters,
+            0,
+            this.frameIndex,
         );
         let passIndex = 0;
         const draw = (
@@ -559,6 +585,7 @@ export class AtmosphereRenderer {
         data[1] = this.canvas.height;
         draw(c.getCurrentTexture().createView(), this.pipelines[3], this.textures[current], true);
         d.queue.submit([enc.finish()]);
+        this.frameIndex = (this.frameIndex + 1) % 16_777_216;
     }
     destroy() {
         if (this.destroyed) return;
