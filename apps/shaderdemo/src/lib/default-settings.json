@@ -75,7 +75,7 @@
             "godRaysSoftness": 0.25,
             "godRaysCenterX": 0,
             "godRaysCenterY": 0,
-            "godRaysSamples": 20,
+            "godRaysSamples": 64,
             "bloomEnabled": 0,
             "bloomThreshold": 0.75,
             "bloomKnee": 0.25,

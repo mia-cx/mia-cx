@@ -40,7 +40,12 @@ describe('field configuration', () => {
         expect(distance).toMatchObject({ label: 'Distance', min: -100, max: 100, default: 0 });
         expect(GOD_RAYS_SHADER_SOURCE).toContain('1.-u.post[2].z/16384.');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('pow(contraction,progress*64.)');
-        expect(GOD_RAYS_SHADER_SOURCE).toContain('for(var i=0u;i<24u;i++)');
+        expect(PARAMETER_SCHEMA.find(({ key }) => key === 'godRaysSamples')).toMatchObject({
+            min: 64,
+            max: 128,
+            default: 64,
+        });
+        expect(GOD_RAYS_SHADER_SOURCE).toContain('for(var i=0u;i<128u;i++)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('center+(startUv-center)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('textureSampleLevel(src,samp,uv,0.)');
         expect(GOD_RAYS_SHADER_SOURCE).not.toContain('textureSample(src,samp,uv)');

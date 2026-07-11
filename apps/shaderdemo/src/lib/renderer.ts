@@ -138,7 +138,7 @@ export const POST_PARAMETER_SCHEMA = [
     { key: 'godRaysSoftness', label: 'Softness', min: 0, max: 1, step: 0.01, default: 0.25 },
     { key: 'godRaysCenterX', label: 'Center X', min: -2, max: 2, step: 0.01, default: 0 },
     { key: 'godRaysCenterY', label: 'Center Y', min: -2, max: 2, step: 0.01, default: 0 },
-    { key: 'godRaysSamples', label: 'Samples', min: 8, max: 24, step: 1, default: 20 },
+    { key: 'godRaysSamples', label: 'Samples', min: 64, max: 128, step: 1, default: 64 },
     { key: 'bloomEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
     { key: 'bloomThreshold', label: 'Threshold', min: 0, max: 2, step: 0.01, default: 0.75 },
     { key: 'bloomKnee', label: 'Softness', min: 0, max: 1, step: 0.01, default: 0.25 },
@@ -505,9 +505,9 @@ fn graded(v:f32)->vec3f {
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f {
  let startUv=pos.xy/u.resolution; let center=vec2f(.5)+u.post[3].zw*.5;
  // Paint.NET contracts the source vector by Amount/16384 for each of 64 iterations.
- // Sample that same 64-step path at a bounded number of evenly spaced taps at quarter resolution.
+ // Sample the complete Paint.NET path, with optional oversampling for long rays.
  let contraction=max(1.-u.post[2].z/16384.,0.); let count=u32(round(u.post[4].x)); var sum=vec3f(0); var visible=0.;
- for(var i=0u;i<24u;i++) { if(i<count) {
+ for(var i=0u;i<128u;i++) { if(i<count) {
   let progress=f32(i)/max(f32(count-1u),1.); let uv=center+(startUv-center)*pow(contraction,progress*64.);
   if(all(uv>=vec2f(0)) && all(uv<=vec2f(1))) {
    let v=pow(clamp(textureSampleLevel(src,samp,uv,0.).r,0.,1.),u.finalContrast); let rgb=graded(v); let luminance=dot(max(rgb,vec3f(0)),vec3f(.2126,.7152,.0722));
