@@ -2,11 +2,13 @@
     import { onMount } from 'svelte';
     import {
         AtmosphereRenderer,
+        FIELD_BLEND_MODES,
         FIELD_PARAMETER_SCHEMA,
         OCTAVE_BLUR_SCHEMA,
         OCTAVE_PARAMETER_SCHEMA,
         OCTAVE_PIXELATE_SCHEMA,
         PARAMETER_SCHEMA,
+        POST_BLEND_MODES,
         POST_PARAMETER_SCHEMA,
         type ParameterKey,
         type RenderOptions,
@@ -342,9 +344,9 @@
                                                     bind:value={options.parameters[parameter.key]}
                                                     onchange={update}
                                                 >
-                                                    <option value={0}>Add</option>
-                                                    <option value={1}>Screen</option>
-                                                    <option value={2}>Overlay</option>
+                                                    {#each FIELD_BLEND_MODES as label, value}
+                                                        <option {value}>{label}</option>
+                                                    {/each}
                                                 </select>
                                             </label>
                                         {:else}
@@ -531,10 +533,9 @@
                                                     bind:value={options.parameters[parameter.key]}
                                                     onchange={update}
                                                 >
-                                                    <option value={0}>Add</option>
-                                                    <option value={1}>Screen</option>
-                                                    <option value={2}>Overlay</option>
-                                                    <option value={3}>Soft light</option>
+                                                    {#each POST_BLEND_MODES as label, value}
+                                                        <option {value}>{label}</option>
+                                                    {/each}
                                                 </select>
                                             </label>
                                         {:else}

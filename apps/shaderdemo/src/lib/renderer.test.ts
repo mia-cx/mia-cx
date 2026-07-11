@@ -7,6 +7,9 @@ import {
     BLUR_SHADER_SOURCE,
     COMMON_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
+    FIELD_BLEND_MODES,
+    POST_BLEND_MODES,
+    POST_PARAMETER_SCHEMA,
     DISPLAY_SHADER_SOURCE,
     GOD_RAYS_SHADER_SOURCE,
     GOD_RAYS_TEXTURE_FORMAT,
@@ -294,8 +297,13 @@ describe('field configuration', () => {
         const parameters = defaultParameters();
         parameters.baseBlendMode = 1.6;
         parameters.secondaryBlendMode = -4;
+        parameters.glowBlendMode = 99;
         const normalized = normalizeSavedSettings({ seed: 7, parameters });
-        expect([normalized.parameters.baseBlendMode, normalized.parameters.secondaryBlendMode]).toEqual([2, 0]);
+        expect([
+            normalized.parameters.baseBlendMode,
+            normalized.parameters.secondaryBlendMode,
+            normalized.parameters.glowBlendMode,
+        ]).toEqual([2, 0, 14]);
     });
     it('packs the aligned uniform header and array<vec4f, 5>', () => {
         const parameters = defaultParameters();
@@ -346,6 +354,57 @@ describe('field configuration', () => {
         expect(octaveBlurIsActive(parameters, 0)).toBe(true);
         parameters.octave1Threshold = 0.00001;
         expect(octaveEffectIsActive(parameters, 0)).toBe(true);
+    });
+    it('keeps persisted blend enums stable and implements every appended mode', () => {
+        expect(FIELD_BLEND_MODES.slice(0, 4)).toEqual(['Add', 'Subtract', 'Screen', 'Overlay']);
+        expect(POST_BLEND_MODES.slice(0, 4)).toEqual(['Add', 'Screen', 'Overlay', 'Soft light']);
+        expect(FIELD_BLEND_MODES).toHaveLength(15);
+        expect(POST_BLEND_MODES).toHaveLength(15);
+        expect(FIELD_BLEND_MODES).toEqual(
+            expect.arrayContaining([
+                'Multiply',
+                'Difference',
+                'Negation',
+                'Exclusion',
+                'Darken',
+                'Lighten',
+                'Color dodge',
+                'Color burn',
+                'Hard light',
+                'Soft light',
+                'Divide',
+            ]),
+        );
+        expect(POST_BLEND_MODES).toEqual(
+            expect.arrayContaining([
+                'Multiply',
+                'Difference',
+                'Negation',
+                'Exclusion',
+                'Darken',
+                'Lighten',
+                'Color dodge',
+                'Color burn',
+                'Hard light',
+                'Subtract',
+                'Divide',
+            ]),
+        );
+        for (const key of ['baseBlendMode', 'secondaryBlendMode', 'secondaryRibbonBlendMode'])
+            expect(FIELD_PARAMETER_SCHEMA.find((parameter) => parameter.key === key)).toMatchObject({
+                min: 0,
+                max: 14,
+            });
+        for (const key of ['godRaysBlendMode', 'bloomBlendMode', 'glowBlendMode'])
+            expect(POST_PARAMETER_SCHEMA.find((parameter) => parameter.key === key)).toMatchObject({ min: 0, max: 14 });
+        expect(COMMON_SHADER_SOURCE).toContain('if(mode<1.5) { return backdrop-source; }');
+        expect(COMMON_SHADER_SOURCE).toContain('fn extendedBlend01');
+        expect(COMMON_SHADER_SOURCE).toContain('max(1.-b,.00001)');
+        expect(COMMON_SHADER_SOURCE).toContain('a/max(b,.00001)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('fn extendedLightChannel');
+        expect(DISPLAY_SHADER_SOURCE).toContain('if(mode<13.5) { return a-b; }');
+        expect(DISPLAY_SHADER_SOURCE).toContain('if(strength<=0.) { return base; }');
+        expect(BLOOM_EXTRACT_SHADER_SOURCE).toContain('fn extendedLightChannel');
     });
     it('preserves the base generator blend while compositing secondary ribbon independently', () => {
         expect(BASE_SHADER_SOURCE).toContain('fn screen01');

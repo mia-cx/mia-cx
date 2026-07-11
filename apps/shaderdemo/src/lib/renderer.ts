@@ -15,7 +15,7 @@ const FIELD_PARAMETER_SCHEMA_BASE = [
     { key: 'billowAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: 1 },
     { key: 'ridgeAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: 2 },
     { key: 'ridgeSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 4 },
-    { key: 'baseBlendMode', label: 'Blend mode', min: 0, max: 2, step: 1, default: 2 },
+    { key: 'baseBlendMode', label: 'Blend mode', min: 0, max: 14, step: 1, default: 2 },
     { key: 'warpScale', label: 'Warp scale', min: 0.2, max: 2.5, step: 0.01, default: 0.2 },
     { key: 'warpStrength', label: 'Warp strength', min: 0, max: 1.5, step: 0.01, default: 0 },
     { key: 'secondaryEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
@@ -23,8 +23,8 @@ const FIELD_PARAMETER_SCHEMA_BASE = [
     { key: 'secondaryCloudAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: -0.25 },
     { key: 'secondaryRibbonAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: -1 },
     { key: 'secondaryRibbonSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 4 },
-    { key: 'secondaryBlendMode', label: 'Cloud blend mode', min: 0, max: 2, step: 1, default: 2 },
-    { key: 'secondaryRibbonBlendMode', label: 'Ribbon blend mode', min: 0, max: 2, step: 1, default: 2 },
+    { key: 'secondaryBlendMode', label: 'Cloud blend mode', min: 0, max: 14, step: 1, default: 2 },
+    { key: 'secondaryRibbonBlendMode', label: 'Ribbon blend mode', min: 0, max: 14, step: 1, default: 2 },
     { key: 'thresholdEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
     { key: 'threshold', label: 'Threshold', min: 0.05, max: 0.95, step: 0.01, default: 0.5 },
     { key: 'thresholdSoftness', label: 'Threshold softness', min: 0.01, max: 0.5, step: 0.01, default: 0.5 },
@@ -154,9 +154,46 @@ export const POST_PARAMETER_SCHEMA = [
     { key: 'sharpen', label: 'Sharpen', min: 0, max: 2, step: 0.01, default: 0 },
     { key: 'filmGrainAmount', label: 'Film grain', min: 0, max: 0.3, step: 0.005, default: 0 },
     { key: 'filmGrainSize', label: 'Grain size', min: 0.5, max: 4, step: 0.1, default: 1 },
-    { key: 'godRaysBlendMode', label: 'Blend mode', min: 0, max: 3, step: 1, default: 0 },
-    { key: 'bloomBlendMode', label: 'Blend mode', min: 0, max: 3, step: 1, default: 0 },
-    { key: 'glowBlendMode', label: 'Blend mode', min: 0, max: 3, step: 1, default: 0 },
+    { key: 'godRaysBlendMode', label: 'Blend mode', min: 0, max: 14, step: 1, default: 0 },
+    { key: 'bloomBlendMode', label: 'Blend mode', min: 0, max: 14, step: 1, default: 0 },
+    { key: 'glowBlendMode', label: 'Blend mode', min: 0, max: 14, step: 1, default: 0 },
+] as const;
+
+/** Numeric order is persisted; append only. */
+export const FIELD_BLEND_MODES = [
+    'Add',
+    'Subtract',
+    'Screen',
+    'Overlay',
+    'Multiply',
+    'Difference',
+    'Negation',
+    'Exclusion',
+    'Darken',
+    'Lighten',
+    'Color dodge',
+    'Color burn',
+    'Hard light',
+    'Soft light',
+    'Divide',
+] as const;
+/** Numeric order is persisted; append only. */
+export const POST_BLEND_MODES = [
+    'Add',
+    'Screen',
+    'Overlay',
+    'Soft light',
+    'Multiply',
+    'Difference',
+    'Negation',
+    'Exclusion',
+    'Darken',
+    'Lighten',
+    'Color dodge',
+    'Color burn',
+    'Hard light',
+    'Subtract',
+    'Divide',
 ] as const;
 export const PARAMETER_SCHEMA = [
     ...FIELD_PARAMETER_SCHEMA,
@@ -319,16 +356,40 @@ fn overlay01(backdrop: f32, source: f32) -> f32 {
     let a=clamp(backdrop,0.,1.); let b=clamp(source,0.,1.);
     return select(2.*a*b,1.-2.*(1.-a)*(1.-b),a>.5);
 }
+fn softLight01(a: f32, b: f32) -> f32 {
+    return select(a-(1.-2.*b)*a*(1.-a),a+(2.*b-1.)*(sqrt(a)-a),b>.5);
+}
+fn extendedBlend01(a: f32, b: f32, mode: f32) -> f32 {
+    if(mode<4.5) { return a*b; }
+    if(mode<5.5) { return abs(a-b); }
+    if(mode<6.5) { return 1.-abs(1.-a-b); }
+    if(mode<7.5) { return a+b-2.*a*b; }
+    if(mode<8.5) { return min(a,b); }
+    if(mode<9.5) { return max(a,b); }
+    if(mode<10.5) { return select(1.,min(1.,a/max(1.-b,.00001)),b<1.); }
+    if(mode<11.5) { return select(0.,1.-min(1.,(1.-a)/max(b,.00001)),b>0.); }
+    if(mode<12.5) { return overlay01(b,a); }
+    if(mode<13.5) { return softLight01(a,b); }
+    return select(1.,a/max(b,.00001),b>0.);
+}
 fn blendSigned(backdrop: f32, source: f32, mode: f32) -> f32 {
     if(source==0.) { return backdrop; }
     if(mode<.5) { return backdrop+source; }
-    if(mode<1.5) {
+    if(mode<1.5) { return backdrop-source; }
+    if(mode<2.5) {
         // Signed screen: equal signs screen magnitudes; a negative source multiplicatively
         // darkens a positive backdrop, retaining excess strength as signed subtraction.
         if(source<0. && backdrop>0.) { let m=-source; return backdrop*(1.-min(m,1.))-max(m-1.,0.); }
         if(source>=0. && backdrop<0.) { return backdrop+source; }
         let sign=select(-1.,1.,backdrop+source>=0.);
         return sign*screen01(abs(backdrop),abs(source));
+    }
+    if(mode>=3.5) {
+        // Apply the standard unsigned operation by signed source strength. Negative field
+        // contributions reverse the operation, and magnitudes above one remain effective.
+        let a=clamp(backdrop,0.,1.); let strength=min(abs(source),1.); let b=strength;
+        let blended=extendedBlend01(a,b,mode); let direction=select(-1.,1.,source>0.);
+        return backdrop+direction*(blended-a)*strength+direction*max(abs(source)-1.,0.);
     }
     // Standard [0,1] overlay, mixed by signed source strength so zero remains an identity.
     let strength=min(abs(source),1.);
@@ -530,16 +591,23 @@ fn hueRotate(rgb:vec3f,h:f32)->vec3f {
 }
 fn overlayChannel(base:f32,blend:f32)->f32 { return select(2.*base*blend,1.-2.*(1.-base)*(1.-blend),base>.5); }
 fn softLightChannel(base:f32,blend:f32)->f32 { return select(base-(1.-2.*blend)*base*(1.-base),base+(2.*blend-1.)*(sqrt(base)-base),blend>.5); }
+fn extendedLightChannel(a:f32,b:f32,mode:f32)->f32 {
+ if(mode<4.5) { return a*b; } if(mode<5.5) { return abs(a-b); } if(mode<6.5) { return 1.-abs(1.-a-b); }
+ if(mode<7.5) { return a+b-2.*a*b; } if(mode<8.5) { return min(a,b); } if(mode<9.5) { return max(a,b); }
+ if(mode<10.5) { return select(1.,min(1.,a/max(1.-b,.00001)),b<1.); } if(mode<11.5) { return select(0.,1.-min(1.,(1.-a)/max(b,.00001)),b>0.); }
+ if(mode<12.5) { return overlayChannel(b,a); } if(mode<13.5) { return a-b; } return select(1.,a/max(b,.00001),b>0.);
+}
 fn blendLight(base:vec3f,color:vec3f,amount:f32,mode:f32)->vec3f {
  if(amount==0.) { return base; } if(mode<.5) { return base+color*amount; }
  let bounded=clamp(base,vec3f(0),vec3f(1)); let excess=max(base-vec3f(1),vec3f(0));
  if(mode<1.5) { return 1.-(1.-bounded)*(1.-clamp(color*amount,vec3f(0),vec3f(1)))+excess; }
  let strength=clamp(amount,0.,1.); var blended:vec3f;
  if(mode<2.5) { blended=vec3f(overlayChannel(bounded.r,color.r),overlayChannel(bounded.g,color.g),overlayChannel(bounded.b,color.b)); }
- else { blended=vec3f(softLightChannel(bounded.r,color.r),softLightChannel(bounded.g,color.g),softLightChannel(bounded.b,color.b)); }
+ else if(mode<3.5) { blended=vec3f(softLightChannel(bounded.r,color.r),softLightChannel(bounded.g,color.g),softLightChannel(bounded.b,color.b)); }
+ else { let c=clamp(color,vec3f(0),vec3f(1)); blended=vec3f(extendedLightChannel(bounded.r,c.r,mode),extendedLightChannel(bounded.g,c.g,mode),extendedLightChannel(bounded.b,c.b,mode)); }
  return mix(bounded,blended,strength)+excess;
 }
-fn blendLayer(base:vec3f,layer:vec3f,mode:f32)->vec3f { if(mode<.5) { return base+layer; } let strength=max(layer.r,max(layer.g,layer.b)); if(strength<=0.) { return base; } return blendLight(base,layer/strength,strength,mode); }
+fn blendLayer(base:vec3f,layer:vec3f,mode:f32)->vec3f { if(mode<.5) { return base+layer; } let strength=select(max(abs(layer.r),max(abs(layer.g),abs(layer.b))),max(layer.r,max(layer.g,layer.b)),mode<3.5); if(strength<=0.) { return base; } return blendLight(base,layer/strength,strength,mode); }
 fn adjusted(v:f32)->vec3f { let f=clamp(v,0.,1.); if(u.blurRadii[1].w<=.5) { return vec3f(f); } let p=f*4095.; let lo=i32(floor(p)); let hi=min(lo+1,4095); return mix(textureLoad(adjustmentLut,vec2i(lo,0),0).rgb,textureLoad(adjustmentLut,vec2i(hi,0),0).rgb,p-f32(lo)); }
 fn sourceValue(uv:vec2f)->f32 { return pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); }
 fn lensUv(centered:vec2f,coefficient:f32,fit:f32)->vec2f { return .5+centered*((1.+coefficient*dot(centered,centered))/fit)*.5; }
@@ -563,8 +631,9 @@ export const BLOOM_EXTRACT_SHADER_SOURCE =
 fn adjusted(v:f32)->vec3f { let f=clamp(v,0.,1.); if(u.blurRadii[1].w<=.5) { return vec3f(f); } let p=f*4095.; let lo=i32(floor(p)); let hi=min(lo+1,4095); return mix(textureLoad(adjustmentLut,vec2i(lo,0),0).rgb,textureLoad(adjustmentLut,vec2i(hi,0),0).rgb,p-f32(lo)); }
 fn overlayChannel(base:f32,blend:f32)->f32 { return select(2.*base*blend,1.-2.*(1.-base)*(1.-blend),base>.5); }
 fn softLightChannel(base:f32,blend:f32)->f32 { return select(base-(1.-2.*blend)*base*(1.-base),base+(2.*blend-1.)*(sqrt(base)-base),blend>.5); }
-fn blendLight(base:vec3f,color:vec3f,amount:f32,mode:f32)->vec3f { if(amount==0.) { return base; } if(mode<.5) { return base+color*amount; } let bounded=clamp(base,vec3f(0),vec3f(1)); let excess=max(base-vec3f(1),vec3f(0)); if(mode<1.5) { return 1.-(1.-bounded)*(1.-clamp(color*amount,vec3f(0),vec3f(1)))+excess; } let strength=clamp(amount,0.,1.); var blended:vec3f; if(mode<2.5) { blended=vec3f(overlayChannel(bounded.r,color.r),overlayChannel(bounded.g,color.g),overlayChannel(bounded.b,color.b)); } else { blended=vec3f(softLightChannel(bounded.r,color.r),softLightChannel(bounded.g,color.g),softLightChannel(bounded.b,color.b)); } return mix(bounded,blended,strength)+excess; }
-fn blendLayer(base:vec3f,layer:vec3f,mode:f32)->vec3f { if(mode<.5) { return base+layer; } let strength=max(layer.r,max(layer.g,layer.b)); if(strength<=0.) { return base; } return blendLight(base,layer/strength,strength,mode); }
+fn extendedLightChannel(a:f32,b:f32,mode:f32)->f32 { if(mode<4.5) { return a*b; } if(mode<5.5) { return abs(a-b); } if(mode<6.5) { return 1.-abs(1.-a-b); } if(mode<7.5) { return a+b-2.*a*b; } if(mode<8.5) { return min(a,b); } if(mode<9.5) { return max(a,b); } if(mode<10.5) { return select(1.,min(1.,a/max(1.-b,.00001)),b<1.); } if(mode<11.5) { return select(0.,1.-min(1.,(1.-a)/max(b,.00001)),b>0.); } if(mode<12.5) { return overlayChannel(b,a); } if(mode<13.5) { return a-b; } return select(1.,a/max(b,.00001),b>0.); }
+fn blendLight(base:vec3f,color:vec3f,amount:f32,mode:f32)->vec3f { if(amount==0.) { return base; } if(mode<.5) { return base+color*amount; } let bounded=clamp(base,vec3f(0),vec3f(1)); let excess=max(base-vec3f(1),vec3f(0)); if(mode<1.5) { return 1.-(1.-bounded)*(1.-clamp(color*amount,vec3f(0),vec3f(1)))+excess; } let strength=clamp(amount,0.,1.); var blended:vec3f; if(mode<2.5) { blended=vec3f(overlayChannel(bounded.r,color.r),overlayChannel(bounded.g,color.g),overlayChannel(bounded.b,color.b)); } else if(mode<3.5) { blended=vec3f(softLightChannel(bounded.r,color.r),softLightChannel(bounded.g,color.g),softLightChannel(bounded.b,color.b)); } else { let c=clamp(color,vec3f(0),vec3f(1)); blended=vec3f(extendedLightChannel(bounded.r,c.r,mode),extendedLightChannel(bounded.g,c.g,mode),extendedLightChannel(bounded.b,c.b,mode)); } return mix(bounded,blended,strength)+excess; }
+fn blendLayer(base:vec3f,layer:vec3f,mode:f32)->vec3f { if(mode<.5) { return base+layer; } let strength=select(max(abs(layer.r),max(abs(layer.g),abs(layer.b))),max(layer.r,max(layer.g,layer.b)),mode<3.5); if(strength<=0.) { return base; } return blendLight(base,layer/strength,strength,mode); }
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f {
  let uv=pos.xy/u.resolution; let v=pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); var rgb=adjusted(v);
  if(u.post[0].x>.5) { rgb*=exp2(u.post[0].y); let temp=(u.post[0].z-6500.)/2000.; rgb*=vec3f(1.+temp*.08,1.,1.-temp*.08); rgb+=vec3f(u.post[0].w*.25,u.post[0].w*.5,-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let gradeLuma=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(gradeLuma),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,gradeLuma))+u.post[2].x*smoothstep(.5,1.,gradeLuma); }
