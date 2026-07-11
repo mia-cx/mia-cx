@@ -36,10 +36,15 @@ describe('field configuration', () => {
         expect(DISPLAY_SHADER_SOURCE).toContain('let p=f*4095.');
         expect(DISPLAY_SHADER_SOURCE).toContain('let hi=min(lo+1,4095)');
         expect(DISPLAY_SHADER_SOURCE).toContain('mix(textureLoad');
-        expect(DISPLAY_SHADER_SOURCE).toContain('adjusted(sourceValue(uv+dir)).r');
-        expect(DISPLAY_SHADER_SOURCE).toContain('adjusted(sourceValue(uv-dir)).b');
-        expect(DISPLAY_SHADER_SOURCE).toContain('let fit=1.+2.*max(distortion,0.)');
-        expect(DISPLAY_SHADER_SOURCE).toContain('(1.+distortion*dot(centered,centered))/fit');
+        expect(DISPLAY_SHADER_SOURCE).toContain('adjusted(sourceValue(redUv)).r');
+        expect(DISPLAY_SHADER_SOURCE).toContain('adjusted(sourceValue(blueUv)).b');
+        expect(DISPLAY_SHADER_SOURCE).toContain('let redCoefficient=distortion-dispersion*.552535');
+        expect(DISPLAY_SHADER_SOURCE).toContain('let greenCoefficient=distortion');
+        expect(DISPLAY_SHADER_SOURCE).toContain('let blueCoefficient=distortion+dispersion');
+        expect(DISPLAY_SHADER_SOURCE).toContain(
+            'let fit=1.+2.*max(0.,max(redCoefficient,max(greenCoefficient,blueCoefficient)))',
+        );
+        expect(DISPLAY_SHADER_SOURCE).toContain('coefficient*dot(centered,centered)');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('f*255');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('/255.');
         expect(DISPLAY_SHADER_SOURCE).toContain('if(u.blurRadii[1].w<=.5)');

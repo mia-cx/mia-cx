@@ -486,13 +486,23 @@ fn adjusted(v:f32)->vec3f {
  return mix(textureLoad(adjustmentLut,vec2i(lo,0),0).rgb,textureLoad(adjustmentLut,vec2i(hi,0),0).rgb,p-f32(lo));
 }
 fn sourceValue(uv:vec2f)->f32 { return pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); }
+fn lensUv(centered:vec2f,coefficient:f32,fit:f32)->vec2f { return .5+centered*((1.+coefficient*dot(centered,centered))/fit)*.5; }
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f {
- var uv=pos.xy/u.resolution; let centered=uv*2.-1.;
- if(u.post[5].x!=0.) { let distortion=u.post[5].x; let fit=1.+2.*max(distortion,0.); uv=.5+centered*((1.+distortion*dot(centered,centered))/fit)*.5; }
- var f=sourceValue(uv);
- if(u.post[5].y!=0.) { let px=1./u.resolution; let n=sourceValue(uv+vec2f(px.x,0))+sourceValue(uv-vec2f(px.x,0))+sourceValue(uv+vec2f(0,px.y))+sourceValue(uv-vec2f(0,px.y)); f+=(f*4.-n)*u.post[5].y; }
- var rgb=adjusted(f); let ca=u.post[4].y/u.resolution.x;
- if(ca!=0.) { let dir=normalize(centered+vec2f(.0001))*ca; rgb=vec3f(adjusted(sourceValue(uv+dir)).r,rgb.g,adjusted(sourceValue(uv-dir)).b); }
+ let screenUv=pos.xy/u.resolution; let centered=screenUv*2.-1.;
+ let distortion=u.post[5].x; let dispersion=u.post[4].y*.001;
+ // Schott N-BK7 at Fraunhofer C/e/g lines: red 656.3 nm, green 546.1 nm, blue 435.8 nm.
+ // Relative to green, blue bends 1.0x farther and red 0.552535x in the opposite direction.
+ let redCoefficient=distortion-dispersion*.552535;
+ let greenCoefficient=distortion;
+ let blueCoefficient=distortion+dispersion;
+ let fit=1.+2.*max(0.,max(redCoefficient,max(greenCoefficient,blueCoefficient)));
+ let redUv=lensUv(centered,redCoefficient,fit);
+ let greenUv=lensUv(centered,greenCoefficient,fit);
+ let blueUv=lensUv(centered,blueCoefficient,fit);
+ var f=sourceValue(greenUv);
+ if(u.post[5].y!=0.) { let px=1./u.resolution; let n=sourceValue(greenUv+vec2f(px.x,0))+sourceValue(greenUv-vec2f(px.x,0))+sourceValue(greenUv+vec2f(0,px.y))+sourceValue(greenUv-vec2f(0,px.y)); f+=(f*4.-n)*u.post[5].y; }
+ var rgb=adjusted(f);
+ if(dispersion!=0.) { rgb=vec3f(adjusted(sourceValue(redUv)).r,rgb.g,adjusted(sourceValue(blueUv)).b); }
  if(u.post[0].x>.5) { rgb*=exp2(u.post[0].y); let temp=(u.post[0].z-6500.)/2000.; rgb*=vec3f(1.+temp*.08,1.,1.-temp*.08); rgb+=vec3f(u.post[0].w*.25,u.post[0].w*.5,-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let l=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(l),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,l))+u.post[2].x*smoothstep(.5,1.,l); }
  var b=0.; if((u.post[2].y>.5 && u.post[3].x!=0.) || (u.post[3].z>.5 && u.post[3].w!=0.)) { b=textureSample(bloom,samp,pos.xy/u.resolution).r; }
  if(u.post[2].y>.5 && u.post[3].x!=0.) { rgb+=b*u.post[3].x; }
