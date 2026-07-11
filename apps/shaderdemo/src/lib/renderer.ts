@@ -1246,9 +1246,13 @@ export class AtmosphereRenderer {
             draw(this.textureViews[destination], 11, rgbaCurrent, true, 'colour:adjustments', 'internal-adjustments');
             rgbaCurrent = destination;
         }
+        const colourOccurrences = new Map<string, number>();
         for (const effect of this.options.colour) {
             if (effect.type === 'curve' || effect.type === 'levels' || effect.type === 'hsl') continue;
             if (!effect.enabled || (isRgbColour(effect) && isNeutralRgb(effect))) continue;
+            const occurrence = (colourOccurrences.get(effect.type) ?? 0) + 1;
+            colourOccurrences.set(effect.type, occurrence);
+            const timingLabel = `colour:${effect.type} #${occurrence}`;
             let values: number[];
             let kind: number;
             if (isRgbColour(effect)) {
@@ -1258,14 +1262,7 @@ export class AtmosphereRenderer {
                     data.fill(0, 60, UNIFORM_FLOATS);
                     data.set([...lut.asset.domainMin, ...lut.asset.domainMax, effect.values[0]], 60);
                     const destination = rgbaCurrent === 2 ? 3 : 2;
-                    draw(
-                        this.textureViews[destination],
-                        11,
-                        rgbaCurrent,
-                        true,
-                        `colour:${effect.type}`,
-                        effect.assetId,
-                    );
+                    draw(this.textureViews[destination], 11, rgbaCurrent, true, timingLabel, effect.assetId);
                     rgbaCurrent = destination;
                     continue;
                 }
@@ -1292,18 +1289,21 @@ export class AtmosphereRenderer {
             data.set(values.slice(0, 40), 60);
             data[58] = kind;
             const destination = rgbaCurrent === 2 ? 3 : 2;
-            draw(this.textureViews[destination], 10, rgbaCurrent, true, `colour:${effect.type}`);
+            draw(this.textureViews[destination], 10, rgbaCurrent, true, timingLabel);
             rgbaCurrent = destination;
         }
         data.set(
             POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
         );
+        const postOccurrences = new Map<string, number>();
         for (const effect of postStages) {
             if (effect.kind === 'datamosh' && !this.historyValid) continue;
+            const occurrence = (postOccurrences.get(effect.kind) ?? 0) + 1;
+            postOccurrences.set(effect.kind, occurrence);
             const destination = rgbaCurrent === 2 ? 3 : 2;
             data[58] = POST_KIND_INDEX[effect.kind];
-            draw(this.textureViews[destination], 8, rgbaCurrent, true, `post:${effect.kind}`);
+            draw(this.textureViews[destination], 8, rgbaCurrent, true, `post:${effect.kind} #${occurrence}`);
             rgbaCurrent = destination;
         }
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
