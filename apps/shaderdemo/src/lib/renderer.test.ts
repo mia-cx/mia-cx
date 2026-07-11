@@ -5,6 +5,7 @@ import {
     COMMON_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
     DISPLAY_SHADER_SOURCE,
+    GOD_RAYS_SHADER_SOURCE,
     OCTAVE_BLUR_SCHEMA,
     OCTAVE_COUNT,
     OCTAVE_PARAMETER_SCHEMA,
@@ -18,6 +19,7 @@ import {
     bindGroupCacheKey,
     defaultParameters,
     fullResolutionPassSizes,
+    godRaysIsActive,
     octavePixelSizes,
     octaveBlurIsActive,
     octaveEffectIsActive,
@@ -29,6 +31,21 @@ import { defaultShaderSettings, normalizeSavedSettings } from './settings';
 import defaultSettingsFixture from './default-settings.json';
 
 describe('field configuration', () => {
+    it('samples Paint.NET Zoom Blur’s 64-step contraction path at bounded quarter-resolution taps', () => {
+        expect(GOD_RAYS_SHADER_SOURCE).toContain('1.-u.post[2].z/16384.');
+        expect(GOD_RAYS_SHADER_SOURCE).toContain('pow(contraction,progress*64.)');
+        expect(GOD_RAYS_SHADER_SOURCE).toContain('for(var i=0u;i<24u;i++)');
+        expect(GOD_RAYS_SHADER_SOURCE).toContain('center+(startUv-center)');
+
+        const parameters = defaultParameters();
+        expect(godRaysIsActive(parameters)).toBe(false);
+        parameters.godRaysEnabled = 1;
+        parameters.godRaysAmount = 50;
+        parameters.godRaysIntensity = 1;
+        expect(godRaysIsActive(parameters)).toBe(true);
+        parameters.godRaysIntensity = 0;
+        expect(godRaysIsActive(parameters)).toBe(false);
+    });
     it('linearly interpolates the high-depth adjustment LUT in the existing display shader', () => {
         expect(DISPLAY_SHADER_SOURCE.match(/textureLoad\(adjustmentLut/g)).toHaveLength(2);
         expect(DISPLAY_SHADER_SOURCE).toContain('texture_2d<f32>');
@@ -131,8 +148,8 @@ describe('field configuration', () => {
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
         expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(79);
-        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(79);
+        expect(PARAMETER_SCHEMA).toHaveLength(87);
+        expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(87);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
             expect(parameter.step).toBeGreaterThan(0);
@@ -237,7 +254,7 @@ describe('field configuration', () => {
         parameters.octave3Pixelate = 1;
         const data = packUniform([320, 180], 2, 9, parameters, 4, 73);
         expect(data).toHaveLength(UNIFORM_FLOATS);
-        expect(data.byteLength).toBe(336);
+        expect(data.byteLength).toBe(368);
         expect(Array.from(data.slice(12, 18))).toEqual(Array.from(new Float32Array([1, 0.45, -0.25, -1, 4, 2])));
         expect(data[29]).toBe(4);
         expect(data[30]).toBe(5);

@@ -40,7 +40,7 @@ export const FIELD_PARAMETER_SCHEMA = withCanonicalDefaults(FIELD_PARAMETER_SCHE
 
 export const OCTAVE_COUNT = 5;
 export const GPU_TIMING_SAMPLE_INTERVAL = 30;
-export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 4;
+export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 5;
 const GPU_QUERY_COUNT = MAX_RENDER_PASSES * 2;
 export interface GpuTimingStats {
     totalMs: number;
@@ -131,6 +131,14 @@ export const POST_PARAMETER_SCHEMA = [
     { key: 'vibrance', label: 'Vibrance', min: -1, max: 1, step: 0.01, default: 0 },
     { key: 'shadows', label: 'Shadows', min: -1, max: 1, step: 0.01, default: 0 },
     { key: 'highlights', label: 'Highlights', min: -1, max: 1, step: 0.01, default: 0 },
+    { key: 'godRaysEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
+    { key: 'godRaysAmount', label: 'Amount / length', min: 0, max: 100, step: 1, default: 0 },
+    { key: 'godRaysIntensity', label: 'Intensity', min: 0, max: 3, step: 0.01, default: 0 },
+    { key: 'godRaysThreshold', label: 'Threshold', min: 0, max: 2, step: 0.01, default: 0.75 },
+    { key: 'godRaysSoftness', label: 'Softness', min: 0, max: 1, step: 0.01, default: 0.25 },
+    { key: 'godRaysCenterX', label: 'Center X', min: -2, max: 2, step: 0.01, default: 0 },
+    { key: 'godRaysCenterY', label: 'Center Y', min: -2, max: 2, step: 0.01, default: 0 },
+    { key: 'godRaysSamples', label: 'Samples', min: 8, max: 24, step: 1, default: 20 },
     { key: 'bloomEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
     { key: 'bloomThreshold', label: 'Threshold', min: 0, max: 2, step: 0.01, default: 0.75 },
     { key: 'bloomKnee', label: 'Softness', min: 0, max: 1, step: 0.01, default: 0.25 },
@@ -190,7 +198,7 @@ export function fullResolutionPassSizes(width: number, height: number, renderSca
     return Array.from({ length: OCTAVE_COUNT + 1 }, () => ({ ...size }));
 }
 
-export const UNIFORM_FLOATS = 84;
+export const UNIFORM_FLOATS = 92;
 export function packUniform(
     resolution: [number, number],
     time: number,
@@ -236,6 +244,10 @@ export function octaveBlurIsActive(parameters: ShaderParameters, index: number) 
     return parameters[OCTAVE_BLUR_SCHEMA[index].key] > 0;
 }
 
+export function godRaysIsActive(parameters: ShaderParameters) {
+    return parameters.godRaysEnabled >= 0.5 && parameters.godRaysAmount !== 0 && parameters.godRaysIntensity !== 0;
+}
+
 /** Stable identity for bind groups whose resources are all renderer-owned. */
 export function bindGroupCacheKey(pipelineIndex: number, sourceTextureIndex: number | undefined, passIndex: number) {
     return `${pipelineIndex}:${sourceTextureIndex ?? 'none'}:${passIndex}`;
@@ -258,7 +270,7 @@ struct U {
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
  centerSoftness: f32, octaveIndex: f32, octavePixelationMask: f32, frameIndex: f32,
  octaves: array<vec4f, 5>,
- blurRadii: array<vec4f, 2>, post: array<vec4f, 6>
+ blurRadii: array<vec4f, 2>, post: array<vec4f, 8>
 };
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -474,53 +486,56 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     return vec4f(thresholded,0.,0.,1.);
 }`;
 
+export const GOD_RAYS_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f {
+ let startUv=pos.xy/u.resolution; let center=vec2f(.5)+u.post[3].zw*.5;
+ // Paint.NET contracts the source vector by Amount/16384 for each of 64 iterations.
+ // Sample that same 64-step path at a bounded number of evenly spaced taps at quarter resolution.
+ let contraction=max(1.-u.post[2].z/16384.,0.); let count=u32(round(u.post[4].x)); var sum=0.; var visible=0.;
+ for(var i=0u;i<24u;i++) { if(i<count) {
+  let progress=f32(i)/max(f32(count-1u),1.); let uv=center+(startUv-center)*pow(contraction,progress*64.);
+  if(all(uv>=vec2f(0)) && all(uv<=vec2f(1))) {
+   let v=pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); let k=max(u.post[3].y,.00001);
+   let soft=clamp((v-u.post[3].x+k)/(2.*k),0.,1.); sum+=max(v-u.post[3].x,0.)+soft*soft*k; visible+=1.;
+  }
+ } }
+ if(visible==0.) { return vec4f(0,0,0,1); } return vec4f(sum/visible*u.post[2].w,0,0,1);
+}`;
 export const DISPLAY_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
-@group(0) @binding(3) var adjustmentLut:texture_2d<f32>; @group(0) @binding(4) var bloom:texture_2d<f32>;
+@group(0) @binding(3) var adjustmentLut:texture_2d<f32>; @group(0) @binding(4) var bloom:texture_2d<f32>; @group(0) @binding(5) var godRays:texture_2d<f32>;
 fn hueColor(h:f32)->vec3f { return clamp(abs(fract(h+vec3f(0.,.667,.333))*6.-3.)-1.,vec3f(0),vec3f(1)); }
-fn adjusted(v:f32)->vec3f {
- let f=clamp(v,0.,1.); if(u.blurRadii[1].w<=.5) { return vec3f(f); }
- let p=f*4095.; let lo=i32(floor(p)); let hi=min(lo+1,4095);
- return mix(textureLoad(adjustmentLut,vec2i(lo,0),0).rgb,textureLoad(adjustmentLut,vec2i(hi,0),0).rgb,p-f32(lo));
-}
+fn adjusted(v:f32)->vec3f { let f=clamp(v,0.,1.); if(u.blurRadii[1].w<=.5) { return vec3f(f); } let p=f*4095.; let lo=i32(floor(p)); let hi=min(lo+1,4095); return mix(textureLoad(adjustmentLut,vec2i(lo,0),0).rgb,textureLoad(adjustmentLut,vec2i(hi,0),0).rgb,p-f32(lo)); }
 fn sourceValue(uv:vec2f)->f32 { return pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); }
 fn lensUv(centered:vec2f,coefficient:f32,fit:f32)->vec2f { return .5+centered*((1.+coefficient*dot(centered,centered))/fit)*.5; }
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f {
- let screenUv=pos.xy/u.resolution; let centered=screenUv*2.-1.;
- let distortion=u.post[5].x; let dispersion=u.post[4].y*.001;
- // Schott N-BK7 at Fraunhofer C/e/g lines: red 656.3 nm, green 546.1 nm, blue 435.8 nm.
- // Relative to green, blue bends 1.0x farther and red 0.552535x in the opposite direction.
- let redCoefficient=distortion-dispersion*.552535;
- let greenCoefficient=distortion;
- let blueCoefficient=distortion+dispersion;
- let fit=1.+2.*max(0.,max(redCoefficient,max(greenCoefficient,blueCoefficient)));
- let redUv=lensUv(centered,redCoefficient,fit);
- let greenUv=lensUv(centered,greenCoefficient,fit);
- let blueUv=lensUv(centered,blueCoefficient,fit);
- var f=sourceValue(greenUv);
- if(u.post[5].y!=0.) { let px=1./u.resolution; let n=sourceValue(greenUv+vec2f(px.x,0))+sourceValue(greenUv-vec2f(px.x,0))+sourceValue(greenUv+vec2f(0,px.y))+sourceValue(greenUv-vec2f(0,px.y)); f+=(f*4.-n)*u.post[5].y; }
- var rgb=adjusted(f);
- if(dispersion!=0.) { rgb=vec3f(adjusted(sourceValue(redUv)).r,rgb.g,adjusted(sourceValue(blueUv)).b); }
+ let uv=pos.xy/u.resolution; let centered=uv*2.-1.; let distortion=u.post[7].x; let dispersion=u.post[6].y*.001;
+ let redCoefficient=distortion-dispersion*.552535; let greenCoefficient=distortion; let blueCoefficient=distortion+dispersion;
+ let fit=1.+2.*max(0.,max(redCoefficient,max(greenCoefficient,blueCoefficient))); let redUv=lensUv(centered,redCoefficient,fit); let greenUv=lensUv(centered,greenCoefficient,fit); let blueUv=lensUv(centered,blueCoefficient,fit);
+ var f=sourceValue(greenUv); if(u.post[7].y!=0.) { let px=1./u.resolution; let n=sourceValue(greenUv+vec2f(px.x,0))+sourceValue(greenUv-vec2f(px.x,0))+sourceValue(greenUv+vec2f(0,px.y))+sourceValue(greenUv-vec2f(0,px.y)); f+=(f*4.-n)*u.post[7].y; }
+ var rgb=adjusted(f); if(dispersion!=0.) { rgb=vec3f(adjusted(sourceValue(redUv)).r,rgb.g,adjusted(sourceValue(blueUv)).b); }
  if(u.post[0].x>.5) { rgb*=exp2(u.post[0].y); let temp=(u.post[0].z-6500.)/2000.; rgb*=vec3f(1.+temp*.08,1.,1.-temp*.08); rgb+=vec3f(u.post[0].w*.25,u.post[0].w*.5,-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let l=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(l),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,l))+u.post[2].x*smoothstep(.5,1.,l); }
- var b=0.; if((u.post[2].y>.5 && u.post[3].x!=0.) || (u.post[3].z>.5 && u.post[3].w!=0.)) { b=textureSample(bloom,samp,pos.xy/u.resolution).r; }
- if(u.post[2].y>.5 && u.post[3].x!=0.) { rgb+=b*u.post[3].x; }
- if(u.post[3].z>.5 && u.post[3].w!=0.) { rgb+=b*u.post[3].w*hueColor(u.post[4].x); }
- if(u.post[4].z!=0.) { let edge=smoothstep(1.-u.post[4].w,1.,length(centered)*.707); rgb*=1.-edge*u.post[4].z; }
- if(u.post[5].z!=0.) { let grain=fract(sin(dot(floor(pos.xy/u.post[5].w),vec2f(12.9898,78.233))+u.frameIndex)*43758.5453)-.5; rgb+=grain*u.post[5].z; }
+ if(u.post[2].y>.5 && u.post[2].z!=0. && u.post[2].w!=0.) { rgb+=textureSample(godRays,samp,uv).r; }
+ var b=0.; if((u.post[4].y>.5 && u.post[5].x!=0.) || (u.post[5].z>.5 && u.post[5].w!=0.)) { b=textureSample(bloom,samp,uv).r; }
+ if(u.post[4].y>.5 && u.post[5].x!=0.) { rgb+=b*u.post[5].x; } if(u.post[5].z>.5 && u.post[5].w!=0.) { rgb+=b*u.post[5].w*hueColor(u.post[6].x); }
+ if(u.post[6].z!=0.) { let edge=smoothstep(1.-u.post[6].w,1.,length(centered)*.707); rgb*=1.-edge*u.post[6].z; } if(u.post[7].z!=0.) { let grain=fract(sin(dot(floor(pos.xy/u.post[7].w),vec2f(12.9898,78.233))+u.frameIndex)*43758.5453)-.5; rgb+=grain*u.post[7].z; }
  return vec4f(rgb,1.);
 }`;
 export const BLOOM_EXTRACT_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
-@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
-@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let v=pow(clamp(textureSample(src,samp,pos.xy/u.resolution).r,0.,1.),u.finalContrast); let t=u.post[2].z; let k=max(u.post[2].w,.00001); let soft=clamp((v-t+k)/(2.*k),0.,1.); return vec4f(max(v-t,0.)+soft*soft*k,0,0,1); }`;
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler; @group(0) @binding(3) var godRays:texture_2d<f32>;
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; var v=pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast); if(u.post[2].y>.5 && u.post[2].z!=0. && u.post[2].w!=0.) { v+=textureSample(godRays,samp,uv).r; } let t=u.post[4].z; let k=max(u.post[4].w,.00001); let soft=clamp((v-t+k)/(2.*k),0.,1.); return vec4f(max(v-t,0.)+soft*soft*k,0,0,1); }`;
 export const BLOOM_BLUR_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
-@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let o=(1.+u.post[3].y*3.)/vec2f(textureDimensions(src)); var v=textureSample(src,samp,uv+o).r+textureSample(src,samp,uv-o).r+textureSample(src,samp,uv+vec2f(-o.x,o.y)).r+textureSample(src,samp,uv+vec2f(o.x,-o.y)).r; return vec4f(v*.25,0,0,1); }`;
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let o=(1.+u.post[5].y*3.)/vec2f(textureDimensions(src)); var v=textureSample(src,samp,uv+o).r+textureSample(src,samp,uv-o).r+textureSample(src,samp,uv+vec2f(-o.x,o.y)).r+textureSample(src,samp,uv+vec2f(o.x,-o.y)).r; return vec4f(v*.25,0,0,1); }`;
 
 export class AtmosphereRenderer {
     private device?: GPUDevice;
@@ -604,6 +619,7 @@ export class AtmosphereRenderer {
             make(DISPLAY_SHADER_SOURCE, format),
             make(BLOOM_EXTRACT_SHADER_SOURCE, 'r16float'),
             make(BLOOM_BLUR_SHADER_SOURCE, 'r16float'),
+            make(GOD_RAYS_SHADER_SOURCE, 'r16float'),
         ]);
         self.buffers = Array.from({ length: MAX_RENDER_PASSES }, () =>
             self.device!.createBuffer({
@@ -665,6 +681,10 @@ export class AtmosphereRenderer {
             ...Array.from({ length: 2 }, () =>
                 this.device!.createTexture({ size: [bloomSize.width, bloomSize.height], format: 'r16float', usage }),
             ),
+        );
+        // A single quarter-resolution gather target keeps the bounded radial pass inexpensive.
+        this.textures.push(
+            this.device.createTexture({ size: [bloomSize.width, bloomSize.height], format: 'r16float', usage }),
         );
         this.textureViews = this.textures.map((texture) => texture.createView());
     }
@@ -741,9 +761,9 @@ export class AtmosphereRenderer {
             !c ||
             buffers.length < MAX_RENDER_PASSES ||
             !s ||
-            this.pipelines.length < 6 ||
-            this.textures.length < 4 ||
-            this.textureViews.length < 4
+            this.pipelines.length < 7 ||
+            this.textures.length < 5 ||
+            this.textureViews.length < 5
         )
             return;
         const enc = d.createCommandEncoder();
@@ -781,6 +801,9 @@ export class AtmosphereRenderer {
                     if (pipelineIndex === 3) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
                         entries.push({ binding: 4, resource: this.textureViews[3] });
+                        entries.push({ binding: 5, resource: this.textureViews[4] });
+                    } else if (pipelineIndex === 4) {
+                        entries.push({ binding: 3, resource: this.textureViews[4] });
                     }
                 }
                 bindGroup = d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
@@ -826,6 +849,14 @@ export class AtmosphereRenderer {
         data[1] = this.canvas.height;
         data[59] = this.options.adjustments.some((adjustment) => adjustment.enabled) ? 1 : 0;
         const p = this.options.parameters;
+        const godRaysActive = godRaysIsActive(p);
+        if (godRaysActive) {
+            data[0] = this.textures[4].width;
+            data[1] = this.textures[4].height;
+            draw(this.textureViews[4], 6, current, true, 'god-rays');
+            data[0] = this.canvas.width;
+            data[1] = this.canvas.height;
+        }
         const bloomActive =
             (p.bloomEnabled >= 0.5 && p.bloomIntensity !== 0) || (p.glowEnabled >= 0.5 && p.glowIntensity !== 0);
         if (bloomActive) {

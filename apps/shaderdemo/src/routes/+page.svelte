@@ -98,6 +98,19 @@
             keys: ['exposure', 'temperature', 'tint', 'contrast', 'saturation', 'vibrance', 'shadows', 'highlights'],
         },
         {
+            label: 'God rays',
+            toggle: 'godRaysEnabled',
+            keys: [
+                'godRaysAmount',
+                'godRaysIntensity',
+                'godRaysThreshold',
+                'godRaysSoftness',
+                'godRaysCenterX',
+                'godRaysCenterY',
+                'godRaysSamples',
+            ],
+        },
+        {
             label: 'Bloom',
             toggle: 'bloomEnabled',
             keys: ['bloomThreshold', 'bloomKnee', 'bloomIntensity', 'bloomRadius'],
