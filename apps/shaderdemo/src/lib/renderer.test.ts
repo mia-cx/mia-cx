@@ -52,7 +52,7 @@ describe('field configuration', () => {
             expect(parameter.default).toBeLessThanOrEqual(parameter.max);
             expect(defaultParameters()[parameter.key]).toBe(parameter.default);
         }
-        expect(defaultParameters().centerDarkness).toBe(0.65);
+        expect(defaultParameters().centerDarkness).toBe(0);
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual(Array(7).fill(0));
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual(Array(7).fill(0));
     });

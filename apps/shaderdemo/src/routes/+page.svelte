@@ -7,6 +7,7 @@
         defaultParameters,
         type RenderOptions,
     } from '$lib/renderer';
+    import { normalizeSavedSettings, shaderSettings } from '$lib/settings';
 
     let canvas: HTMLCanvasElement;
     let renderer: AtmosphereRenderer | undefined;
@@ -35,6 +36,7 @@
 
     function update() {
         options = { ...options, parameters: { ...options.parameters } };
+        shaderSettings.set({ seed: options.seed, parameters: options.parameters });
         renderer?.setOptions(options);
     }
     function togglePause() {
@@ -47,6 +49,12 @@
     }
     onMount(() => {
         let disposed = false;
+        // Mounting the persistent atom synchronously hydrates it from localStorage.
+        let persisted = shaderSettings.get();
+        const stopHydration = shaderSettings.subscribe((value) => (persisted = value));
+        stopHydration();
+        const saved = normalizeSavedSettings(persisted);
+        options = { ...options, seed: saved.seed, parameters: saved.parameters };
         if (matchMedia('(prefers-reduced-motion: reduce)').matches) paused = true;
         AtmosphereRenderer.create(canvas, options)
             .then((instance) => {
