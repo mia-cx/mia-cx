@@ -13,12 +13,6 @@ export const FIELD_PARAMETER_SCHEMA = [
     { key: 'secondaryRibbonAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: 0 },
     { key: 'secondaryRibbonSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
     { key: 'secondaryBlendMode', label: 'Blend mode', min: 0, max: 2, step: 1, default: 0 },
-    { key: 'tertiaryEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
-    { key: 'tertiaryScale', label: 'Scale', min: 1.1, max: 5, step: 0.01, default: 2.035 },
-    { key: 'tertiaryCloudAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: 0 },
-    { key: 'tertiaryRibbonAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: 0 },
-    { key: 'tertiaryRibbonSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
-    { key: 'tertiaryBlendMode', label: 'Blend mode', min: 0, max: 2, step: 1, default: 0 },
     { key: 'thresholdEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 1 },
     { key: 'threshold', label: 'Threshold', min: 0.05, max: 0.95, step: 0.01, default: 0.56 },
     { key: 'thresholdSoftness', label: 'Threshold softness', min: 0.01, max: 0.5, step: 0.01, default: 0.5 },
@@ -105,7 +99,7 @@ export function fullResolutionPassSizes(width: number, height: number, renderSca
     return Array.from({ length: OCTAVE_COUNT + 1 }, () => ({ ...size }));
 }
 
-export const UNIFORM_FLOATS = 56;
+export const UNIFORM_FLOATS = 52;
 export function packUniform(
     resolution: [number, number],
     time: number,
@@ -115,14 +109,14 @@ export function packUniform(
 ) {
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set([resolution[0], resolution[1], time, seed, ...FIELD_PARAMETER_SCHEMA.map(({ key }) => parameters[key])]);
-    data[34] = octaveIndex;
-    data[35] = OCTAVE_PIXELATE_SCHEMA.reduce(
+    data[28] = octaveIndex;
+    data[29] = OCTAVE_PIXELATE_SCHEMA.reduce(
         (mask, { key }, index) => mask + (parameters[key] >= 0.5 ? 2 ** index : 0),
         0,
     );
     data.set(
         OCTAVE_PARAMETER_SCHEMA.flatMap((group) => group.map(({ key }) => parameters[key])),
-        36,
+        32,
     );
     return data;
 }
@@ -138,8 +132,6 @@ struct U {
  ridgeSharpness: f32, baseBlendMode: f32, warpScale: f32, warpStrength: f32,
  secondaryEnabled: f32, secondaryScale: f32, secondaryCloudAmount: f32,
  secondaryRibbonAmount: f32, secondaryRibbonSharpness: f32, secondaryBlendMode: f32,
- tertiaryEnabled: f32, tertiaryScale: f32, tertiaryCloudAmount: f32,
- tertiaryRibbonAmount: f32, tertiaryRibbonSharpness: f32, tertiaryBlendMode: f32,
  thresholdEnabled: f32, threshold: f32, thresholdSoftness: f32, finalContrast: f32,
  animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
@@ -232,7 +224,6 @@ export const BASE_SHADER_SOURCE =
     let p=flow+drift*u.warpStrength;
     let primaryPosition=vec3f(p,t*.075);
     let secondaryPosition=vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-drift*.41,t*.12+7.1);
-    let tertiaryPosition=vec3f(p*u.tertiaryScale+vec2f(-4.1,19.3)+drift*.23,t*.18+19.7);
     let cloud=smoothAbsFold(noise3(primaryPosition,307.)*2.-1.);
     let ribbonBase=1.-abs(noise3(primaryPosition,401.)*2.-1.);
     let ribbon=pow(clamp(ribbonBase,0.,1.),u.ridgeSharpness);
@@ -241,13 +232,8 @@ export const BASE_SHADER_SOURCE =
     let secondaryRibbonBase=1.-abs(noise3(secondaryPosition,601.)*2.-1.);
     let secondaryRibbon=pow(clamp(secondaryRibbonBase,0.,1.),u.secondaryRibbonSharpness);
     let secondaryShaped=blendSigned(secondaryCloud*u.secondaryCloudAmount,secondaryRibbon*u.secondaryRibbonAmount,u.secondaryBlendMode);
-    let tertiaryCloud=smoothAbsFold(noise3(tertiaryPosition,701.)*2.-1.);
-    let tertiaryRibbonBase=1.-abs(noise3(tertiaryPosition,809.)*2.-1.);
-    let tertiaryRibbon=pow(clamp(tertiaryRibbonBase,0.,1.),u.tertiaryRibbonSharpness);
-    let tertiaryShaped=blendSigned(tertiaryCloud*u.tertiaryCloudAmount,tertiaryRibbon*u.tertiaryRibbonAmount,u.tertiaryBlendMode);
     var natural=shaped;
     if(u.secondaryEnabled>=.5) { natural=blendSigned(natural,secondaryShaped,u.secondaryBlendMode); }
-    if(u.tertiaryEnabled>=.5) { natural=blendSigned(natural,tertiaryShaped,u.tertiaryBlendMode); }
     let centerPoint=abs(q/vec2f(u.centerWidth,u.centerHeight));
     let centerDistance=pow(pow(centerPoint.x,u.centerRoundness)+pow(centerPoint.y,u.centerRoundness),1./u.centerRoundness);
     let centerFeather=u.centerSoftness*.5;
@@ -505,7 +491,7 @@ export class AtmosphereRenderer {
         };
         draw(this.textures[0].createView(), this.pipelines[0]);
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
-            data[34] = octave;
+            data[28] = octave;
             data[0] = this.textures[1].width;
             data[1] = this.textures[1].height;
             draw(this.textures[1].createView(), this.pipelines[1], this.textures[0], true);

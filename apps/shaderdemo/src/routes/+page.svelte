@@ -54,17 +54,6 @@
                 'secondaryBlendMode',
             ],
         },
-        {
-            label: 'Tertiary detail',
-            toggle: 'tertiaryEnabled',
-            keys: [
-                'tertiaryScale',
-                'tertiaryCloudAmount',
-                'tertiaryRibbonAmount',
-                'tertiaryRibbonSharpness',
-                'tertiaryBlendMode',
-            ],
-        },
         { label: 'Threshold', toggle: 'thresholdEnabled', keys: ['threshold', 'thresholdSoftness'] },
         { label: 'Output', keys: ['finalContrast'] },
         {
