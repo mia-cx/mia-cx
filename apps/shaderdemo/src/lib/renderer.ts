@@ -1,9 +1,9 @@
 export const FIELD_PARAMETER_SCHEMA = [
     { key: 'fieldScale', label: 'Base field size', min: 32, max: 2048, step: 1, default: 128 },
     { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 2.5 },
-    { key: 'billowAmount', label: 'Billow amount', min: 0, max: 2, step: 0.01, default: 0 },
-    { key: 'ridgeAmount', label: 'Ridge amount', min: 0, max: 2, step: 0.01, default: 1 },
-    { key: 'ridgeSharpness', label: 'Ridge sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
+    { key: 'billowAmount', label: 'Cloud amount', min: 0, max: 2, step: 0.01, default: 0 },
+    { key: 'ridgeAmount', label: 'Ribbon amount', min: 0, max: 2, step: 0.01, default: 1 },
+    { key: 'ridgeSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 1.76 },
     { key: 'warpScale', label: 'Warp scale', min: 0.2, max: 2.5, step: 0.01, default: 0.68 },
     { key: 'warpStrength', label: 'Warp strength', min: 0, max: 1.5, step: 0.01, default: 1.5 },
     { key: 'threshold', label: 'Threshold', min: 0.05, max: 0.95, step: 0.01, default: 0.56 },
