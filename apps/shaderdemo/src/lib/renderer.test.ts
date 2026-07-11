@@ -130,7 +130,7 @@ describe('field configuration', () => {
         expect(defaultParameters()).toMatchObject({
             fieldScale: 1007,
             flowStretch: 2.5,
-            billowAmount: 1,
+            billowAmount: 1.01,
             ridgeAmount: 2,
             ridgeSharpness: 4,
             baseBlendMode: 2,

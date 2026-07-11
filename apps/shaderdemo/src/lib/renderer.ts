@@ -4,7 +4,7 @@ import { composeAdjustmentLut, type Adjustment } from './adjustments';
 export const FIELD_PARAMETER_SCHEMA = [
     { key: 'fieldScale', label: 'Base field size', min: 32, max: 2048, step: 1, default: 1007 },
     { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 2.5 },
-    { key: 'billowAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: 1 },
+    { key: 'billowAmount', label: 'Cloud amount', min: -2, max: 2, step: 0.01, default: 1.01 },
     { key: 'ridgeAmount', label: 'Ribbon amount', min: -2, max: 2, step: 0.01, default: 2 },
     { key: 'ridgeSharpness', label: 'Ribbon sharpness', min: 0.4, max: 4, step: 0.01, default: 4 },
     { key: 'baseBlendMode', label: 'Blend mode', min: 0, max: 2, step: 1, default: 2 },
