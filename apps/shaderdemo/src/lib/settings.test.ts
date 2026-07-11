@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import fixture from './default-settings.json';
 import { newCurve } from './adjustments';
 import { defaultParameters, FIELD_PARAMETER_SCHEMA, PARAMETER_SCHEMA } from './renderer';
-import { defaultShaderSettings, resetSettingsTab, serializeShaderSettings, type SavedShaderSettings } from './settings';
+import {
+    SETTINGS_STORAGE_KEY,
+    defaultShaderSettings,
+    resetSettingsTab,
+    serializeShaderSettings,
+    type SavedShaderSettings,
+} from './settings';
 
 const fixtureParameters = fixture.settings.parameters as Record<string, number>;
 
@@ -41,6 +47,10 @@ describe('canonical defaults', () => {
 });
 
 describe('tab-scoped settings reset', () => {
+    it('uses a fresh persistence generation for the exported canonical preset', () => {
+        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v2');
+    });
+
     it('restores exactly Field without touching Octaves, adjustments, or seed', () => {
         const settings = tuned();
         const reset = resetSettingsTab(settings, 'field');
