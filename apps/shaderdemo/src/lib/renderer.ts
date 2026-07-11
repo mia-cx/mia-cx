@@ -164,10 +164,9 @@ const baseShader =
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
-    // Evaluate the original coarse field continuously at full resolution. This retains the old 1:128
-    // composition scale without ever rasterizing/thresholding the whole image into a low-res mosaic.
-    let centeredPixel=pos.xy-u.resolution*.5;
-    let fieldPixel=centeredPixel/u.fieldScale;
+    // Interpret field size against a 1080px reference height, not the render target's physical pixels.
+    // The composition therefore stays stable across resolutions while higher-resolution targets add detail.
+    let fieldPixel=q*(540./u.fieldScale);
     let flow=mat2x2f(.89,.45,-.45,.89)*vec2f(fieldPixel.x,fieldPixel.y*u.flowStretch);
     let drift=noise3v(flow*u.warpScale,t*.11)-.5;
     let p=flow+drift*u.warpStrength;
