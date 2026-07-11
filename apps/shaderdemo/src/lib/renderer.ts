@@ -160,6 +160,11 @@ export function octaveBlurIsActive(parameters: ShaderParameters, index: number) 
     return parameters[OCTAVE_BLUR_SCHEMA[index].key] > 0;
 }
 
+/** Stable identity for bind groups whose resources are all renderer-owned. */
+export function bindGroupCacheKey(pipelineIndex: number, sourceTextureIndex: number | undefined, passIndex: number) {
+    return `${pipelineIndex}:${sourceTextureIndex ?? 'none'}:${passIndex}`;
+}
+
 export function advanceSimulationTime(time: number, deltaSeconds: number, speed: number) {
     return time + deltaSeconds * speed;
 }
@@ -330,11 +335,10 @@ fn avalanche(value: u32) -> u32 {
     x^=x>>16u; x*=0x7feb352du; x^=x>>15u; x*=0x846ca68bu; x^=x>>16u;
     return x;
 }
-fn tileHash(tile: vec2f, salt: u32) -> u32 {
-    let coordinate=vec2u(tile);
-    return avalanche((coordinate.x*0x9e3779b9u) ^ (coordinate.y*0x85ebca6bu) ^ (u32(u.seed)*0xc2b2ae35u) ^ salt);
+fn tileHash(tile: vec2u, salt: u32) -> u32 {
+    return avalanche((tile.x*0x9e3779b9u) ^ (tile.y*0x85ebca6bu) ^ (u32(u.seed)*0xc2b2ae35u) ^ salt);
 }
-fn scatterOffset(tile: vec2f, sampleIndex: u32, distance: f32) -> vec2f {
+fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: u32) -> vec2f {
     // Paint.NET Frosted Glass: one hash supplies an independent quantized direction and radius per sample.
     let directions=array<vec2f,16>(
         vec2f(1.,0.),vec2f(.9238795,.3826834),vec2f(.7071068,.7071068),vec2f(.3826834,.9238795),
@@ -342,54 +346,56 @@ fn scatterOffset(tile: vec2f, sampleIndex: u32, distance: f32) -> vec2f {
         vec2f(-1.,0.),vec2f(-.9238795,-.3826834),vec2f(-.7071068,-.7071068),vec2f(-.3826834,-.9238795),
         vec2f(0.,-1.),vec2f(.3826834,-.9238795),vec2f(.7071068,-.7071068),vec2f(.9238795,-.3826834)
     );
-    let bits=tileHash(
-        tile,
-        (u32(u.octaveIndex)*0x27d4eb2du) ^
-        (sampleIndex*0x165667b1u) ^
-        (u32(u.frameIndex)*0x9e3779b9u)
-    );
+    let bits=tileHash(tile,octaveFrameSalt ^ (sampleIndex*0x165667b1u));
     let radius=f32(bits>>8u)*(1./16777215.)*distance;
     return directions[bits&15u]*radius;
 }
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let sourceSize=vec2f(textureDimensions(src));
-    let settings=u.octaves[u32(u.octaveIndex)];
-    let pixel=floor(pos.xy);
-    let octavePixelSize=exp2(4.-u.octaveIndex);
-    let tile=floor(pixel/octavePixelSize);
-    let pixelationBit=floor(u.octavePixelationMask/exp2(u.octaveIndex))%2.;
-    let tiledUv=(tile+.5)*octavePixelSize/sourceSize;
-    let sourceUv=select(uv,tiledUv,pixelationBit>.5);
+    let octave=u32(u.octaveIndex);
+    let settings=u.octaves[octave];
+    let pixel=vec2u(pos.xy);
+    let tileShift=4u-octave;
+    let octavePixelSizeU=1u<<tileShift;
+    let tile=pixel>>vec2u(tileShift);
+    let pixelationBit=(u32(u.octavePixelationMask)&(1u<<octave))!=0u;
+    let octavePixelSize=f32(octavePixelSizeU);
+    let tiledUv=(vec2f(tile)+.5)*octavePixelSize/sourceSize;
+    let sourceUv=select(uv,tiledUv,pixelationBit);
     let sampleCount=u32(round(mix(1.,4.,settings.z)));
     // Radius zero is an exact identity operation: no random resampling and no accumulated softening.
-    var scattered=textureSample(src,samp,sourceUv).r;
+    var scattered: f32;
     if(settings.w>0.) {
         scattered=0.;
+        let octaveFrameSalt=(octave*0x27d4eb2du) ^ (u32(u.frameIndex)*0x9e3779b9u);
         for(var sampleIndex=0u;sampleIndex<4u;sampleIndex++) {
             if(sampleIndex<sampleCount) {
                 // Run Frosted Glass in this octave's virtual pixel grid. Every real pixel inside a tile
                 // receives the same whole-tile displacement while retaining its local detail.
-                let tileOffset=round(scatterOffset(tile,sampleIndex,settings.w));
+                let tileOffset=round(scatterOffset(tile,sampleIndex,settings.w,octaveFrameSalt));
                 let offset=tileOffset*octavePixelSize;
                 scattered+=textureSample(src,samp,sourceUv+offset/sourceSize).r;
             }
         }
         scattered/=f32(sampleCount);
+    } else {
+        scattered=textureSample(src,samp,sourceUv).r;
     }
     // Paint.NET's smoothness is sample count: 1–4 randomly displaced bilinear samples blended together.
     // Diffusion offsets and electrical noise are independently re-salted every rendered frame.
     // Literal noise is constant per effect-space tile, but independently salted for each rendered frame.
     var injected=scattered;
     if(settings.x!=0.) {
-        let noiseBits=tileHash(tile,(u32(u.octaveIndex)*0x27d4eb2du) ^ (u32(u.frameIndex)*0x165667b1u) ^ 0xa511e9b3u);
+        let noiseSalt=(octave*0x27d4eb2du) ^ (u32(u.frameIndex)*0x165667b1u) ^ 0xa511e9b3u;
+        let noiseBits=tileHash(tile,noiseSalt);
         let detail=f32(noiseBits)*(1./4294967295.)-.5;
         injected+=detail*settings.x;
     }
+    if(settings.y==0.) { return vec4f(injected,0.,0.,1.); }
     let thresholdWidth=max(.015,fwidth(injected)*1.5);
     let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,injected);
-    let output=select(injected,thresholded,settings.y!=0.);
-    return vec4f(output,0.,0.,1.);
+    return vec4f(thresholded,0.,0.,1.);
 }`;
 
 const displayShader =
@@ -408,8 +414,10 @@ export class AtmosphereRenderer {
     private context: GPUCanvasContext | null = null;
     private pipelines: GPURenderPipeline[] = [];
     private textures: GPUTexture[] = [];
+    private textureViews: GPUTextureView[] = [];
     private sampler?: GPUSampler;
     private buffers: GPUBuffer[] = [];
+    private bindGroups = new Map<string, GPUBindGroup>();
     private observer: ResizeObserver;
     private rafId = 0;
     private simTime = 0;
@@ -486,12 +494,15 @@ export class AtmosphereRenderer {
     private recreateTargets() {
         if (!this.device) return;
         this.textures.forEach((texture) => texture.destroy());
+        this.textureViews = [];
+        this.bindGroups.clear();
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
         // Two full-resolution targets ping-pong through each octave's blur and effect passes.
         const size = scaledSize(this.canvas.width, this.canvas.height, this.options.renderScale);
         this.textures = Array.from({ length: 2 }, () => {
             return this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage });
         });
+        this.textureViews = this.textures.map((texture) => texture.createView());
     }
     setOptions(options: RenderOptions) {
         const changed = this.options.renderScale !== options.renderScale;
@@ -536,7 +547,8 @@ export class AtmosphereRenderer {
             buffers.length < 2 * OCTAVE_COUNT + 2 ||
             !s ||
             this.pipelines.length < 4 ||
-            this.textures.length < 2
+            this.textures.length < 2 ||
+            this.textureViews.length < 2
         )
             return;
         const enc = d.createCommandEncoder();
@@ -551,16 +563,24 @@ export class AtmosphereRenderer {
         let passIndex = 0;
         const draw = (
             target: GPUTextureView,
-            pipeline: GPURenderPipeline,
-            source?: GPUTexture,
+            pipelineIndex: number,
+            sourceTextureIndex?: number,
             usesSampler = false,
         ) => {
-            const buffer = buffers[passIndex++];
+            const uniformSlot = passIndex++;
+            const buffer = buffers[uniformSlot];
             d.queue.writeBuffer(buffer, 0, data);
-            const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer } }];
-            if (source) {
-                entries.push({ binding: 1, resource: source.createView() });
-                if (usesSampler) entries.push({ binding: 2, resource: s });
+            const pipeline = this.pipelines[pipelineIndex];
+            const cacheKey = bindGroupCacheKey(pipelineIndex, sourceTextureIndex, uniformSlot);
+            let bindGroup = this.bindGroups.get(cacheKey);
+            if (!bindGroup) {
+                const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer } }];
+                if (sourceTextureIndex !== undefined) {
+                    entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
+                    if (usesSampler) entries.push({ binding: 2, resource: s });
+                }
+                bindGroup = d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
+                this.bindGroups.set(cacheKey, bindGroup);
             }
             const pass = enc.beginRenderPass({
                 colorAttachments: [
@@ -568,28 +588,28 @@ export class AtmosphereRenderer {
                 ],
             });
             pass.setPipeline(pipeline);
-            pass.setBindGroup(0, d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries }));
+            pass.setBindGroup(0, bindGroup);
             pass.draw(3);
             pass.end();
         };
-        draw(this.textures[0].createView(), this.pipelines[0]);
+        draw(this.textureViews[0], 0);
         let current = 0;
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
             data[29] = octave;
             if (octaveBlurIsActive(this.options.parameters, octave)) {
                 const scratch = 1 - current;
-                draw(this.textures[scratch].createView(), this.pipelines[1], this.textures[current], true);
+                draw(this.textureViews[scratch], 1, current, true);
                 current = scratch;
             }
             if (octaveEffectIsActive(this.options.parameters, octave)) {
                 const scratch = 1 - current;
-                draw(this.textures[scratch].createView(), this.pipelines[2], this.textures[current], true);
+                draw(this.textureViews[scratch], 2, current, true);
                 current = scratch;
             }
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), this.pipelines[3], this.textures[current], true);
+        draw(c.getCurrentTexture().createView(), 3, current, true);
         d.queue.submit([enc.finish()]);
         this.frameIndex = (this.frameIndex + 1) % 16_777_216;
     }
@@ -599,6 +619,8 @@ export class AtmosphereRenderer {
         if (this.rafId) cancelAnimationFrame(this.rafId);
         this.observer.disconnect();
         this.textures.forEach((texture) => texture.destroy());
+        this.textureViews = [];
+        this.bindGroups.clear();
         this.buffers.forEach((buffer) => buffer.destroy());
         this.buffers = [];
         try {

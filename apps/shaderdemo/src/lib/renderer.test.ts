@@ -12,6 +12,7 @@ import {
     PARAMETER_SCHEMA,
     UNIFORM_FLOATS,
     advanceSimulationTime,
+    bindGroupCacheKey,
     defaultParameters,
     fullResolutionPassSizes,
     octavePixelSizes,
@@ -237,15 +238,30 @@ describe('field configuration', () => {
     });
     it('uses exact zero threshold and diffusion bypasses in the octave shader', () => {
         expect(OCTAVE_SHADER_SOURCE).toContain('if(settings.w>0.)');
-        expect(OCTAVE_SHADER_SOURCE).toContain('settings.y!=0.');
+        expect(OCTAVE_SHADER_SOURCE).toContain('if(settings.y==0.) { return vec4f(injected,0.,0.,1.); }');
+        expect(OCTAVE_SHADER_SOURCE.indexOf('if(settings.y==0.)')).toBeLessThan(
+            OCTAVE_SHADER_SOURCE.indexOf('fwidth(injected)'),
+        );
         expect(OCTAVE_SHADER_SOURCE).not.toContain('abs(settings.y)>.001');
+        expect(OCTAVE_SHADER_SOURCE).toContain('var scattered: f32;');
+        expect(OCTAVE_SHADER_SOURCE).toContain('} else {\n        scattered=textureSample(src,samp,sourceUv).r;');
+        expect(OCTAVE_SHADER_SOURCE).not.toContain('var scattered=textureSample');
+    });
+    it('uses exact integer octave tiling and pixelation bits', () => {
+        expect(OCTAVE_SHADER_SOURCE).toContain('let octave=u32(u.octaveIndex)');
+        expect(OCTAVE_SHADER_SOURCE).toContain('let pixel=vec2u(pos.xy)');
+        expect(OCTAVE_SHADER_SOURCE).toContain('let tileShift=4u-octave');
+        expect(OCTAVE_SHADER_SOURCE).toContain('let octavePixelSizeU=1u<<tileShift');
+        expect(OCTAVE_SHADER_SOURCE).toContain('let tile=pixel>>vec2u(tileShift)');
+        expect(OCTAVE_SHADER_SOURCE).toContain('(u32(u.octavePixelationMask)&(1u<<octave))!=0u');
+        expect(OCTAVE_SHADER_SOURCE).not.toContain('floor(pixel/octavePixelSize)');
     });
     it('uses fast frame-varying scatter and tile noise', () => {
         expect(OCTAVE_SHADER_SOURCE).toContain('fn avalanche(value: u32)');
         expect(OCTAVE_SHADER_SOURCE).toContain(
-            '(coordinate.x*0x9e3779b9u) ^ (coordinate.y*0x85ebca6bu) ^ (u32(u.seed)*0xc2b2ae35u)',
+            '(tile.x*0x9e3779b9u) ^ (tile.y*0x85ebca6bu) ^ (u32(u.seed)*0xc2b2ae35u)',
         );
-        expect(OCTAVE_SHADER_SOURCE).toContain('(sampleIndex*0x165667b1u) ^');
+        expect(OCTAVE_SHADER_SOURCE).toContain('octaveFrameSalt ^ (sampleIndex*0x165667b1u)');
         expect(OCTAVE_SHADER_SOURCE).toContain('(u32(u.frameIndex)*0x9e3779b9u)');
         expect(OCTAVE_SHADER_SOURCE).toContain('array<vec2f,16>');
         expect(OCTAVE_SHADER_SOURCE).toContain('sampleIndex<4u');
@@ -256,6 +272,11 @@ describe('field configuration', () => {
         expect(OCTAVE_SHADER_SOURCE).not.toContain('cos(');
         expect(OCTAVE_SHADER_SOURCE).not.toContain('sin(angle)');
         expect(OCTAVE_SHADER_SOURCE).not.toContain('hash(pixel');
+    });
+    it('keys cached bind groups by pipeline, source, and independent uniform slot', () => {
+        expect(bindGroupCacheKey(2, 0, 3)).toBe('2:0:3');
+        expect(bindGroupCacheKey(2, 1, 3)).not.toBe(bindGroupCacheKey(2, 0, 3));
+        expect(bindGroupCacheKey(0, undefined, 0)).toBe('0:none:0');
     });
     it('can bypass the stage-one threshold to expose the raw field', () => {
         expect(BASE_SHADER_SOURCE).toContain('if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }');
