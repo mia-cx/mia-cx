@@ -71,7 +71,9 @@
         const parameters = { ...options.parameters };
         for (const parameter of PARAMETER_SCHEMA) {
             const value = Number(parameters[parameter.key]);
-            parameters[parameter.key] = Number.isFinite(value) ? value : parameter.default;
+            parameters[parameter.key] = Number.isFinite(value)
+                ? Math.min(parameter.max, Math.max(parameter.min, value))
+                : parameter.default;
         }
         options = { ...options, parameters };
         shaderSettings.set({ seed: options.seed, parameters: options.parameters });
@@ -172,9 +174,17 @@
                                     </div>
                                     {#each FIELD_PARAMETER_SCHEMA.filter( ({ key }) => group.keys.includes(key), ) as parameter}
                                         <label class="parameter">
-                                            <span>{parameter.label}</span><output
-                                                >{Number(options.parameters[parameter.key]).toFixed(2)}</output
-                                            >
+                                            <span>{parameter.label}</span>
+                                            <input
+                                                class="exact-value"
+                                                aria-label={`${parameter.label} exact value`}
+                                                type="number"
+                                                min={parameter.min}
+                                                max={parameter.max}
+                                                step={parameter.step}
+                                                bind:value={options.parameters[parameter.key]}
+                                                onchange={update}
+                                            />
                                             <input
                                                 type="range"
                                                 min={parameter.min}
@@ -209,9 +219,17 @@
                                     </label>
                                     {#each parameters as parameter}
                                         <label class="parameter">
-                                            <span>{parameter.label}</span><output
-                                                >{Number(options.parameters[parameter.key]).toFixed(2)}</output
-                                            >
+                                            <span>{parameter.label}</span>
+                                            <input
+                                                class="exact-value"
+                                                aria-label={`Octave ${index + 1} ${parameter.label} exact value`}
+                                                type="number"
+                                                min={parameter.min}
+                                                max={parameter.max}
+                                                step={parameter.step}
+                                                bind:value={options.parameters[parameter.key]}
+                                                onchange={update}
+                                            />
                                             <input
                                                 type="range"
                                                 min={parameter.min}
@@ -355,7 +373,7 @@
     }
     .controls .parameter {
         display: grid;
-        grid-template-columns: 1fr 40px;
+        grid-template-columns: 1fr 62px;
         gap: 2px 7px;
         cursor: default;
         letter-spacing: 0.03em;
@@ -392,10 +410,23 @@
         padding: 0;
         color: #aaa;
     }
-    .parameter output {
+    .parameter .exact-value {
+        width: 100%;
+        min-width: 0;
+        padding: 1px 2px;
+        border: 0;
+        border-bottom: 1px solid #ffffff24;
+        border-radius: 0;
+        outline: none;
+        background: transparent;
         color: #aaa;
+        font: inherit;
         text-align: right;
         font-variant-numeric: tabular-nums;
+    }
+    .parameter .exact-value:focus {
+        border-bottom-color: #ddd;
+        color: #fff;
     }
     .parameter input[type='range'] {
         grid-column: 1 / -1;
