@@ -342,7 +342,12 @@ fn scatterOffset(tile: vec2f, sampleIndex: u32, distance: f32) -> vec2f {
         vec2f(-1.,0.),vec2f(-.9238795,-.3826834),vec2f(-.7071068,-.7071068),vec2f(-.3826834,-.9238795),
         vec2f(0.,-1.),vec2f(.3826834,-.9238795),vec2f(.7071068,-.7071068),vec2f(.9238795,-.3826834)
     );
-    let bits=tileHash(tile,(u32(u.octaveIndex)*0x27d4eb2du) ^ (sampleIndex*0x165667b1u));
+    let bits=tileHash(
+        tile,
+        (u32(u.octaveIndex)*0x27d4eb2du) ^
+        (sampleIndex*0x165667b1u) ^
+        (u32(u.frameIndex)*0x9e3779b9u)
+    );
     let radius=f32(bits>>8u)*(1./16777215.)*distance;
     return directions[bits&15u]*radius;
 }
@@ -373,6 +378,7 @@ fn scatterOffset(tile: vec2f, sampleIndex: u32, distance: f32) -> vec2f {
         scattered/=f32(sampleCount);
     }
     // Paint.NET's smoothness is sample count: 1–4 randomly displaced bilinear samples blended together.
+    // Diffusion offsets and electrical noise are independently re-salted every rendered frame.
     // Literal noise is constant per effect-space tile, but independently salted for each rendered frame.
     var injected=scattered;
     if(settings.x!=0.) {
