@@ -1,4 +1,5 @@
 import { FrameTelemetry, type FrameRollingSummary } from './telemetry';
+import { composeAdjustmentLut, type Adjustment } from './adjustments';
 
 export const FIELD_PARAMETER_SCHEMA = [
     { key: 'fieldScale', label: 'Base field size', min: 32, max: 2048, step: 1, default: 1007 },
@@ -124,6 +125,7 @@ export interface RenderOptions {
     dprCap: number;
     renderScale: number;
     parameters: ShaderParameters;
+    adjustments: Adjustment[];
 }
 
 export function renderSize(width: number, height: number, dpr: number, cap: number) {
@@ -429,14 +431,17 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     return vec4f(thresholded,0.,0.,1.);
 }`;
 
-const displayShader =
+export const DISPLAY_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
+@group(0) @binding(3) var adjustmentLut: texture_2d<u32>;
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let density=textureSample(src,samp,uv).r;
-    let f=pow(clamp(density,0.,1.),u.finalContrast);
+    var f=pow(clamp(density,0.,1.),u.finalContrast);
+    // Existing final contrast first; adjustment LUT is the new final stage.
+    if(u.blurRadii[1].w>.5) { f=f32(textureLoad(adjustmentLut,vec2i(i32(floor(f*255.+.5)),0),0).r)/255.; }
     return vec4f(vec3f(f),1.);
 }`;
 
@@ -447,6 +452,9 @@ export class AtmosphereRenderer {
     private textures: GPUTexture[] = [];
     private textureViews: GPUTextureView[] = [];
     private sampler?: GPUSampler;
+    private adjustmentTexture?: GPUTexture;
+    private adjustmentView?: GPUTextureView;
+    private adjustmentsKey = '';
     private buffers: GPUBuffer[] = [];
     private bindGroups = new Map<string, GPUBindGroup>();
     private observer: ResizeObserver;
@@ -516,7 +524,7 @@ export class AtmosphereRenderer {
             make(BASE_SHADER_SOURCE, 'r16float'),
             make(BLUR_SHADER_SOURCE, 'r16float'),
             make(OCTAVE_SHADER_SOURCE, 'r16float'),
-            make(displayShader, format),
+            make(DISPLAY_SHADER_SOURCE, format),
         ]);
         self.buffers = Array.from({ length: 2 * OCTAVE_COUNT + 2 }, () =>
             self.device!.createBuffer({
@@ -525,6 +533,13 @@ export class AtmosphereRenderer {
             }),
         );
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+        self.adjustmentTexture = self.device.createTexture({
+            size: [256, 1],
+            format: 'r8uint',
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        });
+        self.adjustmentView = self.adjustmentTexture.createView();
+        self.updateAdjustmentLut();
         if (gpuTimingSupported) {
             self.querySet = self.device.createQuerySet({ type: 'timestamp', count: GPU_QUERY_COUNT });
             const size = GPU_QUERY_COUNT * BigUint64Array.BYTES_PER_ELEMENT;
@@ -571,8 +586,19 @@ export class AtmosphereRenderer {
     setOptions(options: RenderOptions) {
         const changed = this.options.renderScale !== options.renderScale;
         this.options = options;
+        this.updateAdjustmentLut();
         if (changed) this.recreateTargets();
         this.invalidate();
+    }
+    private updateAdjustmentLut() {
+        if (!this.device || !this.adjustmentTexture) return;
+        const key = JSON.stringify(this.options.adjustments);
+        if (key === this.adjustmentsKey) return;
+        this.adjustmentsKey = key;
+        const lut = composeAdjustmentLut(this.options.adjustments);
+        const bytes = new ArrayBuffer(256);
+        new Uint8Array(bytes).set(lut);
+        this.device.queue.writeTexture({ texture: this.adjustmentTexture }, bytes, { bytesPerRow: 256 }, [256, 1]);
     }
     setPaused(value: boolean) {
         this.paused = value;
@@ -661,6 +687,7 @@ export class AtmosphereRenderer {
                 if (sourceTextureIndex !== undefined) {
                     entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
                     if (usesSampler) entries.push({ binding: 2, resource: s });
+                    if (pipelineIndex === 3) entries.push({ binding: 3, resource: this.adjustmentView! });
                 }
                 bindGroup = d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
                 this.bindGroups.set(cacheKey, bindGroup);
@@ -703,6 +730,7 @@ export class AtmosphereRenderer {
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
+        data[59] = this.options.adjustments.some((adjustment) => adjustment.enabled) ? 1 : 0;
         draw(c.getCurrentTexture().createView(), 3, current, true, 'display');
         if (sampleGpu) {
             const bytes = gpuLabels!.length * 16;
@@ -739,6 +767,7 @@ export class AtmosphereRenderer {
         if (this.rafId) cancelAnimationFrame(this.rafId);
         this.observer.disconnect();
         this.textures.forEach((texture) => texture.destroy());
+        this.adjustmentTexture?.destroy();
         this.textureViews = [];
         this.bindGroups.clear();
         this.buffers.forEach((buffer) => buffer.destroy());

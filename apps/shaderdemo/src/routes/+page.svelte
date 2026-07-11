@@ -14,6 +14,16 @@
     } from '$lib/renderer';
     import { GpuTelemetry, type FrameRollingSummary, type GpuRollingSummary } from '$lib/telemetry';
     import { defaultShaderSettings, normalizeSavedSettings, shaderSettings } from '$lib/settings';
+    import CurveEditor from '$lib/CurveEditor.svelte';
+    import {
+        MAX_ADJUSTMENTS,
+        newCurve,
+        newLevels,
+        setLevelsValue,
+        type Adjustment,
+        type LevelsAdjustment,
+        type LevelsKey,
+    } from '$lib/adjustments';
 
     let canvas: HTMLCanvasElement;
     let renderer: AtmosphereRenderer | undefined;
@@ -22,6 +32,7 @@
         dprCap: Number.POSITIVE_INFINITY,
         renderScale: 1,
         parameters: defaultParameters(),
+        adjustments: [],
     };
     let paused = false;
     let controlsOpen = true;
@@ -36,6 +47,7 @@
     const parameterTabs = [
         { id: 'field', label: 'Field' },
         { id: 'octaves', label: 'Octaves' },
+        { id: 'adjustments', label: 'Curves & levels' },
     ] as const;
     let selectedTabId: (typeof parameterTabs)[number]['id'] = 'field';
     const fieldGroups: { label: string; keys: ParameterKey[]; toggle?: ParameterKey }[] = [
@@ -76,7 +88,10 @@
     function tabKeydown(event: KeyboardEvent) {
         if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
         event.preventDefault();
-        selectedTabId = selectedTabId === 'field' ? 'octaves' : 'field';
+        const index = parameterTabs.findIndex((tab) => tab.id === selectedTabId);
+        selectedTabId =
+            parameterTabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + parameterTabs.length) % parameterTabs.length]
+                .id;
         requestAnimationFrame(() => document.getElementById(`tab-${selectedTabId}`)?.focus());
     }
 
@@ -91,7 +106,7 @@
                 : parameter.default;
         }
         options = { ...options, parameters };
-        shaderSettings.set({ seed: options.seed, parameters: options.parameters });
+        shaderSettings.set({ seed: options.seed, parameters: options.parameters, adjustments: options.adjustments });
         renderer?.setOptions(options);
     }
     function togglePause() {
@@ -104,9 +119,31 @@
     }
     function resetDefaults() {
         const defaults = defaultShaderSettings();
-        options = { ...options, seed: defaults.seed, parameters: defaults.parameters };
+        options = {
+            ...options,
+            seed: defaults.seed,
+            parameters: defaults.parameters,
+            adjustments: defaults.adjustments,
+        };
         shaderSettings.set(defaults);
         renderer?.setOptions(options);
+    }
+    function replaceAdjustment(index: number, adjustment: Adjustment) {
+        options = { ...options, adjustments: options.adjustments.map((item, i) => (i === index ? adjustment : item)) };
+        update();
+    }
+    function addAdjustment(adjustment: Adjustment) {
+        if (options.adjustments.length >= MAX_ADJUSTMENTS) return;
+        options = { ...options, adjustments: [...options.adjustments, adjustment] };
+        update();
+    }
+    function moveAdjustment(index: number, direction: number) {
+        const target = index + direction;
+        if (target < 0 || target >= options.adjustments.length) return;
+        const adjustments = [...options.adjustments];
+        [adjustments[index], adjustments[target]] = [adjustments[target], adjustments[index]];
+        options = { ...options, adjustments };
+        update();
     }
     onMount(() => {
         let disposed = false;
@@ -115,7 +152,7 @@
         const stopHydration = shaderSettings.subscribe((value) => (persisted = value));
         stopHydration();
         const saved = normalizeSavedSettings(persisted);
-        options = { ...options, seed: saved.seed, parameters: saved.parameters };
+        options = { ...options, seed: saved.seed, parameters: saved.parameters, adjustments: saved.adjustments };
         if (matchMedia('(prefers-reduced-motion: reduce)').matches) paused = true;
         AtmosphereRenderer.create(canvas, options)
             .then((instance) => {
@@ -276,7 +313,7 @@
                                 </section>
                             {/each}
                         </div>
-                    {:else}
+                    {:else if selectedTabId === 'octaves'}
                         <div class="sliders" id="panel-octaves" role="tabpanel" aria-labelledby="tab-octaves">
                             {#each OCTAVE_PARAMETER_SCHEMA as parameters, index}
                                 <fieldset class="octave">
@@ -320,6 +357,117 @@
                                     {/each}
                                 </fieldset>
                             {/each}
+                        </div>
+                    {:else}
+                        <div
+                            class="sliders adjustment-stack"
+                            id="panel-adjustments"
+                            role="tabpanel"
+                            aria-labelledby="tab-adjustments"
+                        >
+                            <div class="add-adjustments">
+                                <button
+                                    onclick={() => addAdjustment(newCurve())}
+                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add curve</button
+                                ><button
+                                    onclick={() => addAdjustment(newLevels())}
+                                    disabled={options.adjustments.length >= MAX_ADJUSTMENTS}>Add levels</button
+                                >
+                            </div>
+                            {#each options.adjustments as adjustment, index (adjustment.id)}
+                                <section class="adjustment">
+                                    <div class="adjustment-heading">
+                                        <strong
+                                            >{adjustment.type === 'curve' ? 'Curve' : 'Levels'}
+                                            {options.adjustments
+                                                .slice(0, index + 1)
+                                                .filter((a) => a.type === adjustment.type).length}</strong
+                                        ><label
+                                            ><span>Enabled</span><input
+                                                type="checkbox"
+                                                checked={adjustment.enabled}
+                                                onchange={(e) =>
+                                                    replaceAdjustment(index, {
+                                                        ...adjustment,
+                                                        enabled: e.currentTarget.checked,
+                                                    })}
+                                            /></label
+                                        >
+                                    </div>
+                                    <div class="adjustment-actions">
+                                        <button
+                                            aria-label="Move up"
+                                            disabled={index === 0}
+                                            onclick={() => moveAdjustment(index, -1)}>↑</button
+                                        ><button
+                                            aria-label="Move down"
+                                            disabled={index === options.adjustments.length - 1}
+                                            onclick={() => moveAdjustment(index, 1)}>↓</button
+                                        ><button
+                                            onclick={() =>
+                                                replaceAdjustment(
+                                                    index,
+                                                    adjustment.type === 'curve'
+                                                        ? { ...newCurve(), id: adjustment.id }
+                                                        : { ...newLevels(), id: adjustment.id },
+                                                )}>Reset</button
+                                        ><button
+                                            onclick={() => {
+                                                options = {
+                                                    ...options,
+                                                    adjustments: options.adjustments.filter((_, i) => i !== index),
+                                                };
+                                                update();
+                                            }}>Remove</button
+                                        >
+                                    </div>
+                                    {#if adjustment.type === 'curve'}
+                                        <CurveEditor
+                                            points={adjustment.points}
+                                            onchange={(points) => replaceAdjustment(index, { ...adjustment, points })}
+                                        />
+                                    {:else}
+                                        {#each [['inputLow', 'Input black', 0, 254, 1], ['inputHigh', 'Input white', 1, 255, 1], ['gamma', 'Gamma', 0.1, 10, 0.1], ['outputLow', 'Output black', 0, 254, 1], ['outputHigh', 'Output white', 1, 255, 1]] as row}
+                                            <label class="parameter"
+                                                ><span>{row[1]}</span><input
+                                                    class="exact-value"
+                                                    aria-label={`${row[1]} exact value`}
+                                                    type="number"
+                                                    min={row[2]}
+                                                    max={row[3]}
+                                                    step={row[4]}
+                                                    value={adjustment[row[0] as LevelsKey]}
+                                                    onchange={(e) =>
+                                                        replaceAdjustment(
+                                                            index,
+                                                            setLevelsValue(
+                                                                adjustment as LevelsAdjustment,
+                                                                row[0] as LevelsKey,
+                                                                +e.currentTarget.value,
+                                                            ),
+                                                        )}
+                                                /><input
+                                                    type="range"
+                                                    min={row[2]}
+                                                    max={row[3]}
+                                                    step={row[4]}
+                                                    value={adjustment[row[0] as LevelsKey]}
+                                                    oninput={(e) =>
+                                                        replaceAdjustment(
+                                                            index,
+                                                            setLevelsValue(
+                                                                adjustment as LevelsAdjustment,
+                                                                row[0] as LevelsKey,
+                                                                +e.currentTarget.value,
+                                                            ),
+                                                        )}
+                                                /></label
+                                            >
+                                        {/each}
+                                    {/if}
+                                </section>
+                            {/each}
+                            {#if options.adjustments.length === 0}<p class="empty">No adjustments.</p>{/if}
                         </div>
                     {/if}
                 </div>
@@ -464,7 +612,7 @@
     }
     .tabs {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, 1fr);
         gap: 2px;
         padding: 4px 0;
     }
@@ -535,6 +683,44 @@
     .octave legend {
         padding: 0;
         color: #aaa;
+    }
+    .add-adjustments,
+    .adjustment-heading,
+    .adjustment-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .add-adjustments {
+        justify-content: center;
+        padding: 3px;
+    }
+    .adjustment {
+        display: grid;
+        gap: 7px;
+        padding: 9px 2px;
+        border-top: 1px solid #ffffff20;
+    }
+    .adjustment-heading {
+        justify-content: space-between;
+        color: #aaa;
+    }
+    .adjustment-heading label {
+        color: #ddd;
+        text-transform: none;
+    }
+    .adjustment-actions {
+        justify-content: flex-end;
+    }
+    .adjustment-actions button:disabled {
+        opacity: 0.3;
+        cursor: default;
+    }
+    .empty {
+        margin: 8px;
+        color: #888;
+        text-align: center;
+        text-transform: none;
     }
     .parameter .exact-value {
         width: 100%;

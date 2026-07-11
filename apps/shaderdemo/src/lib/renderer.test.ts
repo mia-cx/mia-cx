@@ -4,6 +4,7 @@ import {
     BLUR_SHADER_SOURCE,
     COMMON_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
+    DISPLAY_SHADER_SOURCE,
     OCTAVE_BLUR_SCHEMA,
     OCTAVE_COUNT,
     OCTAVE_PARAMETER_SCHEMA,
@@ -27,6 +28,13 @@ import {
 import { defaultShaderSettings, normalizeSavedSettings } from './settings';
 
 describe('field configuration', () => {
+    it('does one exact integer adjustment lookup in the existing display shader', () => {
+        expect(DISPLAY_SHADER_SOURCE.match(/textureLoad\(adjustmentLut/g)).toHaveLength(1);
+        expect(DISPLAY_SHADER_SOURCE).toContain('texture_2d<u32>');
+        expect(DISPLAY_SHADER_SOURCE).toContain('floor(f*255.+.5)');
+        expect(DISPLAY_SHADER_SOURCE).toContain('if(u.blurRadii[1].w>.5)');
+        expect(DISPLAY_SHADER_SOURCE).not.toContain('textureSample(adjustmentLut');
+    });
     it('aggregates nanosecond GPU timestamp pairs by semantic stage', () => {
         const stats = aggregateGpuTimestamps(
             [0n, 2_000_000n, 3_000_000n, 8_000_000n, 9_000_000n, 21_000_000n, 22_000_000n, 22_400_000n],
@@ -52,6 +60,7 @@ describe('field configuration', () => {
         const second = defaultShaderSettings();
         expect(first.seed).toBe(4.2);
         expect(first.parameters).toEqual(defaultParameters());
+        expect(first.adjustments).toEqual([]);
         first.parameters.fieldScale = 32;
         expect(second.parameters.fieldScale).toBe(1007);
     });

@@ -1,14 +1,17 @@
 import { persistentAtom } from '@nanostores/persistent';
 import { PARAMETER_SCHEMA, defaultParameters, type ShaderParameters } from './renderer';
+import { sanitizeAdjustments, type Adjustment } from './adjustments';
 
 export interface SavedShaderSettings {
     seed: number;
     parameters: ShaderParameters;
+    adjustments: Adjustment[];
 }
 
 const initialSettings = (): SavedShaderSettings => ({
     seed: 4.2,
     parameters: defaultParameters(),
+    adjustments: [],
 });
 
 export const defaultShaderSettings = initialSettings;
@@ -18,7 +21,7 @@ export const shaderSettings = persistentAtom<SavedShaderSettings>('shaderdemo:se
     decode: JSON.parse,
 });
 
-export function normalizeSavedSettings(saved: SavedShaderSettings | undefined): SavedShaderSettings {
+export function normalizeSavedSettings(saved: Partial<SavedShaderSettings> | undefined): SavedShaderSettings {
     const defaults = initialSettings();
     const parameters = { ...defaults.parameters };
 
@@ -33,5 +36,6 @@ export function normalizeSavedSettings(saved: SavedShaderSettings | undefined): 
     return {
         seed: typeof saved?.seed === 'number' && Number.isFinite(saved.seed) ? saved.seed : defaults.seed,
         parameters,
+        adjustments: sanitizeAdjustments(saved?.adjustments),
     };
 }
