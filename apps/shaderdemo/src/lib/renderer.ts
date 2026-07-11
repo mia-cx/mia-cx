@@ -1,3 +1,5 @@
+import { FrameTelemetry, type FrameRollingSummary } from './telemetry';
+
 export const FIELD_PARAMETER_SCHEMA = [
     { key: 'fieldScale', label: 'Base field size', min: 32, max: 2048, step: 1, default: 1007 },
     { key: 'flowStretch', label: 'Flow stretch', min: 0.35, max: 2.5, step: 0.01, default: 2.5 },
@@ -454,6 +456,7 @@ export class AtmosphereRenderer {
     private lastTime = performance.now();
     private statsStartedAt = this.lastTime;
     private statsFrames = 0;
+    private frameTelemetry = new FrameTelemetry();
     private destroyed = false;
     private invalid = true;
     readonly gpuTimingSupported = false;
@@ -464,7 +467,7 @@ export class AtmosphereRenderer {
     private renderedFrames = 0;
     private gpuStatsCallback?: (stats: GpuTimingStats | null) => void;
     paused = false;
-    onStats?: (fps: number, width: number, height: number) => void;
+    onStats?: (fps: number, width: number, height: number, rolling?: FrameRollingSummary) => void;
     get onGpuStats() {
         return this.gpuStatsCallback;
     }
@@ -576,7 +579,8 @@ export class AtmosphereRenderer {
         this.lastTime = performance.now();
         this.statsStartedAt = this.lastTime;
         this.statsFrames = 0;
-        if (value) this.onStats?.(0, this.canvas.width, this.canvas.height);
+        this.frameTelemetry.reset();
+        this.onStats?.(0, this.canvas.width, this.canvas.height, this.frameTelemetry.summary(this.lastTime));
         this.invalidate();
     }
     invalidate() {
@@ -596,10 +600,14 @@ export class AtmosphereRenderer {
         if (this.invalid || animated) {
             this.render();
             this.invalid = false;
-            this.statsFrames += 1;
+            if (animated) {
+                this.frameTelemetry.recordRenderedFrame(now);
+                this.statsFrames += 1;
+            }
             const statsElapsed = now - this.statsStartedAt;
-            if (statsElapsed >= 500) {
-                this.onStats?.((this.statsFrames * 1000) / statsElapsed, this.canvas.width, this.canvas.height);
+            if (animated && statsElapsed >= 500) {
+                const rolling = this.frameTelemetry.summary(now);
+                this.onStats?.(rolling.windows[500]?.fps ?? 0, this.canvas.width, this.canvas.height, rolling);
                 this.statsStartedAt = now;
                 this.statsFrames = 0;
             }

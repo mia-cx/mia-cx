@@ -1,0 +1,149 @@
+import type { GpuTimingStats } from './renderer';
+
+export const FRAME_WINDOWS_MS = [500, 2_000, 10_000] as const;
+export const GPU_WINDOWS_MS = [1_000, 5_000, 30_000] as const;
+
+export interface FrameWindowStats {
+    fps: number;
+    sampleCount: number;
+}
+
+export interface FrameRollingSummary {
+    windows: Record<(typeof FRAME_WINDOWS_MS)[number], FrameWindowStats | undefined>;
+    rms2sMs?: number;
+}
+
+export type GpuMeanStats = Pick<GpuTimingStats, 'totalMs' | 'baseMs' | 'blurMs' | 'octaveMs' | 'displayMs'>;
+export interface GpuRollingSummary {
+    windows: Record<(typeof GPU_WINDOWS_MS)[number], GpuMeanStats | undefined>;
+    rms5sMs?: number;
+}
+
+interface TimedValue<T> {
+    timestampMs: number;
+    value: T;
+}
+
+/** Bounded timestamp deque with incremental head pruning and occasional compaction. */
+class TimeBuffer<T> {
+    private values: TimedValue<T>[] = [];
+    private head = 0;
+
+    constructor(
+        private readonly retentionMs: number,
+        private readonly capacity: number,
+    ) {}
+
+    push(timestampMs: number, value: T) {
+        this.values.push({ timestampMs, value });
+        this.prune(timestampMs);
+        while (this.values.length - this.head > this.capacity) this.head++;
+        if (this.head > 256 && this.head * 2 > this.values.length) {
+            this.values = this.values.slice(this.head);
+            this.head = 0;
+        }
+    }
+
+    prune(nowMs: number) {
+        const cutoff = nowMs - this.retentionMs;
+        while (this.head < this.values.length && this.values[this.head].timestampMs < cutoff) this.head++;
+    }
+
+    current(nowMs: number, windowMs: number) {
+        const cutoff = nowMs - windowMs;
+        const result: TimedValue<T>[] = [];
+        for (let i = this.head; i < this.values.length; i++) {
+            if (this.values[i].timestampMs >= cutoff && this.values[i].timestampMs <= nowMs)
+                result.push(this.values[i]);
+        }
+        return result;
+    }
+
+    clear() {
+        this.values = [];
+        this.head = 0;
+    }
+
+    get size() {
+        return this.values.length - this.head;
+    }
+}
+
+export class FrameTelemetry {
+    private intervals = new TimeBuffer<number>(10_000, 1_800);
+    private previousTimestampMs: number | undefined;
+
+    recordRenderedFrame(timestampMs: number) {
+        if (this.previousTimestampMs !== undefined && timestampMs > this.previousTimestampMs) {
+            this.intervals.push(timestampMs, timestampMs - this.previousTimestampMs);
+        }
+        this.previousTimestampMs = timestampMs;
+    }
+
+    reset() {
+        this.previousTimestampMs = undefined;
+        this.intervals.clear();
+    }
+
+    summary(nowMs: number): FrameRollingSummary {
+        this.intervals.prune(nowMs);
+        const windows = {} as FrameRollingSummary['windows'];
+        for (const windowMs of FRAME_WINDOWS_MS) {
+            const samples = this.intervals.current(nowMs, windowMs).map(({ value }) => value);
+            const elapsed = samples.reduce((sum, value) => sum + value, 0);
+            windows[windowMs] =
+                samples.length && elapsed > 0
+                    ? { fps: (samples.length * 1_000) / elapsed, sampleCount: samples.length }
+                    : undefined;
+        }
+        const twoSecondSamples = this.intervals.current(nowMs, 2_000).map(({ value }) => value);
+        return {
+            windows,
+            rms2sMs: twoSecondSamples.length
+                ? Math.sqrt(twoSecondSamples.reduce((sum, value) => sum + value * value, 0) / twoSecondSamples.length)
+                : undefined,
+        };
+    }
+
+    get sampleCount() {
+        return this.intervals.size;
+    }
+}
+
+export class GpuTelemetry {
+    private samples = new TimeBuffer<GpuTimingStats>(30_000, 128);
+
+    record(timestampMs: number, stats: GpuTimingStats) {
+        this.samples.push(timestampMs, stats);
+    }
+
+    summary(nowMs: number): GpuRollingSummary {
+        this.samples.prune(nowMs);
+        const windows = {} as GpuRollingSummary['windows'];
+        for (const windowMs of GPU_WINDOWS_MS) {
+            const samples = this.samples.current(nowMs, windowMs).map(({ value }) => value);
+            if (samples.length) {
+                const mean = (key: keyof GpuMeanStats) =>
+                    samples.reduce((sum, sample) => sum + sample[key], 0) / samples.length;
+                windows[windowMs] = {
+                    totalMs: mean('totalMs'),
+                    baseMs: mean('baseMs'),
+                    blurMs: mean('blurMs'),
+                    octaveMs: mean('octaveMs'),
+                    displayMs: mean('displayMs'),
+                };
+            }
+        }
+        const fiveSecondSamples = this.samples.current(nowMs, 5_000).map(({ value }) => value.totalMs);
+        return {
+            windows,
+            rms5sMs: fiveSecondSamples.length
+                ? Math.sqrt(fiveSecondSamples.reduce((sum, value) => sum + value * value, 0) / fiveSecondSamples.length)
+                : undefined,
+        };
+    }
+
+    get sampleCount() {
+        return this.samples.size;
+    }
+}

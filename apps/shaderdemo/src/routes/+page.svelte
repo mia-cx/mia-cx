@@ -12,6 +12,7 @@
         type RenderOptions,
         type GpuTimingStats,
     } from '$lib/renderer';
+    import { GpuTelemetry, type FrameRollingSummary, type GpuRollingSummary } from '$lib/telemetry';
     import { defaultShaderSettings, normalizeSavedSettings, shaderSettings } from '$lib/settings';
 
     let canvas: HTMLCanvasElement;
@@ -26,8 +27,11 @@
     let controlsOpen = true;
     let ready = false;
     let status = 'Starting WebGPU…';
-    let fps = 0;
+    let frameStats: FrameRollingSummary | undefined;
     let gpuStats: GpuTimingStats | null | undefined;
+    let gpuRolling: GpuRollingSummary | undefined;
+    const gpuTelemetry = new GpuTelemetry();
+    const number = (value: number | undefined) => (value === undefined ? '…' : value.toFixed(1));
     const parameterTabs = [
         { id: 'field', label: 'Field' },
         { id: 'octaves', label: 'Octaves' },
@@ -116,8 +120,15 @@
             .then((instance) => {
                 if (disposed) return instance.destroy();
                 renderer = instance;
-                instance.onStats = (value) => (fps = value);
-                instance.onGpuStats = (value) => (gpuStats = value);
+                instance.onStats = (_value, _width, _height, rolling) => (frameStats = rolling);
+                instance.onGpuStats = (value) => {
+                    gpuStats = value;
+                    if (value) {
+                        const now = performance.now();
+                        gpuTelemetry.record(now, value);
+                        gpuRolling = gpuTelemetry.summary(now);
+                    }
+                };
                 instance.setPaused(paused);
                 ready = true;
                 status = 'WebGPU';
@@ -145,13 +156,24 @@
 
 <main>
     <canvas class:ready bind:this={canvas} aria-label="Animated monochrome noise field"></canvas>
-    {#if ready}<output class="fps"
-            >{paused ? 'paused' : `${fps.toFixed(1)} fps`}<br />{gpuStats === null
-                ? 'GPU timing unavailable'
-                : gpuStats
-                  ? `GPU ${gpuStats.totalMs.toFixed(1)}ms · base ${gpuStats.baseMs.toFixed(1)} · blur ${gpuStats.blurMs.toFixed(1)} · oct ${gpuStats.octaveMs.toFixed(1)} · out ${gpuStats.displayMs.toFixed(1)}`
-                  : 'GPU timing…'}</output
-        >{/if}
+    {#if ready}<output class="fps">
+            {#if paused}
+                FPS paused/reset<br />frame RMS paused/reset
+            {:else}
+                FPS .5s {number(frameStats?.windows[500]?.fps)} · 2s {number(frameStats?.windows[2000]?.fps)} · 10s
+                {number(frameStats?.windows[10000]?.fps)}<br />frame RMS {number(frameStats?.rms2sMs)}ms
+            {/if}<br />
+            {#if gpuStats === null}
+                GPU timing unavailable
+            {:else if gpuRolling}
+                GPU 1s {number(gpuRolling.windows[1000]?.totalMs)} · 5s {number(gpuRolling.windows[5000]?.totalMs)} · 30s
+                {number(gpuRolling.windows[30000]?.totalMs)}ms · RMS {number(gpuRolling.rms5sMs)}<br />
+                base {number(gpuRolling.windows[5000]?.baseMs)} · blur {number(gpuRolling.windows[5000]?.blurMs)} · oct
+                {number(gpuRolling.windows[5000]?.octaveMs)} · out {number(gpuRolling.windows[5000]?.displayMs)}
+            {:else}
+                GPU timing…
+            {/if}
+        </output>{/if}
     <nav aria-label="Study controls" data-disabled={!ready} inert={!ready}>
         <button class="reveal" onclick={() => (controlsOpen = !controlsOpen)} aria-expanded={controlsOpen}
             >{controlsOpen ? '×' : '+'}<span class="sr-only">{controlsOpen ? 'Hide' : 'Show'} controls</span></button
