@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     BASE_SHADER_SOURCE,
+    AtmosphereRenderer,
     BLOOM_BLUR_SHADER_SOURCE,
     BLOOM_EXTRACT_SHADER_SOURCE,
     BLOOM_TEXTURE_FORMAT,
@@ -54,6 +55,17 @@ describe('field configuration', () => {
         expect(LUT_SHADER_SOURCE).toContain('(source-domainMin)/(domainMax-domainMin)');
         expect(LUT_SHADER_SOURCE).toContain('mix(source,mapped,clamp(p(6),0.,1.))');
         expect(Array.from(cubeRgba16Data(new Float32Array([0, 0.5, 1])))).toEqual([0, 0x3800, 0x3c00, 0x3c00]);
+    });
+    it('labels the adjustment pass after lighting and before RGB Colour and octaves', () => {
+        const source = AtmosphereRenderer.toString();
+        const lighting = source.indexOf('lighting:${effect.kind}');
+        const adjustments = source.indexOf('colour:adjustments');
+        const rgb = source.indexOf('colour:${effect.type}');
+        const octave = source.indexOf('octave${octave + 1}');
+        expect([lighting, adjustments, rgb, octave]).not.toContain(-1);
+        expect(lighting).toBeLessThan(adjustments);
+        expect(adjustments).toBeLessThan(rgb);
+        expect(rgb).toBeLessThan(octave);
     });
     it('samples Paint.NET Zoom Blur’s 64-step contraction path at bounded quarter-resolution taps', () => {
         const distance = PARAMETER_SCHEMA.find(({ key }) => key === 'godRaysAmount');
@@ -455,13 +467,14 @@ describe('field configuration', () => {
     });
     it('uses exact zero threshold and diffusion bypasses in the octave shader', () => {
         expect(OCTAVE_SHADER_SOURCE).toContain('if(settings.w>0.)');
-        expect(OCTAVE_SHADER_SOURCE).toContain('if(settings.y==0.) { return vec4f(injected,0.,0.,1.); }');
+        expect(OCTAVE_SHADER_SOURCE).toContain('if(settings.y==0.) { return vec4f(injected,1.); }');
         expect(OCTAVE_SHADER_SOURCE.indexOf('if(settings.y==0.)')).toBeLessThan(
-            OCTAVE_SHADER_SOURCE.indexOf('fwidth(injected)'),
+            OCTAVE_SHADER_SOURCE.indexOf('fwidth(luminance)'),
         );
         expect(OCTAVE_SHADER_SOURCE).not.toContain('abs(settings.y)>.001');
-        expect(OCTAVE_SHADER_SOURCE).toContain('var scattered: f32;');
-        expect(OCTAVE_SHADER_SOURCE).toContain('} else {\n        scattered=textureSample(src,samp,sourceUv).r;');
+        expect(OCTAVE_SHADER_SOURCE).toContain('var scattered: vec3f;');
+        expect(OCTAVE_SHADER_SOURCE).toContain('} else {\n        scattered=textureSample(src,samp,sourceUv).rgb;');
+        expect(OCTAVE_SHADER_SOURCE).toContain('thresholded/max(luminance,.000001)');
         expect(OCTAVE_SHADER_SOURCE).not.toContain('var scattered=textureSample');
     });
     it('uses exact integer octave tiling and pixelation bits', () => {

@@ -1,6 +1,7 @@
 export const MAX_ADJUSTMENTS = 128;
 export const MAX_CURVE_POINTS = 256;
-export const ADJUSTMENT_LUT_SIZE = 4096;
+/** Edge length of the renderer's high-depth RGB adjustment cube. */
+export const ADJUSTMENT_LUT_SIZE = 33;
 export const CHANNELS = ['r', 'g', 'b'] as const;
 export type Channel = (typeof CHANNELS)[number];
 export const HSL_CHANNELS = ['h', 's', 'l'] as const;
@@ -389,19 +390,46 @@ export function applyAdjustmentStackFloat(
     return rgb;
 }
 
-/** CPU-composed scalar-to-color RGBA16F LUT used by the renderer. */
+/** CPU-composed RGB 3D RGBA16F LUT used after lighting by the renderer. */
 export function composeAdjustmentLut(stack: Adjustment[]): Uint16Array {
-    const rgba = new Uint16Array(ADJUSTMENT_LUT_SIZE * 4);
-    for (let i = 0; i < ADJUSTMENT_LUT_SIZE; i++) {
-        const value = i / (ADJUSTMENT_LUT_SIZE - 1);
-        const rgb = applyAdjustmentStackFloat(stack, [value, value, value]);
-        const offset = i * 4;
-        rgba[offset] = normalizedFloatToHalf(rgb[0]);
-        rgba[offset + 1] = normalizedFloatToHalf(rgb[1]);
-        rgba[offset + 2] = normalizedFloatToHalf(rgb[2]);
-        rgba[offset + 3] = 0x3c00;
+    const size = ADJUSTMENT_LUT_SIZE;
+    const rgba = new Uint16Array(size ** 3 * 4);
+    for (let b = 0; b < size; b++) {
+        for (let g = 0; g < size; g++) {
+            for (let r = 0; r < size; r++) {
+                const rgb = applyAdjustmentStackFloat(stack, [r / (size - 1), g / (size - 1), b / (size - 1)]);
+                const offset = (b * size * size + g * size + r) * 4;
+                rgba[offset] = normalizedFloatToHalf(rgb[0]);
+                rgba[offset + 1] = normalizedFloatToHalf(rgb[1]);
+                rgba[offset + 2] = normalizedFloatToHalf(rgb[2]);
+                rgba[offset + 3] = 0x3c00;
+            }
+        }
     }
     return rgba;
+}
+
+export function isNeutralAdjustment(a: Adjustment): boolean {
+    if (!a.enabled) return true;
+    if (a.type === 'hsl') return a.hue === 0 && a.saturation === 100 && a.lightness === 0;
+    if (a.type === 'levels')
+        return CHANNELS.every((channel) => {
+            const value = a.channels[channel];
+            return (
+                value.inputLow === 0 &&
+                value.inputHigh === 255 &&
+                value.gamma === 1 &&
+                value.outputLow === 0 &&
+                value.outputHigh === 255
+            );
+        });
+    const channels: readonly string[] = a.mode === 'rgb' ? CHANNELS : HSL_CHANNELS;
+    return channels.every((channel) => {
+        const points = (a.channels as Record<string, CurvePoint[]>)[channel];
+        return (
+            points.length === 2 && points[0].x === 0 && points[0].y === 0 && points[1].x === 255 && points[1].y === 255
+        );
+    });
 }
 export function setLevelsChannelValue(
     a: LevelsAdjustment,

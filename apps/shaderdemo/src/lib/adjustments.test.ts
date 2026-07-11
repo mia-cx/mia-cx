@@ -32,6 +32,8 @@ const halfToFloat = (half: number) => {
     const fraction = half & 0x3ff;
     return exponent === 0 ? sign * 2 ** -14 * (fraction / 1024) : sign * 2 ** (exponent - 15) * (1 + fraction / 1024);
 };
+const cubeOffset = (r: number, g: number, b: number) =>
+    (b * ADJUSTMENT_LUT_SIZE ** 2 + g * ADJUSTMENT_LUT_SIZE + r) * 4;
 
 describe('RGB Paint.NET adjustment semantics', () => {
     it('creates independent identity channels', () => {
@@ -106,7 +108,7 @@ describe('RGB Paint.NET adjustment semantics', () => {
         levels.channels.r.gamma = 2;
         const lut = composeAdjustmentLut([curve, levels]);
         expect(lut).toBeInstanceOf(Uint16Array);
-        expect(lut).toHaveLength(ADJUSTMENT_LUT_SIZE * 4);
+        expect(lut).toHaveLength(ADJUSTMENT_LUT_SIZE ** 3 * 4);
         const rgb = applyAdjustmentStackFloat([curve, levels], [200 / 255, 200 / 255, 200 / 255]);
         expect(rgb[0]).toBeCloseTo((200 / 255) ** 2 * (128 / 255) ** 2, 6);
         expect(rgb[1]).toBeCloseTo(200 / 255, 10);
@@ -116,11 +118,11 @@ describe('RGB Paint.NET adjustment semantics', () => {
         const a = newCurve();
         a.enabled = false;
         const lut = composeAdjustmentLut([a]);
-        const i = 200 * 4;
+        const i = cubeOffset(5, 11, 23);
         expect([...lut.slice(i, i + 4)].map(halfToFloat)).toEqual([
-            halfToFloat(normalizedFloatToHalf(200 / 4095)),
-            halfToFloat(normalizedFloatToHalf(200 / 4095)),
-            halfToFloat(normalizedFloatToHalf(200 / 4095)),
+            halfToFloat(normalizedFloatToHalf(5 / 32)),
+            halfToFloat(normalizedFloatToHalf(11 / 32)),
+            halfToFloat(normalizedFloatToHalf(23 / 32)),
             1,
         ]);
     });
@@ -194,8 +196,8 @@ describe('RGB Paint.NET adjustment semantics', () => {
         const lut = composeAdjustmentLut([newHslCurve()]);
         expect([...lut.slice(0, 4)]).toEqual([0, 0, 0, 0x3c00]);
         expect([...lut.slice(-4)]).toEqual([0x3c00, 0x3c00, 0x3c00, 0x3c00]);
-        const middle = 2048 * 4;
-        expect(halfToFloat(lut[middle])).toBeCloseTo(2048 / 4095, 3);
+        const middle = cubeOffset(16, 16, 16);
+        expect(halfToFloat(lut[middle])).toBeCloseTo(0.5, 3);
     });
     it('interleaves RGB and HSL curves in literal stack order', () => {
         const rgb = newCurve();
@@ -294,9 +296,23 @@ describe('RGB Paint.NET adjustment semantics', () => {
         const precise = applyHslAdjustmentFloat(adjustment, [0.12345, 0.45678, 0.78901]);
         expect(precise.some((value) => Math.abs(value * 255 - Math.round(value * 255)) > 1e-4)).toBe(true);
         const lut = composeAdjustmentLut([adjustment]);
-        const a = halfToFloat(lut[2000 * 4]);
-        const b = halfToFloat(lut[2001 * 4]);
-        expect(Math.abs(b - a)).toBeGreaterThan(0);
-        expect(Math.abs(b - a)).toBeLessThan(1 / 255);
+        const colored = cubeOffset(4, 15, 25);
+        const mapped = [...lut.slice(colored, colored + 3)].map(halfToFloat);
+        const expected = applyAdjustmentStackFloat([adjustment], [4 / 32, 15 / 32, 25 / 32]);
+        mapped.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 3));
+        expect(new Set(mapped.map((value) => value.toFixed(4))).size).toBeGreaterThan(1);
+    });
+    it('maps arbitrary coloured input and lets an HSL curve alter its hue', () => {
+        const curve = newHslCurve();
+        curve.channels.h = [
+            { x: 0, y: 85 },
+            { x: 255, y: 85 },
+        ];
+        const lut = composeAdjustmentLut([curve]);
+        const offset = cubeOffset(24, 8, 4);
+        const mapped = [...lut.slice(offset, offset + 3)].map(halfToFloat);
+        const expected = applyAdjustmentStackFloat([curve], [0.75, 0.25, 0.125]);
+        mapped.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 3));
+        expect(mapped[1]).toBeGreaterThan(mapped[0]);
     });
 });

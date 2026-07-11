@@ -1,7 +1,13 @@
 import { FrameTelemetry, type FrameRollingSummary } from './telemetry';
-import { ADJUSTMENT_LUT_SIZE, composeAdjustmentLut, type Adjustment } from './adjustments';
+import { ADJUSTMENT_LUT_SIZE, composeAdjustmentLut, isNeutralAdjustment } from './adjustments';
 import defaultSettingsFixture from './default-settings.json';
-import { postRendererPlan, type ColourEffect, type PostEffect, type PostEffectKind } from './pipeline';
+import {
+    leadingAdjustmentRegion,
+    rendererStagePlan,
+    type ColourEffect,
+    type PostEffect,
+    type PostEffectKind,
+} from './pipeline';
 import { RGB_COLOUR_KINDS, isNeutralRgb, isRgbColour, type CubeLut, type RgbColourEffect } from './colour-effects';
 
 const canonicalParameterDefaults = defaultSettingsFixture.settings.parameters;
@@ -545,15 +551,15 @@ export const BLUR_SHADER_SOURCE =
     let sourceSize=vec2f(textureDimensions(src));
     let radiusIndex=u32(u.octaveIndex);
     let radius=u.blurRadii[radiusIndex/4u][radiusIndex%4u];
-    if(radius<=0.) { return vec4f(textureSample(src,samp,uv).r,0.,0.,1.); }
+    if(radius<=0.) { return vec4f(textureSample(src,samp,uv).rgb,1.); }
     // Four bilinearly filtered diagonal taps provide a compact, scale-relative Kawase blur.
     let octavePixelSize=exp2(4.-u.octaveIndex);
     let offset=vec2f(octavePixelSize*radius)/sourceSize;
-    var value=textureSample(src,samp,uv+offset).r*.25;
-    value+=textureSample(src,samp,uv+vec2f(-offset.x,offset.y)).r*.25;
-    value+=textureSample(src,samp,uv+vec2f(offset.x,-offset.y)).r*.25;
-    value+=textureSample(src,samp,uv-offset).r*.25;
-    return vec4f(value,0.,0.,1.);
+    var value=textureSample(src,samp,uv+offset).rgb*.25;
+    value+=textureSample(src,samp,uv+vec2f(-offset.x,offset.y)).rgb*.25;
+    value+=textureSample(src,samp,uv+vec2f(offset.x,-offset.y)).rgb*.25;
+    value+=textureSample(src,samp,uv-offset).rgb*.25;
+    return vec4f(value,1.);
 }`;
 
 export const OCTAVE_SHADER_SOURCE =
@@ -595,9 +601,9 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     let sourceUv=select(uv,tiledUv,pixelationBit);
     let sampleCount=u32(round(mix(1.,4.,settings.z)));
     // Radius zero is an exact identity operation: no random resampling and no accumulated softening.
-    var scattered: f32;
+    var scattered: vec3f;
     if(settings.w>0.) {
-        scattered=0.;
+        scattered=vec3f(0.);
         let octaveFrameSalt=(octave*0x27d4eb2du) ^ (u32(u.frameIndex)*0x9e3779b9u);
         for(var sampleIndex=0u;sampleIndex<4u;sampleIndex++) {
             if(sampleIndex<sampleCount) {
@@ -605,12 +611,12 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
                 // receives the same whole-tile displacement while retaining its local detail.
                 let tileOffset=round(scatterOffset(tile,sampleIndex,settings.w,octaveFrameSalt));
                 let offset=tileOffset*octavePixelSize;
-                scattered+=textureSample(src,samp,sourceUv+offset/sourceSize).r;
+                scattered+=textureSample(src,samp,sourceUv+offset/sourceSize).rgb;
             }
         }
         scattered/=f32(sampleCount);
     } else {
-        scattered=textureSample(src,samp,sourceUv).r;
+        scattered=textureSample(src,samp,sourceUv).rgb;
     }
     // Paint.NET's smoothness is sample count: 1–4 randomly displaced bilinear samples blended together.
     // Diffusion offsets and electrical noise are independently re-salted every rendered frame.
@@ -622,10 +628,12 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
         let detail=f32(noiseBits)*(1./4294967295.)-.5;
         injected+=detail*settings.x;
     }
-    if(settings.y==0.) { return vec4f(injected,0.,0.,1.); }
-    let thresholdWidth=max(.015,fwidth(injected)*1.5);
-    let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,injected);
-    return vec4f(thresholded,0.,0.,1.);
+    if(settings.y==0.) { return vec4f(injected,1.); }
+    let luminance=dot(max(injected,vec3f(0.)),vec3f(.2126,.7152,.0722));
+    let thresholdWidth=max(.015,fwidth(luminance)*1.5);
+    let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,luminance);
+    let scale=select(0.,thresholded/max(luminance,.000001),luminance>0.);
+    return vec4f(injected*scale,1.);
 }`;
 
 export const GOD_RAYS_TEXTURE_FORMAT: GPUTextureFormat = 'rgba16float';
@@ -724,13 +732,12 @@ export const BLOOM_BLUR_SHADER_SOURCE =
 @group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let o=(1.+u.post[5].y*3.)/vec2f(textureDimensions(src)); var rgb=textureSample(src,samp,uv+o).rgb+textureSample(src,samp,uv-o).rgb+textureSample(src,samp,uv+vec2f(-o.x,o.y)).rgb+textureSample(src,samp,uv+vec2f(o.x,-o.y)).rgb; return vec4f(rgb*.25,1); }`;
 
-/** Scalar-to-RGBA materialization: ordered adjustment LUT, then final grade. */
+/** Scalar-to-RGBA materialization; Colour starts only after lighting. */
 export const MATERIALIZE_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
-@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler; @group(0) @binding(3) var lut:texture_2d<f32>;
-fn adjusted(v:f32)->vec3f { let f=clamp(v,0.,1.); let p=f*4095.; let lo=i32(floor(p)); let hi=min(lo+1,4095); return mix(textureLoad(lut,vec2i(lo,0),0).rgb,textureLoad(lut,vec2i(hi,0),0).rgb,p-f32(lo)); }
-@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { var rgb=adjusted(pow(clamp(textureSample(src,samp,pos.xy/u.resolution).r,0.,1.),u.finalContrast)); if(false) { rgb*=exp2(u.post[0].y); let t=(u.post[0].z-6500.)/2000.; rgb*=vec3f(1.+t*.08,1.,1.-t*.08); rgb+=vec3f(u.post[0].w*.25,u.post[0].w*.5,-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let l=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(l),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,l))+u.post[2].x*smoothstep(.5,1.,l); } return vec4f(rgb,1.); }`;
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let v=pow(clamp(textureSample(src,samp,pos.xy/u.resolution).r,0.,1.),u.finalContrast); return vec4f(vec3f(v),1.); }`;
 
 /** A single literal post item; u.blurRadii[1].z selects its kind. */
 export const POST_EFFECT_SHADER_SOURCE =
@@ -848,6 +855,7 @@ export class AtmosphereRenderer {
     private sampler?: GPUSampler;
     private adjustmentTexture?: GPUTexture;
     private adjustmentView?: GPUTextureView;
+    private adjustmentLutActive = false;
     private adjustmentsKey = '';
     private lutTextures = new Map<string, { texture: GPUTexture; view: GPUTextureView; asset: CubeLut }>();
     private historyTexture?: GPUTexture;
@@ -921,8 +929,8 @@ export class AtmosphereRenderer {
         };
         self.pipelines = await Promise.all([
             make(BASE_SHADER_SOURCE, 'r16float'),
-            make(BLUR_SHADER_SOURCE, 'r16float'),
-            make(OCTAVE_SHADER_SOURCE, 'r16float'),
+            make(BLUR_SHADER_SOURCE, 'rgba16float'),
+            make(OCTAVE_SHADER_SOURCE, 'rgba16float'),
             make(DISPLAY_SHADER_SOURCE, format),
             make(BLOOM_EXTRACT_SHADER_SOURCE, BLOOM_TEXTURE_FORMAT),
             make(BLOOM_BLUR_SHADER_SOURCE, BLOOM_TEXTURE_FORMAT),
@@ -941,11 +949,12 @@ export class AtmosphereRenderer {
         );
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
         self.adjustmentTexture = self.device.createTexture({
-            size: [ADJUSTMENT_LUT_SIZE, 1],
+            dimension: '3d',
+            size: [ADJUSTMENT_LUT_SIZE, ADJUSTMENT_LUT_SIZE, ADJUSTMENT_LUT_SIZE],
             format: 'rgba16float',
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
         });
-        self.adjustmentView = self.adjustmentTexture.createView();
+        self.adjustmentView = self.adjustmentTexture.createView({ dimension: '3d' });
         self.updateAdjustmentLut();
         self.updateCubeLuts();
         if (gpuTimingSupported) {
@@ -1025,12 +1034,12 @@ export class AtmosphereRenderer {
     }
     private updateAdjustmentLut() {
         if (!this.device || !this.adjustmentTexture) return;
-        const adjustments = this.options.colour.filter((x): x is Adjustment =>
-            ['curve', 'levels', 'hsl'].includes(x.type),
-        );
+        const adjustments = leadingAdjustmentRegion(this.options.colour);
         const key = JSON.stringify(adjustments);
         if (key === this.adjustmentsKey) return;
         this.adjustmentsKey = key;
+        this.adjustmentLutActive = adjustments.some((adjustment) => !isNeutralAdjustment(adjustment));
+        if (!this.adjustmentLutActive) return;
         const lut = composeAdjustmentLut(adjustments);
         // Copy into an ArrayBuffer-backed view (WebGPU deliberately rejects SharedArrayBuffer views).
         const upload = new Uint16Array(new ArrayBuffer(lut.byteLength));
@@ -1038,8 +1047,8 @@ export class AtmosphereRenderer {
         this.device.queue.writeTexture(
             { texture: this.adjustmentTexture },
             upload,
-            { bytesPerRow: ADJUSTMENT_LUT_SIZE * 4 * 2 },
-            [ADJUSTMENT_LUT_SIZE, 1],
+            { bytesPerRow: ADJUSTMENT_LUT_SIZE * 4 * 2, rowsPerImage: ADJUSTMENT_LUT_SIZE },
+            [ADJUSTMENT_LUT_SIZE, ADJUSTMENT_LUT_SIZE, ADJUSTMENT_LUT_SIZE],
         );
     }
     private updateCubeLuts() {
@@ -1156,9 +1165,7 @@ export class AtmosphereRenderer {
                 if (sourceTextureIndex !== undefined) {
                     entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
                     if (usesSampler) entries.push({ binding: 2, resource: s });
-                    if (pipelineIndex === 7) {
-                        entries.push({ binding: 3, resource: this.adjustmentView! });
-                    } else if (pipelineIndex === 3) {
+                    if (pipelineIndex === 3) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
                         entries.push({ binding: 4, resource: this.textureViews[3] });
                         entries.push({ binding: 5, resource: this.textureViews[4] });
@@ -1170,7 +1177,13 @@ export class AtmosphereRenderer {
                     } else if (pipelineIndex === 8) {
                         entries.push({ binding: 3, resource: this.historyView! });
                     } else if (pipelineIndex === 11 && lutId) {
-                        entries.push({ binding: 3, resource: this.lutTextures.get(lutId)!.view });
+                        entries.push({
+                            binding: 3,
+                            resource:
+                                lutId === 'internal-adjustments'
+                                    ? this.adjustmentView!
+                                    : this.lutTextures.get(lutId)!.view,
+                        });
                     }
                 }
                 bindGroup = d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
@@ -1198,25 +1211,30 @@ export class AtmosphereRenderer {
             pass.end();
         };
         draw(this.textureViews[0], 0, undefined, false, 'base');
-        let current = 0;
-        for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
-            data[29] = octave;
-            if (octaveBlurIsActive(this.options.parameters, octave)) {
-                const scratch = 1 - current;
-                draw(this.textureViews[scratch], 1, current, true, `blur${octave + 1}`);
-                current = scratch;
-            }
-            if (octaveEffectIsActive(this.options.parameters, octave)) {
-                const scratch = 1 - current;
-                draw(this.textureViews[scratch], 2, current, true, `octave${octave + 1}`);
-                current = scratch;
-            }
-        }
         data[0] = this.textures[2].width;
         data[1] = this.textures[2].height;
-        draw(this.textureViews[2], 7, current, true, 'colour-materialize');
+        draw(this.textureViews[2], 7, 0, true, 'field-materialize');
         let rgbaCurrent = 2;
+        data.set(
+            POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
+            60,
+        );
+        const stages = rendererStagePlan(this.options.post, this.options.parameters);
+        for (const effect of stages.lighting) {
+            const destination = rgbaCurrent === 2 ? 3 : 2;
+            data[58] = POST_KIND_INDEX[effect.kind];
+            draw(this.textureViews[destination], 8, rgbaCurrent, true, `lighting:${effect.kind}`);
+            rgbaCurrent = destination;
+        }
+        if (this.adjustmentLutActive) {
+            data.fill(0, 60, UNIFORM_FLOATS);
+            data.set([0, 0, 0, 1, 1, 1, 1], 60);
+            const destination = rgbaCurrent === 2 ? 3 : 2;
+            draw(this.textureViews[destination], 11, rgbaCurrent, true, 'colour:adjustments', 'internal-adjustments');
+            rgbaCurrent = destination;
+        }
         for (const effect of this.options.colour) {
+            if (effect.type === 'curve' || effect.type === 'levels' || effect.type === 'hsl') continue;
             if (!effect.enabled || (isRgbColour(effect) && isNeutralRgb(effect))) continue;
             let values: number[];
             let kind: number;
@@ -1264,11 +1282,24 @@ export class AtmosphereRenderer {
             draw(this.textureViews[destination], 10, rgbaCurrent, true, `colour:${effect.type}`);
             rgbaCurrent = destination;
         }
+        for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
+            data[29] = octave;
+            if (octaveBlurIsActive(this.options.parameters, octave)) {
+                const destination = rgbaCurrent === 2 ? 3 : 2;
+                draw(this.textureViews[destination], 1, rgbaCurrent, true, `blur${octave + 1}`);
+                rgbaCurrent = destination;
+            }
+            if (octaveEffectIsActive(this.options.parameters, octave)) {
+                const destination = rgbaCurrent === 2 ? 3 : 2;
+                draw(this.textureViews[destination], 2, rgbaCurrent, true, `octave${octave + 1}`);
+                rgbaCurrent = destination;
+            }
+        }
         data.set(
             POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
         );
-        for (const effect of postRendererPlan(this.options.post, this.options.parameters)) {
+        for (const effect of stages.post) {
             if (effect.kind === 'datamosh' && !this.historyValid) continue;
             const destination = rgbaCurrent === 2 ? 3 : 2;
             data[58] = POST_KIND_INDEX[effect.kind];

@@ -43,6 +43,7 @@
         POST_LABELS,
         createColour,
         createPost,
+        isLightingKind,
         moveById,
         removeById,
         syncPipelineToggles,
@@ -79,8 +80,8 @@
     const number = (value: number | undefined) => (value === undefined ? '…' : value.toFixed(1));
     const parameterTabs = [
         { id: 'field', label: 'Field' },
-        { id: 'octaves', label: 'Octaves' },
         { id: 'adjustments', label: 'Colour' },
+        { id: 'octaves', label: 'Octaves' },
         { id: 'post', label: 'Post' },
     ] as const;
     let selectedTabId: (typeof parameterTabs)[number]['id'] = $state('field');
@@ -254,12 +255,20 @@
         ]);
         setExpanded(item.id, true);
     }
+    function changePost(next: PostEffect[]) {
+        // Lighting is a real pre-Colour stage; camera/film effects are post-Octaves.
+        // Keep each stage contiguous so the visible order matches execution.
+        post = [
+            ...next.filter((item) => isLightingKind(item.type)),
+            ...next.filter((item) => !isLightingKind(item.type)),
+        ];
+        update();
+    }
     function addPost(type: string) {
         if (post.some((item) => item.type === type)) return;
         const item = createPost(type as PostEffectKind, post);
-        post = [...post, item];
+        changePost([...post, item]);
         setExpanded(item.id, true);
-        update();
     }
     function setParameter(key: ParameterKey, value: number) {
         options = { ...options, parameters: { ...options.parameters, [key]: value } };
@@ -278,13 +287,16 @@
         stopHydration();
         const saved = normalizeSavedSettings(persisted);
         colour = saved.colour;
-        post = saved.post;
+        post = [
+            ...saved.post.filter((item) => isLightingKind(item.type)),
+            ...saved.post.filter((item) => !isLightingKind(item.type)),
+        ];
         options = {
             ...options,
             seed: saved.seed,
             parameters: saved.parameters,
             colour: saved.colour,
-            post: saved.post,
+            post,
         };
         void resolveLuts();
         if (matchMedia('(prefers-reduced-motion: reduce)').matches) paused = true;
@@ -596,30 +608,35 @@
                                 onselect={addPost}
                             />
                             {#each post as item, index (item.id)}
+                                {#if index === 0 || isLightingKind(item.type) !== isLightingKind(post[index - 1].type)}
+                                    <div class="group-heading pipeline-stage">
+                                        <span
+                                            >{isLightingKind(item.type)
+                                                ? 'Lighting — before Colour'
+                                                : 'Post — after Octaves'}</span
+                                        >
+                                    </div>
+                                {/if}
                                 <PipelineItem
                                     id={item.id}
                                     name={POST_LABELS[item.type]}
                                     enabled={item.enabled}
                                     expanded={expanded.has(item.id)}
-                                    moveUpDisabled={index === 0}
-                                    moveDownDisabled={index === post.length - 1}
+                                    moveUpDisabled={index === 0 ||
+                                        isLightingKind(item.type) !== isLightingKind(post[index - 1].type)}
+                                    moveDownDisabled={index === post.length - 1 ||
+                                        isLightingKind(item.type) !== isLightingKind(post[index + 1].type)}
                                     onexpand={() => setExpanded(item.id)}
                                     onenabled={(enabled) => {
                                         post = post.map((x) => (x.id === item.id ? { ...x, enabled } : x));
                                         update();
                                     }}
-                                    onmove={(delta) => {
-                                        post = moveById(post, item.id, delta);
-                                        update();
-                                    }}
+                                    onmove={(delta) => changePost(moveById(post, item.id, delta))}
                                     onreset={() => {
                                         resetParameters(POST_KEYS[item.type]);
                                         update();
                                     }}
-                                    onremove={() => {
-                                        post = removeById(post, item.id);
-                                        update();
-                                    }}
+                                    onremove={() => changePost(removeById(post, item.id))}
                                 >
                                     <ParameterEditor
                                         parameters={options.parameters}
@@ -813,6 +830,11 @@
         align-items: center;
         justify-content: space-between;
         color: #aaa;
+    }
+    .pipeline-stage {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #ffffff20;
     }
     .controls .enabled {
         color: #ddd;
