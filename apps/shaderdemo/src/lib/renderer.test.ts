@@ -16,7 +16,7 @@ describe('field configuration', () => {
         expect(advanceSimulationTime(12, 0.5, 3)).toBe(13.5);
     });
     it('defines complete, valid slider defaults from one schema', () => {
-        expect(PARAMETER_SCHEMA).toHaveLength(17);
+        expect(PARAMETER_SCHEMA).toHaveLength(23);
         expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(PARAMETER_SCHEMA.length);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
@@ -31,6 +31,12 @@ describe('field configuration', () => {
             centerHeight: 0.83,
             centerRoundness: 4,
             centerSoftness: 1.5,
+            diffusionRadius: 1.25,
+            diffusionAmount: 0.65,
+            octaveNoiseAmount: 0.16,
+            lacunarity: 2,
+            persistence: 0.55,
+            octaveCount: 3,
         });
     });
 });

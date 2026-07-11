@@ -16,6 +16,12 @@ export const PARAMETER_SCHEMA = [
     { key: 'centerHeight', label: 'Center height', min: 0.1, max: 2.5, step: 0.01, default: 0.83 },
     { key: 'centerRoundness', label: 'Center roundness', min: 2, max: 12, step: 0.1, default: 4 },
     { key: 'centerSoftness', label: 'Center softness', min: 0.01, max: 1.5, step: 0.01, default: 1.5 },
+    { key: 'diffusionRadius', label: 'Diffusion radius', min: 0, max: 4, step: 0.05, default: 1.25 },
+    { key: 'diffusionAmount', label: 'Diffusion amount', min: 0, max: 1, step: 0.01, default: 0.65 },
+    { key: 'octaveNoiseAmount', label: 'Octave noise amount', min: 0, max: 0.6, step: 0.01, default: 0.16 },
+    { key: 'lacunarity', label: 'Frequency growth', min: 1.1, max: 4, step: 0.05, default: 2 },
+    { key: 'persistence', label: 'Amplitude falloff', min: 0, max: 1, step: 0.01, default: 0.55 },
+    { key: 'octaveCount', label: 'Progressive octaves', min: 0, max: 3, step: 1, default: 3 },
 ] as const;
 export type ParameterKey = (typeof PARAMETER_SCHEMA)[number]['key'];
 export type ShaderParameters = Record<ParameterKey, number>;
@@ -51,7 +57,8 @@ struct U {
  warpScale: f32, warpStrength: f32, threshold: f32, thresholdSoftness: f32,
  secondaryScale: f32, secondaryMix: f32, finalContrast: f32, animationSpeed: f32,
  centerDarkness: f32, centerWidth: f32, centerHeight: f32, centerRoundness: f32,
- centerSoftness: f32, pad1: f32, pad2: f32
+ centerSoftness: f32, diffusionRadius: f32, diffusionAmount: f32, octaveNoiseAmount: f32,
+ lacunarity: f32, persistence: f32, octaveCount: f32, octaveIndex: f32
 };
 @group(0) @binding(0) var<uniform> u: U;
 @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -97,9 +104,31 @@ const baseShader =
     let center=1.-smoothstep(1.-centerFeather,1.+centerFeather,centerDistance);
     let centerAttenuation=exp2(-center*u.centerDarkness*4.);
     natural*=centerAttenuation;
-    let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
-    var f=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
-    return vec4f(vec3f(f),1.);
+    return vec4f(natural,0.,0.,1.);
+}`;
+
+const octaveShader =
+    common +
+    /* wgsl */ `
+@group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
+@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let uv=pos.xy/u.resolution;
+    let sourceSize=vec2f(textureDimensions(src));
+    let offset=vec2f(u.diffusionRadius)/sourceSize;
+    let center=textureSample(src,samp,uv).r;
+    // Four diagonal taps are a compact Kawase diffusion kernel at each progressively larger level.
+    let blurred=(textureSample(src,samp,uv+offset*vec2f(-1.,-1.)).r+
+        textureSample(src,samp,uv+offset*vec2f(1.,-1.)).r+
+        textureSample(src,samp,uv+offset*vec2f(-1.,1.)).r+
+        textureSample(src,samp,uv+offset).r)*.25;
+    let enabled=select(0.,1.,u.octaveIndex<u.octaveCount);
+    let diffused=mix(center,blurred,u.diffusionAmount*enabled);
+    var q=uv*2.-1.; q.x*=u.resolution.x/u.resolution.y;
+    let frequency=u.baseScale*pow(u.lacunarity,u.octaveIndex+1.);
+    let phase=u.time*(.17+u.octaveIndex*.047)+u.octaveIndex*13.71;
+    let detail=noise3(vec3f(q*frequency+vec2f(u.octaveIndex*7.3,-u.octaveIndex*4.9),phase))-.5;
+    let amplitude=u.octaveNoiseAmount*pow(u.persistence,u.octaveIndex)*enabled;
+    return vec4f(diffused+detail*amplitude,0.,0.,1.);
 }`;
 
 const displayShader =
@@ -108,7 +137,10 @@ const displayShader =
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
-    let f=pow(clamp(textureSample(src,samp,uv).r,0.,1.),u.finalContrast);
+    let density=textureSample(src,samp,uv).r;
+    let thresholdWidth=max(u.thresholdSoftness,fwidth(density)*1.5);
+    let thresholded=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,density);
+    let f=pow(clamp(thresholded,0.,1.),u.finalContrast);
     return vec4f(vec3f(f),1.);
 }`;
 
@@ -160,9 +192,13 @@ export class AtmosphereRenderer {
                 fragment: { module, entryPoint: 'fs', targets: [{ format: target }] },
             });
         };
-        self.pipelines = await Promise.all([make(baseShader, 'r16float'), make(displayShader, format)]);
-        self.buffers = Array.from({ length: 2 }, () =>
-            self.device!.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+        self.pipelines = await Promise.all([
+            make(baseShader, 'r16float'),
+            make(octaveShader, 'r16float'),
+            make(displayShader, format),
+        ]);
+        self.buffers = Array.from({ length: 5 }, () =>
+            self.device!.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
         );
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
         self.device.lost.then((info) => {
@@ -186,9 +222,13 @@ export class AtmosphereRenderer {
     private recreateTargets() {
         if (!this.device) return;
         this.textures.forEach((texture) => texture.destroy());
-        const base = scaledSize(this.canvas.width, this.canvas.height, this.options.renderScale);
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
-        this.textures = [this.device.createTexture({ size: [base.width, base.height], format: 'r16float', usage })];
+        // Cheap destructive progression: 18% → 36% → 65% → renderScale, never repeated full-size blur.
+        const scales = [0.18, 0.36, 0.65, 1].map((scale) => scale * this.options.renderScale);
+        this.textures = scales.map((scale) => {
+            const size = scaledSize(this.canvas.width, this.canvas.height, scale);
+            return this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage });
+        });
     }
     setOptions(options: RenderOptions) {
         const changed = this.options.renderScale !== options.renderScale;
@@ -227,10 +267,10 @@ export class AtmosphereRenderer {
             c = this.context,
             buffers = this.buffers,
             s = this.sampler;
-        if (!d || !c || buffers.length < 2 || !s || this.pipelines.length < 2 || this.textures.length < 1) return;
+        if (!d || !c || buffers.length < 5 || !s || this.pipelines.length < 3 || this.textures.length < 4) return;
         const enc = d.createCommandEncoder();
-        // 21 floats padded to 24 (96 bytes) to satisfy WGSL's 16-byte uniform size alignment.
-        const data = new Float32Array(24);
+        // 28 floats (112 bytes), a multiple of WGSL's 16-byte uniform alignment.
+        const data = new Float32Array(28);
         let passIndex = 0;
         const draw = (target: GPUTextureView, pipeline: GPURenderPipeline, source?: GPUTexture) => {
             const buffer = buffers[passIndex++];
@@ -257,9 +297,15 @@ export class AtmosphereRenderer {
             ...PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
         ]);
         draw(this.textures[0].createView(), this.pipelines[0]);
+        for (let octave = 0; octave < 3; octave += 1) {
+            data[0] = this.textures[octave + 1].width;
+            data[1] = this.textures[octave + 1].height;
+            data[27] = octave;
+            draw(this.textures[octave + 1].createView(), this.pipelines[1], this.textures[octave]);
+        }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), this.pipelines[1], this.textures[0]);
+        draw(c.getCurrentTexture().createView(), this.pipelines[2], this.textures[3]);
         d.queue.submit([enc.finish()]);
     }
     destroy() {
