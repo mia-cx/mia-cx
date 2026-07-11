@@ -6,7 +6,6 @@ const gpu = (totalMs: number, baseMs = totalMs / 4): GpuTimingStats => ({
     totalMs,
     fieldMs: baseMs,
     colourMs: totalMs / 8,
-    lightingMs: totalMs / 8,
     postMs: totalMs / 8,
     octavesMs: totalMs / 4,
     presentMs: totalMs / 8,
@@ -92,13 +91,13 @@ describe('rolling GPU telemetry', () => {
             ...gpu(20),
             passes: [
                 { label: 'base', ms: 4 },
-                { label: 'lighting:god-rays', ms: 6 },
+                { label: 'post:god-rays', ms: 6 },
                 { label: 'display', ms: 3 },
             ],
         });
         expect(telemetry.summary(1_000).perPass5s).toEqual([
             { label: 'base', ms: 3 },
-            { label: 'lighting:god-rays', ms: 6 },
+            { label: 'post:god-rays', ms: 6 },
             { label: 'display', ms: 2 },
         ]);
     });

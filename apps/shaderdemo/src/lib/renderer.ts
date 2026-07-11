@@ -54,7 +54,6 @@ export interface GpuTimingStats {
     totalMs: number;
     fieldMs: number;
     colourMs: number;
-    lightingMs: number;
     postMs: number;
     octavesMs: number;
     presentMs: number;
@@ -77,7 +76,6 @@ export function aggregateGpuTimestamps(timestamps: ArrayLike<bigint>, labels: re
         passes.reduce((n, pass) => n + (prefixes.some((prefix) => pass.label.startsWith(prefix)) ? pass.ms : 0), 0);
     const fieldMs = sum('base', 'field-materialize');
     const colourMs = sum('colour:');
-    const lightingMs = sum('lighting:');
     const postMs = sum('post:');
     const blurMs = sum('blur');
     const octaveMs = sum('octave');
@@ -86,7 +84,6 @@ export function aggregateGpuTimestamps(timestamps: ArrayLike<bigint>, labels: re
         totalMs: passes.reduce((n, pass) => n + pass.ms, 0),
         fieldMs,
         colourMs,
-        lightingMs,
         postMs,
         octavesMs: blurMs + octaveMs,
         presentMs,
@@ -754,7 +751,7 @@ export const BLOOM_BLUR_SHADER_SOURCE =
 @group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let o=(1.+u.post[5].y*3.)/vec2f(textureDimensions(src)); var rgb=textureSample(src,samp,uv+o).rgb+textureSample(src,samp,uv-o).rgb+textureSample(src,samp,uv+vec2f(-o.x,o.y)).rgb+textureSample(src,samp,uv+vec2f(o.x,-o.y)).rgb; return vec4f(rgb*.25,1); }`;
 
-/** Scalar-to-RGBA materialization; Colour starts only after lighting. */
+/** Scalar-to-RGBA materialization before the Colour pipeline. */
 export const MATERIALIZE_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
@@ -1241,7 +1238,7 @@ export class AtmosphereRenderer {
             POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
         );
-        const stages = rendererStagePlan(this.options.post, this.options.parameters);
+        const postStages = rendererStagePlan(this.options.post, this.options.parameters);
         if (this.adjustmentLutActive) {
             data.fill(0, 60, UNIFORM_FLOATS);
             data.set([0, 0, 0, 1, 1, 1, 1], 60);
@@ -1302,13 +1299,7 @@ export class AtmosphereRenderer {
             POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
         );
-        for (const effect of stages.lighting) {
-            const destination = rgbaCurrent === 2 ? 3 : 2;
-            data[58] = POST_KIND_INDEX[effect.kind];
-            draw(this.textureViews[destination], 8, rgbaCurrent, true, `lighting:${effect.kind}`);
-            rgbaCurrent = destination;
-        }
-        for (const effect of stages.post) {
+        for (const effect of postStages) {
             if (effect.kind === 'datamosh' && !this.historyValid) continue;
             const destination = rgbaCurrent === 2 ? 3 : 2;
             data[58] = POST_KIND_INDEX[effect.kind];

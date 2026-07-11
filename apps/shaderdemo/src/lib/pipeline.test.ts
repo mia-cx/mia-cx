@@ -6,9 +6,9 @@ import {
     createPost,
     migratePost,
     moveById,
-    postRendererPlan,
     POST_KINDS,
     removeById,
+    rendererStagePlan,
     toggleById,
 } from './pipeline';
 
@@ -29,7 +29,7 @@ describe('ordered pipeline helpers', () => {
         p.bloomIntensity = 1;
         p.sharpen = 0.2;
         const items = migratePost(p).map((x) => ({ ...x, enabled: x.type === 'bloom' || x.type === 'sharpen' }));
-        expect(postRendererPlan(items.reverse(), p).map((x) => x.kind)).toEqual(['sharpen', 'bloom']);
+        expect(rendererStagePlan(items.reverse(), p).map((x) => x.kind)).toEqual(['sharpen', 'bloom']);
     });
     it('segments scalar runs without moving them across RGB materialization', () => {
         const stack = [

@@ -390,7 +390,7 @@ export function applyAdjustmentStackFloat(
     return rgb;
 }
 
-/** CPU-composed RGB 3D RGBA16F LUT used after lighting by the renderer. */
+/** CPU-composed RGB 3D RGBA16F LUT used by the Colour pipeline. */
 export function composeAdjustmentLut(stack: Adjustment[]): Uint16Array {
     const size = ADJUSTMENT_LUT_SIZE;
     const rgba = new Uint16Array(size ** 3 * 4);

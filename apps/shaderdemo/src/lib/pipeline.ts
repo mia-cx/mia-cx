@@ -71,18 +71,6 @@ export const POST_KINDS: readonly PostEffectKind[] = [
     'datamosh',
     'scanline-displacement',
 ];
-export const LIGHTING_KINDS = [
-    'god-rays',
-    'bloom',
-    'glow',
-    'halation',
-    'anamorphic-streaks',
-    'diffraction-starburst',
-    'lens-dirt',
-    'lens-ghosts',
-    'bokeh-bloom',
-] as const;
-export const isLightingKind = (kind: PostEffectKind) => (LIGHTING_KINDS as readonly PostEffectKind[]).includes(kind);
 
 export const POST_LABELS: Record<PostEffectKind, string> = {
     'god-rays': 'God rays',
@@ -290,11 +278,7 @@ export function postRendererPlan(items: PostEffect[], parameters: ShaderParamete
         .map((x) => ({ id: x.id, kind: x.type, label: POST_LABELS[x.type] }));
 }
 export function rendererStagePlan(items: PostEffect[], parameters: ShaderParameters) {
-    const enabled = postRendererPlan(items, parameters);
-    return {
-        lighting: enabled.filter((x) => isLightingKind(x.kind)),
-        post: enabled.filter((x) => !isLightingKind(x.kind)),
-    };
+    return postRendererPlan(items, parameters);
 }
 
 export function isNeutralPost(kind: PostEffectKind, p: ShaderParameters): boolean {

@@ -43,7 +43,6 @@
         POST_LABELS,
         createColour,
         createPost,
-        isLightingKind,
         moveById,
         removeById,
         syncPipelineToggles,
@@ -256,12 +255,7 @@
         setExpanded(item.id, true);
     }
     function changePost(next: PostEffect[]) {
-        // Lighting follows Colour; all remaining post effects precede Octaves.
-        // Keep each stage contiguous so the visible order matches execution.
-        post = [
-            ...next.filter((item) => isLightingKind(item.type)),
-            ...next.filter((item) => !isLightingKind(item.type)),
-        ];
+        post = next;
         update();
     }
     function addPost(type: string) {
@@ -287,10 +281,7 @@
         stopHydration();
         const saved = normalizeSavedSettings(persisted);
         colour = saved.colour;
-        post = [
-            ...saved.post.filter((item) => isLightingKind(item.type)),
-            ...saved.post.filter((item) => !isLightingKind(item.type)),
-        ];
+        post = saved.post;
         options = {
             ...options,
             seed: saved.seed,
@@ -366,11 +357,9 @@
                         {number(gpuRolling.windows[30000]?.totalMs)}ms · RMS {number(gpuRolling.rms5sMs)}<br />
                         field {number(gpuRolling.windows[5000]?.fieldMs)} · colour {number(
                             gpuRolling.windows[5000]?.colourMs,
-                        )} · lighting {number(gpuRolling.windows[5000]?.lightingMs)} · post {number(
-                            gpuRolling.windows[5000]?.postMs,
-                        )} · octaves {number(gpuRolling.windows[5000]?.octavesMs)} · present {number(
-                            gpuRolling.windows[5000]?.presentMs,
-                        )}
+                        )} · post {number(gpuRolling.windows[5000]?.postMs)} · octaves {number(
+                            gpuRolling.windows[5000]?.octavesMs,
+                        )} · present {number(gpuRolling.windows[5000]?.presentMs)}
                         {#if gpuRolling.perPass5s.length}
                             <details class="per-effect-timings">
                                 <summary>Per-effect timings</summary>
@@ -619,20 +608,13 @@
                                 onselect={addPost}
                             />
                             {#each post as item, index (item.id)}
-                                {#if index === 0 || isLightingKind(item.type) !== isLightingKind(post[index - 1].type)}
-                                    <div class="group-heading pipeline-stage">
-                                        <span>{isLightingKind(item.type) ? 'Lighting' : 'Post'}</span>
-                                    </div>
-                                {/if}
                                 <PipelineItem
                                     id={item.id}
                                     name={POST_LABELS[item.type]}
                                     enabled={item.enabled}
                                     expanded={expanded.has(item.id)}
-                                    moveUpDisabled={index === 0 ||
-                                        isLightingKind(item.type) !== isLightingKind(post[index - 1].type)}
-                                    moveDownDisabled={index === post.length - 1 ||
-                                        isLightingKind(item.type) !== isLightingKind(post[index + 1].type)}
+                                    moveUpDisabled={index === 0}
+                                    moveDownDisabled={index === post.length - 1}
                                     onexpand={() => setExpanded(item.id)}
                                     onenabled={(enabled) => {
                                         post = post.map((x) => (x.id === item.id ? { ...x, enabled } : x));
@@ -837,11 +819,6 @@
         align-items: center;
         justify-content: space-between;
         color: #aaa;
-    }
-    .pipeline-stage {
-        margin-top: 8px;
-        padding-top: 8px;
-        border-top: 1px solid #ffffff20;
     }
     .controls .enabled {
         color: #ddd;

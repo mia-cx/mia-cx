@@ -15,7 +15,7 @@ export interface FrameRollingSummary {
 
 export type GpuMeanStats = Pick<
     GpuTimingStats,
-    'totalMs' | 'fieldMs' | 'colourMs' | 'lightingMs' | 'postMs' | 'octavesMs' | 'presentMs'
+    'totalMs' | 'fieldMs' | 'colourMs' | 'postMs' | 'octavesMs' | 'presentMs'
 >;
 export interface GpuRollingSummary {
     windows: Record<(typeof GPU_WINDOWS_MS)[number], GpuMeanStats | undefined>;
@@ -133,7 +133,6 @@ export class GpuTelemetry {
                     totalMs: mean('totalMs'),
                     fieldMs: mean('fieldMs'),
                     colourMs: mean('colourMs'),
-                    lightingMs: mean('lightingMs'),
                     postMs: mean('postMs'),
                     octavesMs: mean('octavesMs'),
                     presentMs: mean('presentMs'),
