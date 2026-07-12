@@ -10,7 +10,7 @@ describe('CursorState', () => {
         expect(densityGroups).toHaveLength(1);
         expect(densityGroups[0][2].map(({ label }) => label)).toEqual([
             'Radius',
-            'Softness',
+            'Falloff',
             'Density strength',
             'Build-up',
             'Decay',

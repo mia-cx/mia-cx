@@ -199,7 +199,7 @@
                     cursorState.x,
                     cursorState.y,
                     options.parameters.cursorDensityRadius,
-                    options.parameters.cursorDensitySoftness,
+                    options.parameters.cursorDensityPressureFalloff,
                     options.parameters.cursorDensityBuildUp,
                 );
             } else if (depositDensity) cursorDensityField.endStroke(false);

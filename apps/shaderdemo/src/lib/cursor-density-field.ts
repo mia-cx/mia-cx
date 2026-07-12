@@ -10,6 +10,20 @@ export interface CursorDensityFieldSnapshot {
 const TARGET_ROWS = 512;
 const MAX_COLUMNS = 1024;
 
+/**
+ * Finite inverse-square-style radial brush profile. `falloff` is artist-scaled:
+ * 0 is nearly uniform, while the default 1 gives 1/(1 + 12r²). Only the final
+ * 8% of the radius is windowed to zero so the radius remains a strict bound.
+ */
+export function densityPressureCoverage(normalizedDistance: number, falloff: number): number {
+    if (!Number.isFinite(normalizedDistance) || !Number.isFinite(falloff) || normalizedDistance >= 1) return 0;
+    const distance = Math.max(0, normalizedDistance);
+    const inverseSquare = 1 / (1 + 12 * Math.max(0, falloff) * distance * distance);
+    const edgeT = Math.max(0, Math.min(1, (distance - 0.92) / 0.08));
+    const edgeCutoff = 1 - edgeT * edgeT * (3 - 2 * edgeT);
+    return inverseSquare * edgeCutoff;
+}
+
 interface StrokePoint {
     x: number;
     y: number;
@@ -144,7 +158,6 @@ export class CursorDensityField {
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const lengthSquared = dx * dx + dy * dy;
-        const softness = Math.max(0, Math.min(1, falloff));
         for (let py = minY; py <= maxY; py++) {
             const qy = ((py + 0.5) / this.height) * 2 - 1;
             for (let px = minX; px <= maxX; px++) {
@@ -154,9 +167,7 @@ export class CursorDensityField {
                     : 0;
                 const segmentDistance = Math.hypot(qx - (a.x + projection * dx), qy - (a.y + projection * dy));
                 if (segmentDistance >= radius) continue;
-                const edgeStart = 1 - softness;
-                const t = Math.max(0, Math.min(1, (1 - segmentDistance / radius) / Math.max(softness, 0.001)));
-                const value = segmentDistance / radius <= edgeStart ? 1 : t * t * (3 - 2 * t);
+                const value = densityPressureCoverage(segmentDistance / radius, falloff);
                 const dataIndex = py * this.width + px;
                 if (value > this.coverage[dataIndex]) {
                     if (this.coverage[dataIndex] === 0) this.touched.push(dataIndex);

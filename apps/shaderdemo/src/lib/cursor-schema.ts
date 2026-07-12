@@ -20,14 +20,14 @@ const p = (
 
 export const CURSOR_COMMON_SCHEMA = [p('cursorEnabled', 'Cursor interaction', 0, 1, 1, 0)] as const;
 
-/** The sole cursor effect. Radius, softness, build-up and decay only affect the persistent CPU texture. */
+/** The sole cursor effect. Radius, falloff, build-up and decay only affect the persistent CPU texture. */
 export const CURSOR_EFFECT_GROUPS = [
     [
         'Density pressure',
         'cursorDensityPressureEnabled',
         [
             p('cursorDensityRadius', 'Radius', 0.02, 1, 0.01, 0.22, true),
-            p('cursorDensitySoftness', 'Softness', 0, 1, 0.01, 0.65, true),
+            p('cursorDensityPressureFalloff', 'Falloff', 0, 8, 0.05, 1, true),
             p('cursorDensityStrength', 'Density strength', -3, 3, 0.01, 1),
             p('cursorDensityBuildUp', 'Build-up', 0.001, 0.25, 0.001, 0.04, true),
             p('cursorDensityDecay', 'Decay', 0.01, 5, 0.01, 0.7, true),

@@ -170,7 +170,7 @@
             "cursorEnabled": 0,
             "cursorDensityPressureEnabled": 1,
             "cursorDensityRadius": 0.22,
-            "cursorDensitySoftness": 0.65,
+            "cursorDensityPressureFalloff": 1,
             "cursorDensityStrength": 1,
             "cursorDensityBuildUp": 0.04,
             "cursorDensityDecay": 0.7,
