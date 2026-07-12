@@ -8,6 +8,14 @@ describe('CursorState', () => {
         const b = new CursorState().update(310, 120, { ...rect }, 10);
         expect([a.x, a.y]).toEqual([1, 0]);
         expect([b.x, b.y]).toEqual([1, 0]);
+        expect(new CursorState().update(210, 20, rect, 10).y).toBe(-1);
+        expect(new CursorState().update(210, 220, rect, 10).y).toBe(1);
+    });
+    it('uses the shader top-left Y axis for pointer velocity', () => {
+        const state = new CursorState().update(210, 70, rect, 10).update(210, 170, rect, 30);
+        expect(state.velocityY).toBeGreaterThan(0);
+        state.update(210, 70, rect, 50);
+        expect(state.velocityY).toBeLessThan(0);
     });
     it('keeps a fixed trail and ages samples only when ticked', () => {
         const state = new CursorState();

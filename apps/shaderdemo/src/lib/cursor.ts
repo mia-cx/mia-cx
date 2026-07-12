@@ -53,7 +53,8 @@ export class CursorState implements CursorSnapshot {
     ) {
         if (!(rect.width > 0 && rect.height > 0)) return this;
         const x = ((clientX - rect.left - rect.width * 0.5) / rect.height) * 2;
-        const y = ((rect.height * 0.5 - (clientY - rect.top)) / rect.height) * 2;
+        // Shader fragment coordinates are top-left-origin: q.y is -1 at the top and +1 at the bottom.
+        const y = ((clientY - rect.top - rect.height * 0.5) / rect.height) * 2;
         if (this.lastTime > 0) {
             const dt = Math.max(1 / 240, Math.min(0.1, (time - this.lastTime) / 1000));
             const vx = (x - this.x) / dt,
