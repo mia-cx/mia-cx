@@ -12,19 +12,30 @@ describe('CursorDensityField', () => {
         expect(field.snapshot().width).toBe(384);
     });
 
-    it('refreshes with MAX stamps without accumulating', () => {
+    it('builds gradually per event and caps exactly', () => {
         const field = new CursorDensityField();
         field.resize(200, 200);
-        field.deposit(0, 0, 0.5, 2);
-        const first = field.snapshot().data.slice();
-        const version = field.version;
-        expect(field.deposit(0, 0, 0.5, 2)).toBe(false);
-        expect(field.snapshot().data).toEqual(first);
-        expect(field.version).toBe(version);
-        field.tick(0.25, 2);
-        expect(maximum(field)).toBeLessThan(Math.max(...first));
-        expect(field.deposit(0, 0, 0.5, 2)).toBe(true);
-        expect(maximum(field)).toBe(Math.max(...first));
+        field.deposit(0, 0, 0.5, 2, 0.08);
+        const first = maximum(field);
+        expect(first).toBeLessThan(255);
+        field.deposit(0, 0, 0.5, 2, 0.08);
+        expect(maximum(field)).toBeGreaterThan(first);
+        for (let index = 0; index < 100; index++) field.deposit(0, 0, 0.5, 2, 0.08);
+        expect(maximum(field)).toBe(255);
+        field.deposit(0, 0, 0.5, 2, 0.08);
+        expect(maximum(field)).toBe(255);
+    });
+
+    it('commits overlapping curve subsegments once and makes end intensity-neutral', () => {
+        const field = new CursorDensityField();
+        field.resize(256, 256);
+        field.addStrokePoint(-0.01, 0, 0.4, 1, 0.08);
+        const first = maximum(field);
+        field.addStrokePoint(0.01, 0, 0.4, 1, 0.08);
+        const second = maximum(field);
+        expect(second - first).toBeLessThanOrEqual(21);
+        expect(field.endStroke(true, 0.4, 1)).toBe(false);
+        expect(maximum(field)).toBe(second);
     });
 
     it('has radial falloff and no pixels outside the radius', () => {

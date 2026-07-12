@@ -1,4 +1,4 @@
-import { CURSOR_PARAMETER_SCHEMA } from './cursor-schema';
+import { CURSOR_UNIFORM_PARAMETER_SCHEMA } from './cursor-schema';
 import { CURSOR_TRAIL_SAMPLES, type CursorSnapshot } from './cursor';
 
 /** Vec4-only, std140/WGSL-compatible cursor block: 3 state + 13 parameters + 16 trail samples. */
@@ -30,7 +30,7 @@ export function packCursorUniform(parameters: Record<string, number>, snapshot: 
     const out = new Float32Array(CURSOR_UNIFORM_FLOATS);
     out.set([s.x, s.y, s.velocityX, s.velocityY, s.speed, s.active ? 1 : 0, s.down ? 1 : 0, s.movingEnergy], 0);
     out.set([s.clickX, s.clickY, Number.isFinite(s.clickAge) ? s.clickAge : 1e20, s.clickPolarity], 8);
-    CURSOR_PARAMETER_SCHEMA.forEach((parameter, index) => {
+    CURSOR_UNIFORM_PARAMETER_SCHEMA.forEach((parameter, index) => {
         out[CURSOR_PARAMETER_OFFSET + index] = parameters[parameter.key] ?? parameter.default;
     });
     const count = Math.min(CURSOR_TRAIL_SAMPLES, s.trailCount, s.trail.length);

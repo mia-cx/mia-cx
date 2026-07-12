@@ -21,6 +21,8 @@ export class CursorDensityField {
     height = TARGET_ROWS;
     version = 0;
     private data = new Uint8Array(this.width * this.height);
+    private coverage = new Float32Array(this.width * this.height);
+    private touched: number[] = [];
     private active = false;
     private stroke: StrokePoint[] = [];
 
@@ -31,36 +33,34 @@ export class CursorDensityField {
         this.width = width;
         this.height = TARGET_ROWS;
         this.data = new Uint8Array(width * TARGET_ROWS);
+        this.coverage = new Float32Array(width * TARGET_ROWS);
+        this.touched = [];
         this.active = false;
         this.stroke = [];
         this.version++;
         return true;
     }
 
-    /** Stamp at shader q coordinates (x measured in canvas-height units, y top-left -1..1). */
-    deposit(x: number, y: number, radius: number, falloff: number): boolean {
-        if (![x, y, radius, falloff].every(Number.isFinite) || radius <= 0) return false;
-        const aspect = this.width / this.height;
-        const minX = Math.max(0, Math.floor((((x - radius) / aspect + 1) * this.width) / 2));
-        const maxX = Math.min(this.width - 1, Math.ceil((((x + radius) / aspect + 1) * this.width) / 2));
-        const minY = Math.max(0, Math.floor(((y - radius + 1) * this.height) / 2));
-        const maxY = Math.min(this.height - 1, Math.ceil(((y + radius + 1) * this.height) / 2));
+    /** Add one event's radial coverage at shader q coordinates. */
+    deposit(x: number, y: number, radius: number, falloff: number, buildUp = 1): boolean {
+        if (![x, y, radius, falloff, buildUp].every(Number.isFinite) || radius <= 0 || buildUp <= 0) return false;
+        this.rasterCapsule({ x, y }, { x, y }, radius, falloff);
+        return this.commitCoverage(buildUp);
+    }
+
+    private commitCoverage(buildUp: number): boolean {
         let changed = false;
-        const exponent = Math.max(0.01, falloff);
-        for (let py = minY; py <= maxY; py++) {
-            const qy = ((py + 0.5) / this.height) * 2 - 1;
-            for (let px = minX; px <= maxX; px++) {
-                const qx = (((px + 0.5) / this.width) * 2 - 1) * aspect;
-                const distance = Math.hypot(qx - x, qy - y);
-                if (distance >= radius) continue;
-                const stamp = Math.round(255 * Math.pow(1 - distance / radius, exponent));
-                const index = py * this.width + px;
-                if (stamp > this.data[index]) {
-                    this.data[index] = stamp;
-                    changed = true;
-                }
+        const increment = 255 * Math.min(1, buildUp);
+        for (const index of this.touched) {
+            const before = this.data[index];
+            const after = Math.min(255, before + Math.round(increment * this.coverage[index]));
+            this.coverage[index] = 0;
+            if (after !== before) {
+                this.data[index] = after;
+                changed = true;
             }
         }
+        this.touched.length = 0;
         if (changed) {
             this.active = true;
             this.version++;
@@ -69,46 +69,26 @@ export class CursorDensityField {
     }
 
     /** Add a pointer position to a smooth midpoint-quadratic stroke. */
-    addStrokePoint(x: number, y: number, radius: number, falloff: number): boolean {
-        if (![x, y, radius, falloff].every(Number.isFinite) || radius <= 0) return false;
+    addStrokePoint(x: number, y: number, radius: number, falloff: number, buildUp = 1): boolean {
+        if (![x, y, radius, falloff, buildUp].every(Number.isFinite) || radius <= 0 || buildUp <= 0) return false;
         const point = { x, y };
         const last = this.stroke[this.stroke.length - 1];
-        if (last && last.x === x && last.y === y) return this.deposit(x, y, radius, falloff);
-        let changed = false;
-        if (!last) changed = this.deposit(x, y, radius, falloff);
-        else if (this.stroke.length === 1)
-            changed = this.rasterCurve(
-                last,
-                this.midpoint(last, point),
-                this.midpoint(last, point),
-                radius,
-                falloff,
-                false,
-            );
+        if (!last || (last.x === x && last.y === y)) this.rasterCapsule(point, point, radius, falloff);
+        else if (this.stroke.length === 1) this.rasterCurve(last, point, point, radius, falloff, false);
         else {
             const prior = this.stroke[this.stroke.length - 2];
-            changed = this.rasterCurve(
-                this.midpoint(prior, last),
-                last,
-                this.midpoint(last, point),
-                radius,
-                falloff,
-                true,
-            );
+            this.rasterCurve(this.midpoint(prior, last), last, this.midpoint(last, point), radius, falloff, true);
+            this.rasterCurve(this.midpoint(last, point), point, point, radius, falloff, false);
         }
-        this.stroke.push(point);
+        if (!last || last.x !== x || last.y !== y) this.stroke.push(point);
         if (this.stroke.length > 2) this.stroke.shift();
-        return changed;
+        return this.commitCoverage(buildUp);
     }
 
     /** Finish the pending half-segment, or discard history when rasterize is false. */
     endStroke(rasterize = true, radius?: number, falloff?: number): boolean {
-        let changed = false;
-        if (rasterize && this.stroke.length > 1 && radius !== undefined && falloff !== undefined) {
-            const last = this.stroke[this.stroke.length - 1];
-            const prior = this.stroke[this.stroke.length - 2];
-            changed = this.rasterCurve(this.midpoint(prior, last), last, last, radius, falloff, true);
-        }
+        // The latest event includes its pending endpoint, so ending is intensity-neutral.
+        const changed = false;
         this.stroke = [];
         return changed;
     }
@@ -133,7 +113,6 @@ export class CursorDensityField {
         const curvature = quadratic ? distance(control, this.midpoint(a, b)) : 0;
         const curvatureSteps = Math.ceil(Math.sqrt(curvature / (texel * 0.125)));
         const steps = Math.max(1, Math.ceil(length / (texel * 4)), curvatureSteps);
-        let changed = false;
         let previous = a;
         for (let index = 1; index <= steps; index++) {
             const t = index / steps;
@@ -142,14 +121,10 @@ export class CursorDensityField {
                 x: quadratic ? u * u * a.x + 2 * u * t * control.x + t * t * b.x : a.x + (b.x - a.x) * t,
                 y: quadratic ? u * u * a.y + 2 * u * t * control.y + t * t * b.y : a.y + (b.y - a.y) * t,
             };
-            changed = this.rasterCapsule(previous, point, radius, falloff) || changed;
+            this.rasterCapsule(previous, point, radius, falloff);
             previous = point;
         }
-        if (changed) {
-            this.active = true;
-            this.version++;
-        }
-        return changed;
+        return this.touched.length > 0;
     }
 
     /** MAX a radial distance field around a line segment, without point-stamp sampling. */
@@ -166,7 +141,6 @@ export class CursorDensityField {
         const dy = b.y - a.y;
         const lengthSquared = dx * dx + dy * dy;
         const exponent = Math.max(0.01, falloff);
-        let changed = false;
         for (let py = minY; py <= maxY; py++) {
             const qy = ((py + 0.5) / this.height) * 2 - 1;
             for (let px = minX; px <= maxX; px++) {
@@ -176,15 +150,15 @@ export class CursorDensityField {
                     : 0;
                 const segmentDistance = Math.hypot(qx - (a.x + projection * dx), qy - (a.y + projection * dy));
                 if (segmentDistance >= radius) continue;
-                const value = Math.round(255 * Math.pow(1 - segmentDistance / radius, exponent));
+                const value = Math.pow(1 - segmentDistance / radius, exponent);
                 const dataIndex = py * this.width + px;
-                if (value > this.data[dataIndex]) {
-                    this.data[dataIndex] = value;
-                    changed = true;
+                if (value > this.coverage[dataIndex]) {
+                    if (this.coverage[dataIndex] === 0) this.touched.push(dataIndex);
+                    this.coverage[dataIndex] = value;
                 }
             }
         }
-        return changed;
+        return this.touched.length > 0;
     }
 
     /** Exponential fade. Returns whether texels changed and whether any remain active. */

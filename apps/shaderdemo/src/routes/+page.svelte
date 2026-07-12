@@ -200,6 +200,7 @@
                     cursorState.y,
                     options.parameters.cursorRadius,
                     options.parameters.cursorFalloff,
+                    options.parameters.cursorDensityPressureBuildUp,
                 );
             } else if (depositDensity) cursorDensityField.endStroke(false);
         }
@@ -218,7 +219,7 @@
         sendCursor();
     }
     function pointerLeave() {
-        cursorDensityField.endStroke(true, options.parameters.cursorRadius, options.parameters.cursorFalloff);
+        cursorDensityField.endStroke(false);
         renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
         cursorState.leave();
         sendCursor();

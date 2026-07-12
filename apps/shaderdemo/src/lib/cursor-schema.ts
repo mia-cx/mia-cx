@@ -1,4 +1,13 @@
-export type CursorParameter = { key: string; label: string; min: number; max: number; step: number; default: number };
+export type CursorParameter = {
+    key: string;
+    label: string;
+    min: number;
+    max: number;
+    step: number;
+    default: number;
+    /** CPU-side interaction setting; excluded from the shared shader uniform layout. */
+    cpuOnly?: boolean;
+};
 const p = (key: string, label: string, min: number, max: number, step: number, value: number): CursorParameter => ({
     key,
     label,
@@ -40,7 +49,8 @@ export const CURSOR_EFFECT_GROUPS = [
         'cursorDensityPressureEnabled',
         [
             p('cursorDensityPressureStrength', 'Strength', -3, 3, 0.01, 1),
-            p('cursorDensityPressureDecay', 'Decay', 0.01, 10, 0.01, 2),
+            { ...p('cursorDensityPressureBuildUp', 'Build-up', 0.001, 1, 0.001, 0.08), cpuOnly: true },
+            { ...p('cursorDensityPressureDecay', 'Decay', 0.01, 10, 0.01, 2), cpuOnly: true },
         ],
     ],
     [
@@ -83,3 +93,13 @@ export const CURSOR_PARAMETER_SCHEMA = [
     ...CURSOR_EFFECT_GROUPS.flatMap(([, toggle, values]) => [enabled(toggle), ...values]),
 ] as CursorParameter[];
 export const CURSOR_PARAMETER_KEYS = CURSOR_PARAMETER_SCHEMA.map(({ key }) => key);
+/**
+ * Stable shader ABI. Density build-up/decay run on the CPU texture, while three zero padding lanes
+ * preserve the generated WGSL/GLSL indices used by Elastic wake and every following interaction.
+ */
+const cursorUniformParameters = CURSOR_PARAMETER_SCHEMA.filter(({ cpuOnly }) => !cpuOnly);
+const densityStrengthIndex = cursorUniformParameters.findIndex(({ key }) => key === 'cursorDensityPressureStrength');
+const shaderPadding = (index: number): CursorParameter =>
+    p(`cursorShaderPadding${index}`, 'Shader padding', 0, 0, 1, 0);
+cursorUniformParameters.splice(densityStrengthIndex + 1, 0, shaderPadding(0), shaderPadding(1), shaderPadding(2));
+export const CURSOR_UNIFORM_PARAMETER_SCHEMA = cursorUniformParameters;
