@@ -1,7 +1,7 @@
 import { CURSOR_UNIFORM_PARAMETER_SCHEMA } from './cursor-schema';
 import type { CursorSnapshot } from './cursor';
 
-/** Compact vec4 cursor block: three shader values plus padding. */
+/** Compact vec4 cursor block containing the four shader values. */
 export const CURSOR_UNIFORM_VEC4S = 1;
 export const CURSOR_UNIFORM_FLOATS = 4;
 export const CURSOR_UNIFORM_BYTES = 16;

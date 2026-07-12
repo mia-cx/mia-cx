@@ -11,7 +11,7 @@ import {
 } from './webgl2-renderer';
 import * as shaders from './webgl2-shaders';
 import * as compactShaders from './webgl2-compact-shaders';
-import { PRESENT_SHADER_SOURCE } from './renderer';
+import { BASE_SHADER_SOURCE, PRESENT_SHADER_SOURCE } from './renderer';
 
 describe('WebGL2 parity backend', () => {
     it('creates every stable integral shader variant without changing continuous uniforms', () => {
@@ -64,8 +64,17 @@ describe('WebGL2 parity backend', () => {
     it('samples the persistent density texture with generated GLSL parity', () => {
         expect(shaders.BASE).toContain('uniform highp sampler2D _group_0_binding_2_fs;');
         expect(shaders.BASE).toContain('texture(_group_0_binding_2_fs, vec2(uv))');
-        expect(shaders.BASE).toContain('float densityPressure = _e50.x;');
-        expect(shaders.BASE).toContain('cursorDensity = (_e53 * densityPressure);');
+        expect(shaders.BASE).toMatch(/float densityPressure = _e\d+\.x;/);
+        expect(shaders.BASE).toMatch(/cursorDensity = \(_e\d+ \* densityPressure\);/);
+        expect(shaders.BASE).toContain('float _e299 = cp(3u);');
+        expect(shaders.BASE).toContain(
+            'float densityResponse = ((_e299 == 0.0) ? 1.0 : pow(max((1.0 - clamp(_e300, 0.0, 1.0)), 1e-6), _e299));',
+        );
+        expect(shaders.BASE).toContain('natural = (_e313 + (_e314 * densityResponse));');
+        expect(BASE_SHADER_SOURCE).toContain('let highlightProtection=cp(3u);');
+        expect(BASE_SHADER_SOURCE).toContain(
+            'select(pow(max(1.-clamp(natural,0.,1.),1e-6),highlightProtection),1.,highlightProtection==0.)',
+        );
         expect(shaders.BASE.match(/texture\(_group_0_binding_2_fs/g)).toHaveLength(1);
         expect(shaders.BASE).not.toContain('vec2 gradient =');
         expect(shaders.BASE).not.toContain('textureSize(_group_0_binding_2_fs');

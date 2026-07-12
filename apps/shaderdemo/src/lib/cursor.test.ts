@@ -12,24 +12,28 @@ describe('CursorState', () => {
             'Radius',
             'Falloff',
             'Density strength',
+            'Highlight protection',
             'Build-up time',
             'Decay',
         ]);
-        expect(densityGroups[0][2][3]).toMatchObject({ min: 0, max: 2, default: 0.4 });
+        expect(densityGroups[0][2][3]).toMatchObject({ min: 0, max: 4, step: 0.05, default: 1 });
+        expect(densityGroups[0][2][4]).toMatchObject({ min: 0, max: 2, default: 0.4 });
         expect(CURSOR_EFFECT_GROUPS.some(([label]) => label.toLowerCase().includes('halogen'))).toBe(false);
         expect(CURSOR_PARAMETER_KEYS.some((key) => key.includes('Halogen'))).toBe(false);
     });
     it('keeps CPU texture controls out of the compact shader parameter ABI', () => {
-        expect(CURSOR_UNIFORM_PARAMETER_SCHEMA).toHaveLength(3);
+        expect(CURSOR_UNIFORM_PARAMETER_SCHEMA).toHaveLength(4);
         expect(CURSOR_UNIFORM_PARAMETER_SCHEMA.some(({ key }) => key === 'cursorDensityPressureBuildUp')).toBe(false);
         expect(CURSOR_UNIFORM_PARAMETER_SCHEMA.map(({ key }) => key)).toEqual([
             'cursorEnabled',
             'cursorDensityPressureEnabled',
             'cursorDensityStrength',
+            'cursorDensityHighlightProtection',
         ]);
         const packed = packCursorUniform({ cursorDensityBuildUp: 0.777 }, undefined);
         expect(packed).toHaveLength(4);
-        expect(packed[3]).toBe(0);
+        expect(packed[3]).toBe(1);
+        expect(packCursorUniform({ cursorDensityHighlightProtection: 2.5 })[3]).toBe(2.5);
     });
     it('uses aspect-correct CSS coordinates independent of backing resolution', () => {
         const a = new CursorState().update(310, 120, rect, 10);
