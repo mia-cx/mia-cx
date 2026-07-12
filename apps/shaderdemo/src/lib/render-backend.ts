@@ -1,6 +1,7 @@
 import type { GpuTimingStats, RenderOptions } from './renderer';
 import type { FrameRollingSummary } from './telemetry';
 import type { CursorSnapshot } from './cursor';
+import type { CursorDensityFieldSnapshot } from './cursor-density-field';
 
 export type RendererBackendName = 'webgpu' | 'webgl2';
 
@@ -12,6 +13,7 @@ export interface RenderBackend {
     onLost?: (message: string) => void;
     setOptions(options: RenderOptions): void;
     setCursorState(state: CursorSnapshot): void;
+    setCursorDensityField(field: CursorDensityFieldSnapshot): void;
     setPaused(paused: boolean): void;
     invalidate(): void;
     destroy(): void;

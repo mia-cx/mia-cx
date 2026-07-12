@@ -4,6 +4,7 @@ import { ADJUSTMENT_LUT_SIZE, composeAdjustmentLut, isNeutralAdjustment } from '
 import defaultSettingsFixture from './default-settings.json';
 import { CURSOR_PARAMETER_SCHEMA } from './cursor-schema';
 import type { CursorSnapshot } from './cursor';
+import type { CursorDensityFieldSnapshot } from './cursor-density-field';
 import { CURSOR_UNIFORM_BYTES, packCursorUniform } from './cursor-uniform';
 import {
     leadingAdjustmentRegion,
@@ -536,6 +537,8 @@ export const BASE_SHADER_SOURCE =
     /* wgsl */ `
 struct CursorUniform { state0:vec4f, state1:vec4f, click:vec4f, parameters:array<vec4f,13>, trail:array<vec4f,16> }
 @group(0) @binding(1) var<uniform> cursor:CursorUniform;
+@group(0) @binding(2) var densityField:texture_2d<f32>;
+@group(0) @binding(3) var densitySampler:sampler;
 fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
 fn cursorWeight(delta:vec2f,radius:f32,falloff:f32)->f32 { return exp(-pow(length(delta)/max(radius,.0001),max(falloff,.1))); }
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
@@ -556,18 +559,14 @@ fn cursorWeight(delta:vec2f,radius:f32,falloff:f32)->f32 { return exp(-pow(lengt
         if(cp(17u)!=0.) { q=center+delta*(1.-cp(18u)*weight); }
         if(cp(19u)!=0.) { q+=(noise3v(vec2f(delta*cp(21u))+t*.07,733.)-.5)*cp(20u)*weight; }
         if(cp(22u)!=0.) { q-=direction*dot(delta,direction)*cp(23u)*weight; }
-        if(cp(24u)!=0.) {
-            let headEnergy=pow(clamp(cursor.state1.w,0.,1.),max(cp(28u),.1));
-            densityPressureEnvelope=clamp(weight*headEnergy,0.,1.);
-        }
+        if(cp(24u)!=0.) { densityPressureEnvelope=textureSample(densityField,densitySampler,pos.xy/u.resolution).r; }
         if(cp(33u)!=0.) { q=center+delta/(1.+cp(34u)*weight); }
         if(cp(35u)!=0.) { q+=direction*cp(36u)*weight; }
         if(cp(37u)!=0.) { cursorDensity+=cp(38u)*weight*dot(delta,direction)/max(radius,.0001); }
         let trailLimit=min(u32(cp(4u)),min(u32(cp(47u)),16u));
-        if(cp(24u)!=0. || cp(29u)!=0.) {
+        if(cp(29u)!=0.) {
             for(var i=0u;i<16u;i++) { if(i<trailLimit) {
                 let sample=cursor.trail[i]; let td=q-sample.xy;
-                if(cp(24u)!=0.) { let trail=clamp(cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(27u))*min(sample.w/max(cp(3u),.0001),1.)*cp(26u),0.,1.); densityPressureEnvelope=max(densityPressureEnvelope,trail); }
                 if(cp(29u)!=0.) { let wake=cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(32u))*sin(length(td)*cp(31u)-sample.z*cp(31u)); q-=direction*cp(30u)*wake; }
             } }
         }
@@ -951,6 +950,12 @@ export class AtmosphereRenderer {
     private datamoshWasActive = false;
     private buffers: GPUBuffer[] = [];
     private cursorBuffer?: GPUBuffer;
+    private densityTexture?: GPUTexture;
+    private densityView?: GPUTextureView;
+    private densitySampler?: GPUSampler;
+    private densityWidth = 1;
+    private densityHeight = 1;
+    private densityVersion = -1;
     private bindGroups = new Map<string, GPUBindGroup>();
     private observer: ResizeObserver;
     private rafId = 0;
@@ -1056,6 +1061,19 @@ export class AtmosphereRenderer {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+        self.densitySampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+        self.densityTexture = self.device.createTexture({
+            size: [1, 1],
+            format: 'r8unorm',
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        });
+        self.densityView = self.densityTexture.createView();
+        self.device.queue.writeTexture(
+            { texture: self.densityTexture },
+            new Uint8Array(256),
+            { bytesPerRow: 256 },
+            [1, 1],
+        );
         self.adjustmentTexture = self.device.createTexture({
             dimension: '3d',
             size: [ADJUSTMENT_LUT_SIZE, ADJUSTMENT_LUT_SIZE, ADJUSTMENT_LUT_SIZE],
@@ -1241,6 +1259,33 @@ export class AtmosphereRenderer {
         this.cursorState = state;
         this.invalidate();
     }
+    setCursorDensityField(field: CursorDensityFieldSnapshot) {
+        if (!this.device || field.version === this.densityVersion) return;
+        if (field.width !== this.densityWidth || field.height !== this.densityHeight) {
+            this.densityTexture?.destroy();
+            this.densityTexture = this.device.createTexture({
+                size: [field.width, field.height],
+                format: 'r8unorm',
+                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+            });
+            this.densityView = this.densityTexture.createView();
+            this.densityWidth = field.width;
+            this.densityHeight = field.height;
+            for (const key of this.bindGroups.keys()) if (key.startsWith('0:')) this.bindGroups.delete(key);
+        }
+        const bytesPerRow = Math.ceil(field.width / 256) * 256;
+        const upload = new Uint8Array(bytesPerRow * field.height);
+        for (let y = 0; y < field.height; y++)
+            upload.set(field.data.subarray(y * field.width, (y + 1) * field.width), y * bytesPerRow);
+        this.device.queue.writeTexture(
+            { texture: this.densityTexture! },
+            upload,
+            { bytesPerRow, rowsPerImage: field.height },
+            [field.width, field.height],
+        );
+        this.densityVersion = field.version;
+        this.invalidate();
+    }
     setPaused(value: boolean) {
         if (value === this.paused) return;
         this.paused = value;
@@ -1377,7 +1422,12 @@ export class AtmosphereRenderer {
             let bindGroup = this.bindGroups.get(cacheKey);
             if (!bindGroup) {
                 const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer } }];
-                if (pipelineIndex === 0) entries.push({ binding: 1, resource: { buffer: this.cursorBuffer! } });
+                if (pipelineIndex === 0)
+                    entries.push(
+                        { binding: 1, resource: { buffer: this.cursorBuffer! } },
+                        { binding: 2, resource: this.densityView! },
+                        { binding: 3, resource: this.densitySampler! },
+                    );
                 if (sourceTextureIndex !== undefined) {
                     entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
                     if (usesSampler) entries.push({ binding: 2, resource: s });
@@ -1670,6 +1720,7 @@ export class AtmosphereRenderer {
         document.removeEventListener('visibilitychange', this.visibilityHandler);
         this.textures.forEach((texture) => texture.destroy());
         this.adjustmentTexture?.destroy();
+        this.densityTexture?.destroy();
         this.lutTextures.forEach(({ texture }) => texture.destroy());
         this.historyTexture?.destroy();
         this.textureViews = [];

@@ -21,6 +21,7 @@ import { FrameTelemetry } from './telemetry';
 import * as shader from './webgl2-shaders';
 import * as compactShader from './webgl2-compact-shaders';
 import type { CursorSnapshot } from './cursor';
+import type { CursorDensityFieldSnapshot } from './cursor-density-field';
 import { CURSOR_UNIFORM_BYTES, packCursorUniform } from './cursor-uniform';
 
 export const WEBGL2_STARTUP_SCALE = 0.5;
@@ -144,6 +145,10 @@ export class WebGL2Renderer implements RenderBackend {
     private history?: Target;
     private uniformBuffer: WebGLBuffer;
     private cursorBuffer: WebGLBuffer;
+    private densityTexture: WebGLTexture;
+    private densityWidth = 1;
+    private densityHeight = 1;
+    private densityVersion = -1;
     private vao: WebGLVertexArrayObject;
     private raf = 0;
     private pendingFence: PendingFence | null = null;
@@ -192,11 +197,19 @@ export class WebGL2Renderer implements RenderBackend {
     ) {
         const ubo = gl.createBuffer(),
             cursorUbo = gl.createBuffer(),
-            vao = gl.createVertexArray();
-        if (!ubo || !cursorUbo || !vao) throw new Error('WebGL2 resource allocation failed.');
+            vao = gl.createVertexArray(),
+            density = gl.createTexture();
+        if (!ubo || !cursorUbo || !vao || !density) throw new Error('WebGL2 resource allocation failed.');
         this.uniformBuffer = ubo;
         this.cursorBuffer = cursorUbo;
         this.vao = vao;
+        this.densityTexture = density;
+        gl.bindTexture(gl.TEXTURE_2D, density);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 1, 1, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array(1));
         this.adaptive = new AdaptiveResolutionController(options.renderScale, {
             initialScale: Math.min(WEBGL2_STARTUP_SCALE, options.renderScale),
             severeSamples: 1,
@@ -251,6 +264,7 @@ export class WebGL2Renderer implements RenderBackend {
             gl.getUniformLocation(p, '_group_0_binding_3_fs'),
             gl.getUniformLocation(p, '_group_0_binding_4_fs'),
             gl.getUniformLocation(p, '_present_resolution'),
+            gl.getUniformLocation(p, '_group_0_binding_2_fs'),
         ];
         this.samplerLocations.set(p, locations);
         gl.useProgram(p);
@@ -258,6 +272,7 @@ export class WebGL2Renderer implements RenderBackend {
         if (locations[0]) gl.uniform1i(locations[0], 0);
         if (locations[1]) gl.uniform1i(locations[1], 1);
         if (locations[2]) gl.uniform1i(locations[2], 1);
+        if (locations[4]) gl.uniform1i(locations[4], 2);
         return p;
     }
     private specialized(name: keyof typeof SELECTORS, index: number) {
@@ -387,6 +402,7 @@ export class WebGL2Renderer implements RenderBackend {
         bind(0, source);
         bind(1, aux);
         bind(1, cube, gl.TEXTURE_3D);
+        if (name === 'BASE') bind(2, this.densityTexture);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     private uploadCube(data: Uint16Array, size: number) {
@@ -831,6 +847,21 @@ export class WebGL2Renderer implements RenderBackend {
         this.cursorState = state;
         this.invalidate();
     }
+    setCursorDensityField(field: CursorDensityFieldSnapshot) {
+        if (field.version === this.densityVersion) return;
+        const gl = this.gl;
+        gl.bindTexture(gl.TEXTURE_2D, this.densityTexture);
+        if (field.width !== this.densityWidth || field.height !== this.densityHeight) {
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, field.width, field.height, 0, gl.RED, gl.UNSIGNED_BYTE, field.data);
+            this.densityWidth = field.width;
+            this.densityHeight = field.height;
+        } else {
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, field.width, field.height, gl.RED, gl.UNSIGNED_BYTE, field.data);
+        }
+        this.boundTextures.clear();
+        this.densityVersion = field.version;
+        this.invalidate();
+    }
     setPaused(v: boolean) {
         if (v === this.paused) return;
         this.paused = v;
@@ -865,6 +896,7 @@ export class WebGL2Renderer implements RenderBackend {
         for (const t of this.lutTextures.values()) this.gl.deleteTexture(t);
         this.gl.deleteBuffer(this.uniformBuffer);
         this.gl.deleteBuffer(this.cursorBuffer);
+        this.gl.deleteTexture(this.densityTexture);
         this.gl.deleteVertexArray(this.vao);
     }
 }

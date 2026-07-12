@@ -53,10 +53,12 @@
     import { MAX_ADJUSTMENTS, newHslCurve, type Adjustment } from '$lib/adjustments';
     import { CURSOR_COMMON_SCHEMA, CURSOR_EFFECT_GROUPS } from '$lib/cursor-schema';
     import { CursorState } from '$lib/cursor';
+    import { CursorDensityField } from '$lib/cursor-density-field';
 
     let canvas: HTMLCanvasElement;
     let renderer: RenderBackend | undefined;
     const cursorState = new CursorState();
+    const cursorDensityField = new CursorDensityField();
     const initialDefaults = defaultShaderSettings();
     let options: RenderOptions = $state({
         seed: initialDefaults.seed,
@@ -178,15 +180,34 @@
     function sendCursor() {
         renderer?.setCursorState(cursorState);
     }
-    function pointerMove(event: PointerEvent) {
+    function resizeCursorDensity(rect: DOMRect) {
+        if (cursorDensityField.resize(rect.width, rect.height))
+            renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
+    }
+    function pointerMove(event: PointerEvent, depositDensity = true) {
         const samples = event.getCoalescedEvents?.() ?? [event],
             rect = canvas.getBoundingClientRect();
-        for (const sample of samples) cursorState.update(sample.clientX, sample.clientY, rect, sample.timeStamp, true);
+        resizeCursorDensity(rect);
+        for (const sample of samples) {
+            cursorState.update(sample.clientX, sample.clientY, rect, sample.timeStamp, true);
+            if (
+                depositDensity &&
+                options.parameters.cursorEnabled !== 0 &&
+                options.parameters.cursorDensityPressureEnabled !== 0
+            )
+                cursorDensityField.deposit(
+                    cursorState.x,
+                    cursorState.y,
+                    options.parameters.cursorRadius,
+                    options.parameters.cursorFalloff,
+                );
+        }
         sendCursor();
+        renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
     }
     function pointerDown(event: PointerEvent) {
         canvas.setPointerCapture(event.pointerId);
-        pointerMove(event);
+        pointerMove(event, false);
         cursorState.pointerDown();
         sendCursor();
     }
@@ -327,6 +348,9 @@
                 if (disposed) return instance.destroy();
                 renderer = instance;
                 instance.setCursorState(cursorState);
+                const rect = canvas.getBoundingClientRect();
+                cursorDensityField.resize(rect.width, rect.height);
+                instance.setCursorDensityField?.(cursorDensityField.snapshot());
                 backendWarnings = [
                     ...warnings,
                     ...(instance.unsupportedEffects?.length
@@ -360,6 +384,13 @@
             if (!paused && !document.hidden) {
                 cursorState.tick((now - cursorTime) / 1000);
                 sendCursor();
+                const rect = canvas.getBoundingClientRect();
+                resizeCursorDensity(rect);
+                const densityTick = cursorDensityField.tick(
+                    (now - cursorTime) / 1000,
+                    options.parameters.cursorDensityPressureDecay,
+                );
+                if (densityTick.changed) renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
             }
             cursorTime = now;
             cursorFrame = requestAnimationFrame(animateCursor);

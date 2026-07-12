@@ -4,20 +4,10 @@ import { CURSOR_EFFECT_GROUPS, CURSOR_PARAMETER_KEYS } from './cursor-schema';
 
 const rect = { left: 10, top: 20, width: 400, height: 200 };
 describe('CursorState', () => {
-    it('exposes one density pressure group with a fading trail and no legacy halogen controls', () => {
+    it('exposes one density pressure group with persistent-field controls', () => {
         const densityGroups = CURSOR_EFFECT_GROUPS.filter(([label]) => label === 'Density pressure');
         expect(densityGroups).toHaveLength(1);
-        expect(densityGroups[0][2].map(({ label }) => label)).toEqual([
-            'Strength',
-            'Trail amount',
-            'Trail decay',
-            'Still fade / head decay',
-        ]);
-        expect(densityGroups[0][2].find(({ label }) => label === 'Trail amount')).toMatchObject({
-            min: 0,
-            max: 1,
-            default: 1,
-        });
+        expect(densityGroups[0][2].map(({ label }) => label)).toEqual(['Strength', 'Decay']);
         expect(CURSOR_EFFECT_GROUPS.some(([label]) => label.toLowerCase().includes('halogen'))).toBe(false);
         expect(CURSOR_PARAMETER_KEYS.some((key) => key.includes('Halogen'))).toBe(false);
     });

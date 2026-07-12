@@ -45,15 +45,14 @@ import { defaultShaderSettings, normalizeSavedSettings } from './settings';
 import defaultSettingsFixture from './default-settings.json';
 
 describe('field configuration', () => {
-    it('applies density pressure as one clamped, non-accumulating head/trail max envelope', () => {
-        expect(BASE_SHADER_SOURCE).toContain('let headEnergy=pow(clamp(cursor.state1.w,0.,1.),max(cp(28u),.1))');
-        expect(BASE_SHADER_SOURCE).toContain('densityPressureEnvelope=clamp(weight*headEnergy,0.,1.)');
+    it('samples persistent density in top-left screen UV without point-list density', () => {
+        expect(BASE_SHADER_SOURCE).toContain('@group(0) @binding(2) var densityField:texture_2d<f32>');
         expect(BASE_SHADER_SOURCE).toContain(
-            'let trail=clamp(cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(27u))*min(sample.w/max(cp(3u),.0001),1.)*cp(26u),0.,1.)',
+            'densityPressureEnvelope=textureSample(densityField,densitySampler,pos.xy/u.resolution).r',
         );
-        expect(BASE_SHADER_SOURCE).toContain('densityPressureEnvelope=max(densityPressureEnvelope,trail)');
         expect(BASE_SHADER_SOURCE).toContain('cursorDensity+=cp(25u)*densityPressureEnvelope');
-        expect(BASE_SHADER_SOURCE).not.toContain('cursorDensity+=cp(25u)*cp(26u)*trail');
+        expect(BASE_SHADER_SOURCE).not.toContain('headEnergy');
+        expect(BASE_SHADER_SOURCE).not.toContain('densityPressureEnvelope=max');
         expect(BASE_SHADER_SOURCE.indexOf('natural+=cursorDensity')).toBeLessThan(
             BASE_SHADER_SOURCE.indexOf('if(u.thresholdEnabled<.5)'),
         );
@@ -296,7 +295,7 @@ describe('field configuration', () => {
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
         expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(210);
+        expect(PARAMETER_SCHEMA).toHaveLength(208);
         expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(PARAMETER_SCHEMA.length);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
