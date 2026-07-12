@@ -384,15 +384,15 @@
         let cursorFrame = 0,
             cursorTime = performance.now();
         const animateCursor = (now: number) => {
-            if (!paused && !document.hidden) {
-                cursorState.tick((now - cursorTime) / 1000);
-                sendCursor();
+            if (!document.hidden) {
+                const dt = (now - cursorTime) / 1000;
+                if (!paused) {
+                    cursorState.tick(dt);
+                    sendCursor();
+                }
                 const rect = canvas.getBoundingClientRect();
                 resizeCursorDensity(rect);
-                const densityTick = cursorDensityField.tick(
-                    (now - cursorTime) / 1000,
-                    options.parameters.cursorDensityPressureDecay,
-                );
+                const densityTick = cursorDensityField.tick(dt, options.parameters.cursorDensityPressureDecay);
                 if (densityTick.changed) renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
             }
             cursorTime = now;

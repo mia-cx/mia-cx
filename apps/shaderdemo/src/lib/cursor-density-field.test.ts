@@ -89,6 +89,47 @@ describe('CursorDensityField', () => {
         expect(atQ(-0.4, -0.05)).toBeGreaterThan(0);
     });
 
+    it('has a flat, continuous centerline for a long sparse stroke', () => {
+        const field = new CursorDensityField();
+        field.resize(256, 256);
+        field.addStrokePoint(-0.9, 0, 0.3, 4);
+        field.addStrokePoint(0.9, 0, 0.3, 4);
+        field.endStroke(true, 0.3, 4);
+        const { data, width, height } = field.snapshot();
+        const row = Math.floor(height / 2);
+        const profile = Array.from(data.slice(row * width + 20, row * width + width - 20));
+        expect(Math.min(...profile)).toBeGreaterThan(220);
+        expect(Math.max(...profile) - Math.min(...profile)).toBeLessThanOrEqual(1);
+    });
+
+    it('keeps a sparse curved stroke covered without periodic stamp dips', () => {
+        const field = new CursorDensityField();
+        field.resize(256, 256);
+        field.addStrokePoint(-0.9, 0.6, 0.18, 3);
+        field.addStrokePoint(0, -0.8, 0.18, 3);
+        field.addStrokePoint(0.9, 0.6, 0.18, 3);
+        field.endStroke(true, 0.18, 3);
+        const { data, width, height } = field.snapshot();
+        // Sample the analytic midpoint quadratics themselves. Every centerline sample
+        // should remain near the distance-field maximum, rather than oscillating at stamps.
+        const values: number[] = [];
+        const sample = (ax: number, ay: number, cx: number, cy: number, bx: number, by: number) => {
+            for (let index = 0; index <= 80; index++) {
+                const t = index / 80;
+                const u = 1 - t;
+                const x = u * u * ax + 2 * u * t * cx + t * t * bx;
+                const y = u * u * ay + 2 * u * t * cy + t * t * by;
+                const px = Math.max(0, Math.min(width - 1, Math.floor(((x + 1) / 2) * width)));
+                const py = Math.max(0, Math.min(height - 1, Math.floor(((y + 1) / 2) * height)));
+                values.push(data[py * width + px]);
+            }
+        };
+        sample(-0.9, 0.6, -0.9, 0.6, -0.45, -0.1);
+        sample(-0.45, -0.1, 0, -0.8, 0.45, -0.1);
+        sample(0.45, -0.1, 0.9, 0.6, 0.9, 0.6);
+        expect(Math.min(...values)).toBeGreaterThan(200);
+    });
+
     it('uses MAX for retracing and separates ended strokes', () => {
         const field = new CursorDensityField();
         field.resize(256, 256);

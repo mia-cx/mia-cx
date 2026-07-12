@@ -127,15 +127,62 @@ export class CursorDensityField {
     ): boolean {
         const distance = (p: StrokePoint, q: StrokePoint) => Math.hypot(q.x - p.x, q.y - p.y);
         const length = quadratic ? distance(a, control) + distance(control, b) : distance(a, b);
-        const spacing = Math.max(1 / this.height, radius * 0.25);
-        const steps = Math.max(1, Math.ceil(length / spacing));
+        // Capsules make straight sections exact. Flatten curves until their error is
+        // sub-texel, with a length bound to keep rapidly changing tangents smooth.
+        const texel = 2 / this.height;
+        const curvature = quadratic ? distance(control, this.midpoint(a, b)) : 0;
+        const curvatureSteps = Math.ceil(Math.sqrt(curvature / (texel * 0.125)));
+        const steps = Math.max(1, Math.ceil(length / (texel * 4)), curvatureSteps);
         let changed = false;
+        let previous = a;
         for (let index = 1; index <= steps; index++) {
             const t = index / steps;
             const u = 1 - t;
-            const x = quadratic ? u * u * a.x + 2 * u * t * control.x + t * t * b.x : a.x + (b.x - a.x) * t;
-            const y = quadratic ? u * u * a.y + 2 * u * t * control.y + t * t * b.y : a.y + (b.y - a.y) * t;
-            changed = this.deposit(x, y, radius, falloff) || changed;
+            const point = {
+                x: quadratic ? u * u * a.x + 2 * u * t * control.x + t * t * b.x : a.x + (b.x - a.x) * t,
+                y: quadratic ? u * u * a.y + 2 * u * t * control.y + t * t * b.y : a.y + (b.y - a.y) * t,
+            };
+            changed = this.rasterCapsule(previous, point, radius, falloff) || changed;
+            previous = point;
+        }
+        if (changed) {
+            this.active = true;
+            this.version++;
+        }
+        return changed;
+    }
+
+    /** MAX a radial distance field around a line segment, without point-stamp sampling. */
+    private rasterCapsule(a: StrokePoint, b: StrokePoint, radius: number, falloff: number): boolean {
+        const aspect = this.width / this.height;
+        const minX = Math.max(0, Math.floor((((Math.min(a.x, b.x) - radius) / aspect + 1) * this.width) / 2));
+        const maxX = Math.min(
+            this.width - 1,
+            Math.ceil((((Math.max(a.x, b.x) + radius) / aspect + 1) * this.width) / 2),
+        );
+        const minY = Math.max(0, Math.floor(((Math.min(a.y, b.y) - radius + 1) * this.height) / 2));
+        const maxY = Math.min(this.height - 1, Math.ceil(((Math.max(a.y, b.y) + radius + 1) * this.height) / 2));
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const lengthSquared = dx * dx + dy * dy;
+        const exponent = Math.max(0.01, falloff);
+        let changed = false;
+        for (let py = minY; py <= maxY; py++) {
+            const qy = ((py + 0.5) / this.height) * 2 - 1;
+            for (let px = minX; px <= maxX; px++) {
+                const qx = (((px + 0.5) / this.width) * 2 - 1) * aspect;
+                const projection = lengthSquared
+                    ? Math.max(0, Math.min(1, ((qx - a.x) * dx + (qy - a.y) * dy) / lengthSquared))
+                    : 0;
+                const segmentDistance = Math.hypot(qx - (a.x + projection * dx), qy - (a.y + projection * dy));
+                if (segmentDistance >= radius) continue;
+                const value = Math.round(255 * Math.pow(1 - segmentDistance / radius, exponent));
+                const dataIndex = py * this.width + px;
+                if (value > this.data[dataIndex]) {
+                    this.data[dataIndex] = value;
+                    changed = true;
+                }
+            }
         }
         return changed;
     }
