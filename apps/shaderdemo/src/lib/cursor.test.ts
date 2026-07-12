@@ -8,23 +8,32 @@ describe('CursorState', () => {
     it('exposes one density pressure group with persistent-field controls', () => {
         const densityGroups = CURSOR_EFFECT_GROUPS.filter(([label]) => label === 'Density pressure');
         expect(densityGroups).toHaveLength(1);
-        expect(densityGroups[0][2].map(({ label }) => label)).toEqual(['Strength', 'Build-up', 'Decay']);
-        expect(densityGroups[0][2][1]).toMatchObject({ min: 0.001, max: 1, default: 0.08 });
+        expect(densityGroups[0][2].map(({ label }) => label)).toEqual([
+            'Radius',
+            'Softness',
+            'Density strength',
+            'Build-up',
+            'Decay',
+            'Bulge strength',
+            'Bulge falloff',
+        ]);
+        expect(densityGroups[0][2][3]).toMatchObject({ min: 0.001, max: 0.25, default: 0.04 });
         expect(CURSOR_EFFECT_GROUPS.some(([label]) => label.toLowerCase().includes('halogen'))).toBe(false);
         expect(CURSOR_PARAMETER_KEYS.some((key) => key.includes('Halogen'))).toBe(false);
     });
     it('keeps CPU-only build-up out of the stable shader parameter ABI', () => {
-        expect(CURSOR_UNIFORM_PARAMETER_SCHEMA).toHaveLength(47);
+        expect(CURSOR_UNIFORM_PARAMETER_SCHEMA).toHaveLength(5);
         expect(CURSOR_UNIFORM_PARAMETER_SCHEMA.some(({ key }) => key === 'cursorDensityPressureBuildUp')).toBe(false);
-        expect(CURSOR_UNIFORM_PARAMETER_SCHEMA.slice(26, 29).map(({ key }) => key)).toEqual([
-            'cursorShaderPadding0',
-            'cursorShaderPadding1',
-            'cursorShaderPadding2',
+        expect(CURSOR_UNIFORM_PARAMETER_SCHEMA.map(({ key }) => key)).toEqual([
+            'cursorEnabled',
+            'cursorDensityPressureEnabled',
+            'cursorDensityStrength',
+            'cursorDensityBulgeStrength',
+            'cursorDensityBulgeFalloff',
         ]);
-        expect(CURSOR_UNIFORM_PARAMETER_SCHEMA[29].key).toBe('cursorElasticWakeEnabled');
-        expect(CURSOR_UNIFORM_PARAMETER_SCHEMA[39].key).toBe('cursorClickEnabled');
-        const packed = packCursorUniform({ cursorDensityPressureBuildUp: 0.777 }, undefined);
-        expect(packed[CURSOR_PARAMETER_OFFSET + 47]).toBe(0);
+        const packed = packCursorUniform({ cursorDensityBuildUp: 0.777 }, undefined);
+        expect(packed).toHaveLength(8);
+        expect(Array.from(packed.slice(5))).toEqual([0, 0, 0]);
     });
     it('uses aspect-correct CSS coordinates independent of backing resolution', () => {
         const a = new CursorState().update(310, 120, rect, 10);

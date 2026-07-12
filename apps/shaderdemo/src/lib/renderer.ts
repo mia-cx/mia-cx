@@ -535,43 +535,28 @@ fn smoothAbsFold(value: f32) -> f32 {
 export const BASE_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
-struct CursorUniform { state0:vec4f, state1:vec4f, click:vec4f, parameters:array<vec4f,13>, trail:array<vec4f,16> }
+struct CursorUniform { parameters:array<vec4f,2> }
 @group(0) @binding(1) var<uniform> cursor:CursorUniform;
 @group(0) @binding(2) var densityField:texture_2d<f32>;
 @group(0) @binding(3) var densitySampler:sampler;
 fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
-fn cursorWeight(delta:vec2f,radius:f32,falloff:f32)->f32 { return exp(-pow(length(delta)/max(radius,.0001),max(falloff,.1))); }
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
     var cursorDensity=0.; var cursorDepth=0.; var densityPressureEnvelope=0.;
-    // Exact master bypass preserves the historical field bit-for-bit and avoids every cursor loop.
-    if(cp(0u)!=0.) {
-        let center=cursor.state0.xy; let velocity=cursor.state0.zw;
-        let speedScale=min(cursor.state1.x/max(cp(3u),.0001),1.);
-        let direction=select(vec2f(0.),normalize(velocity),length(velocity)>.00001);
-        let delta=q-center; let radius=cp(1u); let weight=cursorWeight(delta,radius,cp(2u));
-        if(cp(7u)!=0.) { q-=direction*(cp(8u)*speedScale*weight); }
-        if(cp(9u)!=0.) { q+=vec2f(-delta.y,delta.x)*cp(10u)*weight; }
-        if(cp(11u)!=0.) { q-=delta*cp(12u)*weight; }
-        if(cp(13u)!=0.) { q+=delta*cp(14u)*weight; }
-        if(cp(15u)!=0.) { cursorDepth+=cp(16u)*weight*noise3(vec3f(delta*5.,t*.2),719.); }
-        if(cp(17u)!=0.) { q=center+delta*(1.-cp(18u)*weight); }
-        if(cp(19u)!=0.) { q+=(noise3v(vec2f(delta*cp(21u))+t*.07,733.)-.5)*cp(20u)*weight; }
-        if(cp(22u)!=0.) { q-=direction*dot(delta,direction)*cp(23u)*weight; }
-        if(cp(24u)!=0.) { densityPressureEnvelope=textureSample(densityField,densitySampler,pos.xy/u.resolution).r; }
-        if(cp(33u)!=0.) { q=center+delta/(1.+cp(34u)*weight); }
-        if(cp(35u)!=0.) { q+=direction*cp(36u)*weight; }
-        if(cp(37u)!=0.) { cursorDensity+=cp(38u)*weight*dot(delta,direction)/max(radius,.0001); }
-        let trailLimit=min(u32(cp(4u)),min(u32(cp(47u)),16u));
-        if(cp(29u)!=0.) {
-            for(var i=0u;i<16u;i++) { if(i<trailLimit) {
-                let sample=cursor.trail[i]; let td=q-sample.xy;
-                if(cp(29u)!=0.) { let wake=cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(32u))*sin(length(td)*cp(31u)-sample.z*cp(31u)); q-=direction*cp(30u)*wake; }
-            } }
-        }
-        cursorDensity+=cp(25u)*densityPressureEnvelope;
-        if(cp(39u)!=0.) { let rd=q-cursor.click.xy; let age=cursor.click.z; let ring=length(rd)-age*cp(44u); let envelope=exp(-age*cp(45u))*exp(-pow(ring/max(cp(42u),.0001),2.)); let wave=sin(ring*cp(43u))*envelope*cp(46u)*cursor.click.w; q+=normalize(rd+vec2f(.000001))*cp(40u)*wave; cursorDensity+=cp(41u)*wave; }
+    if(cp(0u)!=0. && cp(1u)!=0.) {
+        let uv=pos.xy/u.resolution;
+        let size=vec2f(textureDimensions(densityField));
+        let texel=1./size;
+        densityPressureEnvelope=textureSample(densityField,densitySampler,uv).r;
+        let gradient=vec2f(
+            textureSample(densityField,densitySampler,uv+vec2f(texel.x,0.)).r-textureSample(densityField,densitySampler,uv-vec2f(texel.x,0.)).r,
+            textureSample(densityField,densitySampler,uv+vec2f(0.,texel.y)).r-textureSample(densityField,densitySampler,uv-vec2f(0.,texel.y)).r
+        )*size*.5;
+        let local=pow(smoothstep(0.,1.,densityPressureEnvelope),cp(4u));
+        let displacement=clamp(gradient*local*cp(3u)*.002,vec2f(-.08),vec2f(.08));
+        q-=vec2f(displacement.x*(u.resolution.x/u.resolution.y),displacement.y);
+        cursorDensity=cp(2u)*densityPressureEnvelope;
     }
     // Interpret field size against a 1080px reference height, not the render target's physical pixels.
     // The composition therefore stays stable across resolutions while higher-resolution targets add detail.
@@ -956,6 +941,7 @@ export class AtmosphereRenderer {
     private densityWidth = 1;
     private densityHeight = 1;
     private densityVersion = -1;
+    private densityUpload = new Uint8Array(0);
     private bindGroups = new Map<string, GPUBindGroup>();
     private observer: ResizeObserver;
     private rafId = 0;
@@ -1274,9 +1260,12 @@ export class AtmosphereRenderer {
             for (const key of this.bindGroups.keys()) if (key.startsWith('0:')) this.bindGroups.delete(key);
         }
         const bytesPerRow = Math.ceil(field.width / 256) * 256;
-        const upload = new Uint8Array(bytesPerRow * field.height);
+        const uploadSize = bytesPerRow * field.height;
+        if (this.densityUpload.length !== uploadSize) this.densityUpload = new Uint8Array(uploadSize);
+        const upload = this.densityUpload;
         for (let y = 0; y < field.height; y++)
-            upload.set(field.data.subarray(y * field.width, (y + 1) * field.width), y * bytesPerRow);
+            for (let x = 0; x < field.width; x++)
+                upload[y * bytesPerRow + x] = Math.round(field.data[y * field.width + x] * 255);
         this.device.queue.writeTexture(
             { texture: this.densityTexture! },
             upload,

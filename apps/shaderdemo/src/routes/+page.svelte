@@ -198,9 +198,9 @@
                 cursorDensityField.addStrokePoint(
                     cursorState.x,
                     cursorState.y,
-                    options.parameters.cursorRadius,
-                    options.parameters.cursorFalloff,
-                    options.parameters.cursorDensityPressureBuildUp,
+                    options.parameters.cursorDensityRadius,
+                    options.parameters.cursorDensitySoftness,
+                    options.parameters.cursorDensityBuildUp,
                 );
             } else if (depositDensity) cursorDensityField.endStroke(false);
         }
@@ -393,7 +393,7 @@
                 }
                 const rect = canvas.getBoundingClientRect();
                 resizeCursorDensity(rect);
-                const densityTick = cursorDensityField.tick(dt, options.parameters.cursorDensityPressureDecay);
+                const densityTick = cursorDensityField.tick(dt, options.parameters.cursorDensityDecay);
                 if (densityTick.changed) renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
             }
             cursorTime = now;

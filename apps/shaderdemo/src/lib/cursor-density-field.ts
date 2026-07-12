@@ -3,12 +3,12 @@ export interface CursorDensityFieldSnapshot {
     readonly height: number;
     /** Incremented whenever dimensions or texels change. */
     readonly version: number;
-    /** Single-channel, row-major, top-left-origin R8 texels. */
-    readonly data: Uint8Array;
+    /** Single-channel, row-major, top-left-origin linear density. Quantized only for GPU upload. */
+    readonly data: Float32Array;
 }
 
-const TARGET_ROWS = 128;
-const MAX_COLUMNS = 384;
+const TARGET_ROWS = 512;
+const MAX_COLUMNS = 1024;
 
 interface StrokePoint {
     x: number;
@@ -20,7 +20,7 @@ export class CursorDensityField {
     width = 1;
     height = TARGET_ROWS;
     version = 0;
-    private data = new Uint8Array(this.width * this.height);
+    private density = new Float32Array(this.width * this.height);
     private coverage = new Float32Array(this.width * this.height);
     private touched: number[] = [];
     private active = false;
@@ -32,7 +32,7 @@ export class CursorDensityField {
         if (width === this.width && this.height === TARGET_ROWS) return false;
         this.width = width;
         this.height = TARGET_ROWS;
-        this.data = new Uint8Array(width * TARGET_ROWS);
+        this.density = new Float32Array(width * TARGET_ROWS);
         this.coverage = new Float32Array(width * TARGET_ROWS);
         this.touched = [];
         this.active = false;
@@ -50,13 +50,13 @@ export class CursorDensityField {
 
     private commitCoverage(buildUp: number): boolean {
         let changed = false;
-        const increment = 255 * Math.min(1, buildUp);
+        const increment = Math.min(1, buildUp);
         for (const index of this.touched) {
-            const before = this.data[index];
-            const after = Math.min(255, before + Math.round(increment * this.coverage[index]));
+            const before = this.density[index];
+            const after = Math.min(1, before + increment * this.coverage[index]);
             this.coverage[index] = 0;
             if (after !== before) {
-                this.data[index] = after;
+                this.density[index] = after;
                 changed = true;
             }
         }
@@ -73,7 +73,11 @@ export class CursorDensityField {
         if (![x, y, radius, falloff, buildUp].every(Number.isFinite) || radius <= 0 || buildUp <= 0) return false;
         const point = { x, y };
         const last = this.stroke[this.stroke.length - 1];
-        if (!last || (last.x === x && last.y === y)) this.rasterCapsule(point, point, radius, falloff);
+        if (!last) {
+            this.stroke.push(point);
+            return false;
+        }
+        if (last.x === x && last.y === y) return false;
         else if (this.stroke.length === 1) this.rasterCurve(last, point, point, radius, falloff, false);
         else {
             const prior = this.stroke[this.stroke.length - 2];
@@ -140,7 +144,7 @@ export class CursorDensityField {
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const lengthSquared = dx * dx + dy * dy;
-        const exponent = Math.max(0.01, falloff);
+        const softness = Math.max(0, Math.min(1, falloff));
         for (let py = minY; py <= maxY; py++) {
             const qy = ((py + 0.5) / this.height) * 2 - 1;
             for (let px = minX; px <= maxX; px++) {
@@ -150,7 +154,9 @@ export class CursorDensityField {
                     : 0;
                 const segmentDistance = Math.hypot(qx - (a.x + projection * dx), qy - (a.y + projection * dy));
                 if (segmentDistance >= radius) continue;
-                const value = Math.pow(1 - segmentDistance / radius, exponent);
+                const edgeStart = 1 - softness;
+                const t = Math.max(0, Math.min(1, (1 - segmentDistance / radius) / Math.max(softness, 0.001)));
+                const value = segmentDistance / radius <= edgeStart ? 1 : t * t * (3 - 2 * t);
                 const dataIndex = py * this.width + px;
                 if (value > this.coverage[dataIndex]) {
                     if (this.coverage[dataIndex] === 0) this.touched.push(dataIndex);
@@ -167,12 +173,12 @@ export class CursorDensityField {
         const multiplier = Math.exp(-decayRate * dt);
         let changed = false;
         let active = false;
-        for (let index = 0; index < this.data.length; index++) {
-            const before = this.data[index];
+        for (let index = 0; index < this.density.length; index++) {
+            const before = this.density[index];
             if (!before) continue;
-            const after = Math.floor(before * multiplier);
+            const after = before * multiplier < 1e-6 ? 0 : before * multiplier;
             if (after !== before) {
-                this.data[index] = after;
+                this.density[index] = after;
                 changed = true;
             }
             if (after) active = true;
@@ -183,6 +189,6 @@ export class CursorDensityField {
     }
 
     snapshot(): CursorDensityFieldSnapshot {
-        return { width: this.width, height: this.height, version: this.version, data: this.data };
+        return { width: this.width, height: this.height, version: this.version, data: this.density };
     }
 }

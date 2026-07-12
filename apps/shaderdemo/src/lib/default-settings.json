@@ -166,7 +166,16 @@
             "scanlineAmount": 0.004,
             "scanlineFrequency": 93,
             "scanlineSpeed": 0,
-            "godRaysFalloff": 2
+            "godRaysFalloff": 2,
+            "cursorEnabled": 0,
+            "cursorDensityPressureEnabled": 1,
+            "cursorDensityRadius": 0.22,
+            "cursorDensitySoftness": 0.65,
+            "cursorDensityStrength": 1,
+            "cursorDensityBuildUp": 0.04,
+            "cursorDensityDecay": 0.7,
+            "cursorDensityBulgeStrength": 0.18,
+            "cursorDensityBulgeFalloff": 1.5
         },
         "colour": [
             {

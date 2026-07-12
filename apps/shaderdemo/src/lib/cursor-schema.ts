@@ -5,101 +5,44 @@ export type CursorParameter = {
     max: number;
     step: number;
     default: number;
-    /** CPU-side interaction setting; excluded from the shared shader uniform layout. */
+    /** CPU-side texture setting; excluded from the shared shader uniform layout. */
     cpuOnly?: boolean;
 };
-const p = (key: string, label: string, min: number, max: number, step: number, value: number): CursorParameter => ({
-    key,
-    label,
-    min,
-    max,
-    step,
-    default: value,
-});
-const enabled = (key: string) => p(key, 'Enabled', 0, 1, 1, 0);
+const p = (
+    key: string,
+    label: string,
+    min: number,
+    max: number,
+    step: number,
+    value: number,
+    cpuOnly = false,
+): CursorParameter => ({ key, label, min, max, step, default: value, cpuOnly });
 
-export const CURSOR_COMMON_SCHEMA = [
-    p('cursorEnabled', 'Cursor interaction', 0, 1, 1, 0),
-    p('cursorRadius', 'Radius', 0.01, 2, 0.01, 0.3),
-    p('cursorFalloff', 'Falloff', 0.1, 8, 0.1, 2),
-    p('cursorSpeedReference', 'Speed reference', 0.01, 10, 0.01, 1),
-    p('cursorTrailLength', 'Trail length', 1, 16, 1, 16),
-    p('cursorTrailSpacing', 'Trail spacing', 0.001, 0.25, 0.001, 0.015),
-    p('cursorTrailDecay', 'Trail decay', 0.05, 10, 0.05, 2),
-] as const;
+export const CURSOR_COMMON_SCHEMA = [p('cursorEnabled', 'Cursor interaction', 0, 1, 1, 0)] as const;
 
+/** The sole cursor effect. Radius, softness, build-up and decay only affect the persistent CPU texture. */
 export const CURSOR_EFFECT_GROUPS = [
-    ['Fluid push', 'cursorFluidPushEnabled', [p('cursorFluidPushStrength', 'Strength', -3, 3, 0.01, 1)]],
-    ['Vortex', 'cursorVortexEnabled', [p('cursorVortexStrength', 'Strength', -6, 6, 0.01, 1)]],
-    ['Attractor', 'cursorAttractorEnabled', [p('cursorAttractorStrength', 'Strength', -3, 3, 0.01, 1)]],
-    ['Repulsor', 'cursorRepulsorEnabled', [p('cursorRepulsorStrength', 'Strength', -3, 3, 0.01, 1)]],
-    ['Depth pressure', 'cursorDepthPressureEnabled', [p('cursorDepthPressureStrength', 'Strength', -3, 3, 0.01, 1)]],
-    ['Scale lens', 'cursorScaleLensEnabled', [p('cursorScaleLensStrength', 'Strength', -2, 2, 0.01, 0.5)]],
-    [
-        'Turbulence injection',
-        'cursorTurbulenceEnabled',
-        [
-            p('cursorTurbulenceStrength', 'Strength', 0, 3, 0.01, 0.5),
-            p('cursorTurbulenceScale', 'Scale', 0.1, 20, 0.1, 4),
-        ],
-    ],
-    ['Directional alignment', 'cursorAlignmentEnabled', [p('cursorAlignmentStrength', 'Strength', -3, 3, 0.01, 1)]],
     [
         'Density pressure',
         'cursorDensityPressureEnabled',
         [
-            p('cursorDensityPressureStrength', 'Strength', -3, 3, 0.01, 1),
-            { ...p('cursorDensityPressureBuildUp', 'Build-up', 0.001, 1, 0.001, 0.08), cpuOnly: true },
-            { ...p('cursorDensityPressureDecay', 'Decay', 0.01, 10, 0.01, 2), cpuOnly: true },
-        ],
-    ],
-    [
-        'Elastic wake',
-        'cursorElasticWakeEnabled',
-        [
-            p('cursorElasticWakeStrength', 'Strength', -3, 3, 0.01, 1),
-            p('cursorElasticWakeFrequency', 'Frequency', 0.1, 30, 0.1, 8),
-            p('cursorElasticWakeDamping', 'Damping', 0.01, 10, 0.01, 2),
-        ],
-    ],
-    ['Bulge', 'cursorBulgeEnabled', [p('cursorBulgeStrength', 'Strength', -2, 2, 0.01, 0.5)]],
-    [
-        'Directional warp',
-        'cursorDirectionalWarpEnabled',
-        [p('cursorDirectionalWarpStrength', 'Strength', -3, 3, 0.01, 1)],
-    ],
-    [
-        'Brightness / density gradient',
-        'cursorBrightnessGradientEnabled',
-        [p('cursorBrightnessGradientStrength', 'Strength', -3, 3, 0.01, 1)],
-    ],
-    [
-        'Click displacement',
-        'cursorClickEnabled',
-        [
-            p('cursorClickDisplacement', 'Displacement', -3, 3, 0.01, 1),
-            p('cursorClickDensityRipple', 'Density ripple', -3, 3, 0.01, 1),
-            p('cursorClickRadius', 'Radius', 0.01, 2, 0.01, 0.4),
-            p('cursorClickFrequency', 'Frequency', 0.1, 30, 0.1, 8),
-            p('cursorClickSpeed', 'Speed', 0.01, 10, 0.01, 1),
-            p('cursorClickDecay', 'Decay', 0.01, 10, 0.01, 2),
-            p('cursorClickPolarity', 'Polarity', -1, 1, 1, 1),
+            p('cursorDensityRadius', 'Radius', 0.02, 1, 0.01, 0.22, true),
+            p('cursorDensitySoftness', 'Softness', 0, 1, 0.01, 0.65, true),
+            p('cursorDensityStrength', 'Density strength', -3, 3, 0.01, 1),
+            p('cursorDensityBuildUp', 'Build-up', 0.001, 0.25, 0.001, 0.04, true),
+            p('cursorDensityDecay', 'Decay', 0.01, 5, 0.01, 0.7, true),
+            p('cursorDensityBulgeStrength', 'Bulge strength', -1, 1, 0.01, 0.18),
+            p('cursorDensityBulgeFalloff', 'Bulge falloff', 0.25, 4, 0.05, 1.5),
         ],
     ],
 ] as const;
 
+const enabled = (key: string): CursorParameter => p(key, 'Enabled', 0, 1, 1, 1);
+const densityGroup = CURSOR_EFFECT_GROUPS[0];
 export const CURSOR_PARAMETER_SCHEMA = [
     ...CURSOR_COMMON_SCHEMA,
-    ...CURSOR_EFFECT_GROUPS.flatMap(([, toggle, values]) => [enabled(toggle), ...values]),
+    enabled(densityGroup[1]),
+    ...densityGroup[2],
 ] as CursorParameter[];
 export const CURSOR_PARAMETER_KEYS = CURSOR_PARAMETER_SCHEMA.map(({ key }) => key);
-/**
- * Stable shader ABI. Density build-up/decay run on the CPU texture, while three zero padding lanes
- * preserve the generated WGSL/GLSL indices used by Elastic wake and every following interaction.
- */
-const cursorUniformParameters = CURSOR_PARAMETER_SCHEMA.filter(({ cpuOnly }) => !cpuOnly);
-const densityStrengthIndex = cursorUniformParameters.findIndex(({ key }) => key === 'cursorDensityPressureStrength');
-const shaderPadding = (index: number): CursorParameter =>
-    p(`cursorShaderPadding${index}`, 'Shader padding', 0, 0, 1, 0);
-cursorUniformParameters.splice(densityStrengthIndex + 1, 0, shaderPadding(0), shaderPadding(1), shaderPadding(2));
-export const CURSOR_UNIFORM_PARAMETER_SCHEMA = cursorUniformParameters;
+export const CURSOR_UNIFORM_PARAMETER_SCHEMA = CURSOR_PARAMETER_SCHEMA.filter(({ cpuOnly }) => !cpuOnly);

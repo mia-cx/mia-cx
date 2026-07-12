@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { CursorDensityField } from './cursor-density-field';
 
-const maximum = (field: CursorDensityField) => Math.max(...field.snapshot().data);
+const maximum = (field: CursorDensityField) => field.snapshot().data.reduce((a, b) => Math.max(a, b), 0);
 
 describe('CursorDensityField', () => {
     it('uses about 128 rows and aspect-correct bounded columns', () => {
         const field = new CursorDensityField();
         field.resize(400, 200);
-        expect(field.snapshot()).toMatchObject({ width: 256, height: 128 });
+        expect(field.snapshot()).toMatchObject({ width: 1024, height: 512 });
         field.resize(10_000, 100);
-        expect(field.snapshot().width).toBe(384);
+        expect(field.snapshot().width).toBe(1024);
     });
 
     it('builds gradually per event and caps exactly', () => {
@@ -21,9 +21,9 @@ describe('CursorDensityField', () => {
         field.deposit(0, 0, 0.5, 2, 0.08);
         expect(maximum(field)).toBeGreaterThan(first);
         for (let index = 0; index < 100; index++) field.deposit(0, 0, 0.5, 2, 0.08);
-        expect(maximum(field)).toBe(255);
+        expect(maximum(field)).toBe(1);
         field.deposit(0, 0, 0.5, 2, 0.08);
-        expect(maximum(field)).toBe(255);
+        expect(maximum(field)).toBe(1);
     });
 
     it('commits overlapping curve subsegments once and makes end intensity-neutral', () => {
@@ -45,7 +45,7 @@ describe('CursorDensityField', () => {
         const { data, width, height } = field.snapshot();
         const at = (x: number, y: number) => data[y * width + x];
         expect(at(width / 2, height / 2)).toBeGreaterThan(at(width / 2 + 20, height / 2));
-        expect(at(width / 2 + 40, height / 2)).toBe(0);
+        expect(at(width / 2 + 140, height / 2)).toBe(0);
     });
 
     it('maps q.x in height units on wide fields', () => {
@@ -109,7 +109,7 @@ describe('CursorDensityField', () => {
         const { data, width, height } = field.snapshot();
         const row = Math.floor(height / 2);
         const profile = Array.from(data.slice(row * width + 20, row * width + width - 20));
-        expect(Math.min(...profile)).toBeGreaterThan(220);
+        expect(Math.min(...profile)).toBeGreaterThan(0.98);
         expect(Math.max(...profile) - Math.min(...profile)).toBeLessThanOrEqual(1);
     });
 
@@ -138,7 +138,7 @@ describe('CursorDensityField', () => {
         sample(-0.9, 0.6, -0.9, 0.6, -0.45, -0.1);
         sample(-0.45, -0.1, 0, -0.8, 0.45, -0.1);
         sample(0.45, -0.1, 0.9, 0.6, 0.9, 0.6);
-        expect(Math.min(...values)).toBeGreaterThan(200);
+        expect(Math.min(...values)).toBeGreaterThan(0.78);
     });
 
     it('uses MAX for retracing and separates ended strokes', () => {
@@ -149,7 +149,7 @@ describe('CursorDensityField', () => {
             field.addStrokePoint(0.7, -0.5, 0.1, 1);
             field.endStroke(true, 0.1, 1);
         }
-        expect(maximum(field)).toBeLessThanOrEqual(255);
+        expect(maximum(field)).toBeLessThanOrEqual(1);
         field.addStrokePoint(-0.7, 0.5, 0.1, 1);
         field.endStroke(false);
         const { data, width, height } = field.snapshot();

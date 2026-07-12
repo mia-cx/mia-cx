@@ -149,6 +149,7 @@ export class WebGL2Renderer implements RenderBackend {
     private densityWidth = 1;
     private densityHeight = 1;
     private densityVersion = -1;
+    private densityUpload = new Uint8Array(0);
     private vao: WebGLVertexArrayObject;
     private raf = 0;
     private pendingFence: PendingFence | null = null;
@@ -850,13 +851,17 @@ export class WebGL2Renderer implements RenderBackend {
     setCursorDensityField(field: CursorDensityFieldSnapshot) {
         if (field.version === this.densityVersion) return;
         const gl = this.gl;
+        const uploadSize = field.width * field.height;
+        if (this.densityUpload.length !== uploadSize) this.densityUpload = new Uint8Array(uploadSize);
+        const upload = this.densityUpload;
+        for (let i = 0; i < uploadSize; i++) upload[i] = Math.round(field.data[i] * 255);
         gl.bindTexture(gl.TEXTURE_2D, this.densityTexture);
         if (field.width !== this.densityWidth || field.height !== this.densityHeight) {
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, field.width, field.height, 0, gl.RED, gl.UNSIGNED_BYTE, field.data);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, field.width, field.height, 0, gl.RED, gl.UNSIGNED_BYTE, upload);
             this.densityWidth = field.width;
             this.densityHeight = field.height;
         } else {
-            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, field.width, field.height, gl.RED, gl.UNSIGNED_BYTE, field.data);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, field.width, field.height, gl.RED, gl.UNSIGNED_BYTE, upload);
         }
         this.boundTextures.clear();
         this.densityVersion = field.version;

@@ -47,10 +47,8 @@ import defaultSettingsFixture from './default-settings.json';
 describe('field configuration', () => {
     it('samples persistent density in top-left screen UV without point-list density', () => {
         expect(BASE_SHADER_SOURCE).toContain('@group(0) @binding(2) var densityField:texture_2d<f32>');
-        expect(BASE_SHADER_SOURCE).toContain(
-            'densityPressureEnvelope=textureSample(densityField,densitySampler,pos.xy/u.resolution).r',
-        );
-        expect(BASE_SHADER_SOURCE).toContain('cursorDensity+=cp(25u)*densityPressureEnvelope');
+        expect(BASE_SHADER_SOURCE).toContain('densityPressureEnvelope=textureSample(densityField,densitySampler,uv).r');
+        expect(BASE_SHADER_SOURCE).toContain('cursorDensity=cp(2u)*densityPressureEnvelope');
         expect(BASE_SHADER_SOURCE).not.toContain('headEnergy');
         expect(BASE_SHADER_SOURCE).not.toContain('densityPressureEnvelope=max');
         expect(BASE_SHADER_SOURCE.indexOf('natural+=cursorDensity')).toBeLessThan(
@@ -295,7 +293,7 @@ describe('field configuration', () => {
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
         expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(209);
+        expect(PARAMETER_SCHEMA).toHaveLength(172);
         expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(PARAMETER_SCHEMA.length);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
