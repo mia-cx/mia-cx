@@ -2,6 +2,7 @@ import type { GpuTimingStats, RenderOptions } from './renderer';
 import type { FrameRollingSummary } from './telemetry';
 import type { CursorSnapshot } from './cursor';
 import type { CursorDensityFieldSnapshot } from './cursor-density-field';
+import type { CursorDensityUpdate } from './cursor-density-gpu';
 
 export type RendererBackendName = 'webgpu' | 'webgl2';
 
@@ -14,6 +15,9 @@ export interface RenderBackend {
     setOptions(options: RenderOptions): void;
     setCursorState(state: CursorSnapshot): void;
     setCursorDensityField(field: CursorDensityFieldSnapshot): void;
+    /** GPU-resident on WebGPU; WebGL2 callers retain setCursorDensityField. */
+    queueCursorDensityUpdate?(update: CursorDensityUpdate): void;
+    resetCursorDensityStroke?(): void;
     setPaused(paused: boolean): void;
     invalidate(): void;
     destroy(): void;

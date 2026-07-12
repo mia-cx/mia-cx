@@ -33,7 +33,7 @@ export interface FrameRollingSummary {
 
 export type GpuMeanStats = Pick<
     GpuTimingStats,
-    'totalMs' | 'fieldMs' | 'colourMs' | 'postMs' | 'octavesMs' | 'presentMs'
+    'totalMs' | 'fieldMs' | 'colourMs' | 'postMs' | 'octavesMs' | 'presentMs' | 'cursorMs'
 >;
 export interface GpuRollingSummary {
     windows: Record<(typeof GPU_WINDOWS_MS)[number], GpuMeanStats | undefined>;
@@ -146,7 +146,7 @@ export class GpuTelemetry {
             const samples = this.samples.current(nowMs, windowMs).map(({ value }) => value);
             if (samples.length) {
                 const mean = (key: keyof GpuMeanStats) =>
-                    samples.reduce((sum, sample) => sum + sample[key], 0) / samples.length;
+                    samples.reduce((sum, sample) => sum + (sample[key] ?? 0), 0) / samples.length;
                 windows[windowMs] = {
                     totalMs: mean('totalMs'),
                     fieldMs: mean('fieldMs'),
@@ -154,6 +154,7 @@ export class GpuTelemetry {
                     postMs: mean('postMs'),
                     octavesMs: mean('octavesMs'),
                     presentMs: mean('presentMs'),
+                    cursorMs: mean('cursorMs'),
                 };
             }
         }

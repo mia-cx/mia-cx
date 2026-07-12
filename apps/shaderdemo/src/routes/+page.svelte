@@ -189,7 +189,13 @@
     function sendCursor() {
         renderer?.setCursorState(cursorState);
     }
+    function resetDensityStroke() {
+        densityPoints = [];
+        cursorDensityField.endStroke(false);
+        renderer?.resetCursorDensityStroke?.();
+    }
     function resizeCursorDensity(rect: DOMRect) {
+        if (renderer?.backend === 'webgpu') return;
         if (cursorDensityField.resize(rect.width, rect.height))
             renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
     }
@@ -206,8 +212,7 @@
             ) {
                 densityPoints.push({ x: cursorState.x, y: cursorState.y, timeStamp: sample.timeStamp });
             } else if (depositDensity) {
-                densityPoints = [];
-                cursorDensityField.endStroke(false);
+                resetDensityStroke();
             }
         }
         sendCursor();
@@ -224,8 +229,7 @@
         sendCursor();
     }
     function pointerLeave() {
-        densityPoints = [];
-        cursorDensityField.endStroke(false);
+        resetDensityStroke();
         cursorState.leave();
         sendCursor();
     }
@@ -326,6 +330,7 @@
         setExpanded(item.id, true);
     }
     function setParameter(key: ParameterKey, value: number) {
+        if ((key === 'cursorEnabled' || key === 'cursorDensityPressureEnabled') && value === 0) resetDensityStroke();
         options = { ...options, parameters: { ...options.parameters, [key]: value } };
         update();
     }
@@ -358,8 +363,10 @@
                 renderer = instance;
                 instance.setCursorState(cursorState);
                 const rect = canvas.getBoundingClientRect();
-                cursorDensityField.resize(rect.width, rect.height);
-                instance.setCursorDensityField?.(cursorDensityField.snapshot());
+                if (instance.backend === 'webgl2') {
+                    cursorDensityField.resize(rect.width, rect.height);
+                    instance.setCursorDensityField(cursorDensityField.snapshot());
+                }
                 backendWarnings = [
                     ...warnings,
                     ...(instance.unsupportedEffects?.length
@@ -406,30 +413,47 @@
                 densityPoints = [];
                 const inputMs = performance.now() - inputStart;
                 const rasterStart = performance.now();
-                const painted = cursorDensityField.addStrokeBatch(
-                    batch,
-                    options.parameters.cursorDensityRadius,
-                    options.parameters.cursorDensityPressureFalloff,
-                    options.parameters.cursorDensityBuildUp,
-                );
+                const gpuPath = renderer?.backend === 'webgpu';
+                const painted = gpuPath
+                    ? false
+                    : cursorDensityField.addStrokeBatch(
+                          batch,
+                          options.parameters.cursorDensityRadius,
+                          options.parameters.cursorDensityPressureFalloff,
+                          options.parameters.cursorDensityBuildUp,
+                      );
                 const rasterMs = performance.now() - rasterStart;
                 const decayStart = performance.now();
-                const densityTick = cursorDensityField.tick(dt, options.parameters.cursorDensityDecay);
+                const densityTick = gpuPath
+                    ? { changed: false, active: false }
+                    : cursorDensityField.tick(dt, options.parameters.cursorDensityDecay);
                 const decayMs = performance.now() - decayStart;
                 const uploadStart = performance.now();
                 if (painted || densityTick.changed) renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
-                const uploadSubmitMs = performance.now() - uploadStart;
-                const snapshot = cursorDensityField.snapshot();
-                cursorCpuTelemetry.record(now, {
-                    inputMs,
-                    rasterMs,
-                    decayMs,
-                    uploadSubmitMs,
-                    totalMs: performance.now() - totalStart,
-                    pointCount,
-                    width: snapshot.width,
-                    height: snapshot.height,
+                renderer?.queueCursorDensityUpdate?.({
+                    points: batch,
+                    cssWidth: rect.width,
+                    cssHeight: rect.height,
+                    dt,
+                    radius: options.parameters.cursorDensityRadius,
+                    falloff: options.parameters.cursorDensityPressureFalloff,
+                    buildUpSeconds: options.parameters.cursorDensityBuildUp,
+                    decayRate: options.parameters.cursorDensityDecay,
                 });
+                const uploadSubmitMs = performance.now() - uploadStart;
+                if (!gpuPath) {
+                    const snapshot = cursorDensityField.snapshot();
+                    cursorCpuTelemetry.record(now, {
+                        inputMs,
+                        rasterMs,
+                        decayMs,
+                        uploadSubmitMs,
+                        totalMs: performance.now() - totalStart,
+                        pointCount,
+                        width: snapshot.width,
+                        height: snapshot.height,
+                    });
+                }
             }
             cursorTime = now;
             cursorFrame = requestAnimationFrame(animateCursor);
@@ -438,8 +462,7 @@
         const visibility = () => {
             renderer?.setPaused(document.hidden || paused);
             if (document.hidden) {
-                densityPoints = [];
-                cursorDensityField.endStroke(false);
+                resetDensityStroke();
                 cursorState.leave();
                 sendCursor();
             }
@@ -448,7 +471,7 @@
         document.addEventListener('visibilitychange', visibility);
         return () => {
             disposed = true;
-            cursorDensityField.endStroke(false);
+            resetDensityStroke();
             document.removeEventListener('visibilitychange', visibility);
             cancelAnimationFrame(cursorFrame);
             renderer?.destroy();
@@ -505,7 +528,9 @@
                             gpuRolling.windows[5000]?.colourMs,
                         )} · post {number(gpuRolling.windows[5000]?.postMs)} · octaves {number(
                             gpuRolling.windows[5000]?.octavesMs,
-                        )} · present {number(gpuRolling.windows[5000]?.presentMs)}
+                        )} · cursor {number(gpuRolling.windows[5000]?.cursorMs)} · present {number(
+                            gpuRolling.windows[5000]?.presentMs,
+                        )}
                         {#if gpuRolling.perPass5s.length}
                             <details class="per-effect-timings">
                                 <summary>Per-effect timings</summary>

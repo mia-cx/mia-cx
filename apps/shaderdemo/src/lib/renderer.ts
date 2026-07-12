@@ -5,6 +5,14 @@ import defaultSettingsFixture from './default-settings.json';
 import { CURSOR_PARAMETER_SCHEMA } from './cursor-schema';
 import type { CursorSnapshot } from './cursor';
 import type { CursorDensityFieldSnapshot } from './cursor-density-field';
+import {
+    DENSITY_EXTINCTION_THRESHOLD,
+    GpuDensityGeometry,
+    MAX_GPU_DENSITY_SEGMENTS,
+    appendBoundedDensitySegments,
+    densityMapSize,
+    type CursorDensityUpdate,
+} from './cursor-density-gpu';
 import { CURSOR_UNIFORM_BYTES, packCursorUniform } from './cursor-uniform';
 import {
     leadingAdjustmentRegion,
@@ -54,7 +62,12 @@ export const FIELD_PARAMETER_SCHEMA = withCanonicalDefaults(FIELD_PARAMETER_SCHE
 export const OCTAVE_COUNT = 5;
 export const GPU_TIMING_SAMPLE_INTERVAL = 30;
 export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 33;
-const GPU_QUERY_COUNT = MAX_RENDER_PASSES * 2;
+export const MAX_CURSOR_DENSITY_PASSES = 2;
+export const MAX_TIMESTAMPED_PASSES = MAX_RENDER_PASSES + MAX_CURSOR_DENSITY_PASSES;
+const GPU_QUERY_COUNT = MAX_TIMESTAMPED_PASSES * 2;
+const PIPELINE_COUNT = 15;
+const CURSOR_DECAY_PIPELINE = 13;
+const CURSOR_PAINT_PIPELINE = 14;
 export const GPU_FRAME_TIMING_RING_SIZE = 3;
 type FrameTimingSlot = {
     resolve: GPUBuffer;
@@ -70,6 +83,7 @@ export interface GpuTimingStats {
     postMs: number;
     octavesMs: number;
     presentMs: number;
+    cursorMs?: number;
     /** Legacy aliases retained for consumers of the original telemetry API. */
     baseMs: number;
     blurMs: number;
@@ -99,6 +113,7 @@ export function aggregateGpuTimestamps(timestamps: ArrayLike<bigint>, labels: re
     const sum = (...prefixes: string[]) =>
         passes.reduce((n, pass) => n + (prefixes.some((prefix) => pass.label.startsWith(prefix)) ? pass.ms : 0), 0);
     const fieldMs = sum('base', 'field-materialize');
+    const cursorMs = sum('CURSOR:');
     const colourMs = sum('colour:');
     const postMs = sum('post:');
     const blurMs = sum('blur');
@@ -111,6 +126,7 @@ export function aggregateGpuTimestamps(timestamps: ArrayLike<bigint>, labels: re
         postMs,
         octavesMs: blurMs + octaveMs,
         presentMs,
+        cursorMs,
         baseMs: fieldMs,
         blurMs,
         octaveMs,
@@ -907,6 +923,20 @@ export const POST_KIND_INDEX: Record<PostEffectKind, number> = {
     'scanline-displacement': 24,
 };
 
+export const CURSOR_DENSITY_FORMAT: GPUTextureFormat = 'r16float';
+export const CURSOR_DECAY_SHADER_SOURCE = /* wgsl */ `
+struct Params { decay:f32, pad:vec3f }; @group(0) @binding(0) var<uniform> p:Params;
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
+@vertex fn vs(@builtin(vertex_index)i:u32)->@builtin(position) vec4f { let q=array(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));return vec4f(q[i],0,1); }
+@fragment fn fs(@builtin(position) q:vec4f)->@location(0) f32 { return textureSample(src,samp,q.xy/vec2f(textureDimensions(src))).r*p.decay; }`;
+export const CURSOR_PAINT_SHADER_SOURCE = /* wgsl */ `
+struct Segment { a:vec2f,b:vec2f,radius:f32,strength:f32,falloff:f32,pad:f32 };
+struct PaintParams { aspect:f32,pad:vec3f }; @group(0) @binding(0) var<uniform> params:PaintParams;
+@group(0) @binding(1) var<storage,read> segments:array<Segment>;
+struct Out { @builtin(position) position:vec4f,@location(0) q:vec2f,@location(1) @interpolate(flat) a:vec2f,@location(2) @interpolate(flat) b:vec2f,@location(3) @interpolate(flat) values:vec3f };
+@vertex fn vs(@builtin(vertex_index)i:u32,@builtin(instance_index)n:u32)->Out { let s=segments[n];let corners=array(vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(-1,1),vec2f(1,-1),vec2f(1,1));let lo=min(s.a,s.b)-s.radius;let hi=max(s.a,s.b)+s.radius;let q=mix(lo,hi,(corners[i]+1.)*.5);var o:Out;o.position=vec4f(q.x/params.aspect,q.y,0,1);o.q=q;o.a=s.a;o.b=s.b;o.values=vec3f(s.radius,s.strength,s.falloff);return o; }
+@fragment fn fs(i:Out)->@location(0) f32 { let d=i.b-i.a;let t=select(0.,clamp(dot(i.q-i.a,d)/dot(d,d),0.,1.),dot(d,d)>0.);let distance=length(i.q-(i.a+t*d))/i.values.x;if(distance>=1.){discard;}let inverseSquare=1./(1.+12.*max(i.values.z,0.)*distance*distance);let edgeT=clamp((distance-.92)/.08,0.,1.);let edge=1.-edgeT*edgeT*(3.-2.*edgeT);return i.values.y*inverseSquare*edge; }`;
+
 export class AtmosphereRenderer {
     readonly backend = 'webgpu' as const;
     private device?: GPUDevice;
@@ -926,13 +956,21 @@ export class AtmosphereRenderer {
     private datamoshWasActive = false;
     private buffers: GPUBuffer[] = [];
     private cursorBuffer?: GPUBuffer;
-    private densityTexture?: GPUTexture;
-    private densityView?: GPUTextureView;
+    private densityTextures: GPUTexture[] = [];
+    private densityViews: GPUTextureView[] = [];
+    private densityActive = 0;
     private densitySampler?: GPUSampler;
     private densityWidth = 1;
     private densityHeight = 1;
-    private densityVersion = -1;
-    private densityUpload = new Uint8Array(0);
+    private densityGeometry = new GpuDensityGeometry();
+    private densitySegments: ReturnType<GpuDensityGeometry['add']> = [];
+    private densityDecay = 1;
+    private densityMayBeNonzero = false;
+    private densityMaxEstimate = 0;
+    private densityDroppedSegments = 0;
+    private densitySegmentBuffer?: GPUBuffer;
+    private densityParamsBuffer?: GPUBuffer;
+    private densityPaintParamsBuffer?: GPUBuffer;
     private bindGroups = new Map<string, GPUBindGroup>();
     private observer: ResizeObserver;
     private rafId = 0;
@@ -958,7 +996,10 @@ export class AtmosphereRenderer {
     private lastFrameTimingAt = 0;
     private adaptiveGeneration = 0;
     private readonly visibilityHandler = () => {
-        if (document.hidden) this.resetAdaptive(performance.now());
+        if (document.hidden) {
+            this.resetAdaptive(performance.now());
+            this.resetCursorDensityStroke();
+        }
     };
     private renderedFrames = 0;
     private gpuStatsCallback?: (stats: GpuTimingStats | null) => void;
@@ -1027,6 +1068,38 @@ export class AtmosphereRenderer {
             make(LUT_SHADER_SOURCE, 'rgba16float'),
             make(COPY_SHADER_SOURCE, POST_TEXTURE_FORMAT),
         ]);
+        for (const [code, blend] of [
+            [CURSOR_DECAY_SHADER_SOURCE, false],
+            [CURSOR_PAINT_SHADER_SOURCE, true],
+        ] as const) {
+            const module = self.device.createShaderModule({ code });
+            const info = await module.getCompilationInfo();
+            const errors = info.messages.filter((message) => message.type === 'error');
+            if (errors.length) throw new Error(errors.map((message) => message.message).join('\n'));
+            self.pipelines.push(
+                self.device.createRenderPipeline({
+                    layout: 'auto',
+                    vertex: { module, entryPoint: 'vs' },
+                    fragment: {
+                        module,
+                        entryPoint: 'fs',
+                        targets: [
+                            {
+                                format: CURSOR_DENSITY_FORMAT,
+                                ...(blend
+                                    ? {
+                                          blend: {
+                                              color: { operation: 'max', srcFactor: 'one', dstFactor: 'one' },
+                                              alpha: { operation: 'max', srcFactor: 'one', dstFactor: 'one' },
+                                          },
+                                      }
+                                    : {}),
+                            },
+                        ],
+                    },
+                }),
+            );
+        }
         self.buffers = Array.from({ length: MAX_RENDER_PASSES }, () =>
             self.device!.createBuffer({
                 size: UNIFORM_FLOATS * 4,
@@ -1039,18 +1112,19 @@ export class AtmosphereRenderer {
         });
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
         self.densitySampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-        self.densityTexture = self.device.createTexture({
-            size: [1, 1],
-            format: 'r8unorm',
-            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        self.densitySegmentBuffer = self.device.createBuffer({
+            size: MAX_GPU_DENSITY_SEGMENTS * 32,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         });
-        self.densityView = self.densityTexture.createView();
-        self.device.queue.writeTexture(
-            { texture: self.densityTexture },
-            new Uint8Array(256),
-            { bytesPerRow: 256 },
-            [1, 1],
-        );
+        self.densityParamsBuffer = self.device.createBuffer({
+            size: 16,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        self.densityPaintParamsBuffer = self.device.createBuffer({
+            size: 16,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        self.recreateDensityTextures(1, 1);
         self.adjustmentTexture = self.device.createTexture({
             dimension: '3d',
             size: [ADJUSTMENT_LUT_SIZE, ADJUSTMENT_LUT_SIZE, ADJUSTMENT_LUT_SIZE],
@@ -1105,6 +1179,7 @@ export class AtmosphereRenderer {
     }
 
     resize() {
+        this.resetCursorDensityStroke();
         const rect = this.canvas.getBoundingClientRect();
         const size = renderSize(rect.width, rect.height, devicePixelRatio, this.options.dprCap);
         if (this.canvas.width !== size.width || this.canvas.height !== size.height) {
@@ -1236,35 +1311,66 @@ export class AtmosphereRenderer {
         this.cursorState = state;
         this.invalidate();
     }
-    setCursorDensityField(field: CursorDensityFieldSnapshot) {
-        if (!this.device || field.version === this.densityVersion) return;
-        if (field.width !== this.densityWidth || field.height !== this.densityHeight) {
-            this.densityTexture?.destroy();
-            this.densityTexture = this.device.createTexture({
-                size: [field.width, field.height],
-                format: 'r8unorm',
-                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-            });
-            this.densityView = this.densityTexture.createView();
-            this.densityWidth = field.width;
-            this.densityHeight = field.height;
-            for (const key of this.bindGroups.keys()) if (key.startsWith('0:')) this.bindGroups.delete(key);
-        }
-        const bytesPerRow = Math.ceil(field.width / 256) * 256;
-        const uploadSize = bytesPerRow * field.height;
-        if (this.densityUpload.length !== uploadSize) this.densityUpload = new Uint8Array(uploadSize);
-        const upload = this.densityUpload;
-        for (let y = 0; y < field.height; y++)
-            for (let x = 0; x < field.width; x++)
-                upload[y * bytesPerRow + x] = Math.round(field.data[y * field.width + x] * 255);
-        this.device.queue.writeTexture(
-            { texture: this.densityTexture! },
-            upload,
-            { bytesPerRow, rowsPerImage: field.height },
-            [field.width, field.height],
+    /** CPU snapshots are deliberately ignored by the WebGPU backend. */
+    setCursorDensityField(_field: CursorDensityFieldSnapshot) {}
+    private recreateDensityTextures(width: number, height: number) {
+        if (!this.device) return;
+        this.densityTextures.forEach((texture) => texture.destroy());
+        const usage = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT;
+        this.densityTextures = Array.from({ length: 2 }, () =>
+            this.device!.createTexture({ size: [width, height], format: CURSOR_DENSITY_FORMAT, usage }),
         );
-        this.densityVersion = field.version;
-        this.invalidate();
+        this.densityViews = this.densityTextures.map((texture) => texture.createView());
+        const encoder = this.device.createCommandEncoder();
+        for (const view of this.densityViews)
+            encoder
+                .beginRenderPass({
+                    colorAttachments: [
+                        { view, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
+                    ],
+                })
+                .end();
+        this.device.queue.submit([encoder.finish()]);
+        this.densityWidth = width;
+        this.densityHeight = height;
+        this.densityActive = 0;
+        this.densityMayBeNonzero = false;
+        this.densityMaxEstimate = 0;
+        this.densityDecay = 1;
+        this.densitySegments = [];
+        this.densityGeometry.reset();
+        this.bindGroups.clear();
+    }
+    resetCursorDensityStroke() {
+        this.densityGeometry.reset();
+    }
+    queueCursorDensityUpdate(update: CursorDensityUpdate) {
+        if (this.destroyed) return;
+        const finite = (value: number, fallback = 0) => (Number.isFinite(value) ? value : fallback);
+        const size = densityMapSize(finite(update.cssWidth, 1), finite(update.cssHeight, 1));
+        if (size.width !== this.densityWidth || size.height !== this.densityHeight) {
+            this.recreateDensityTextures(size.width, size.height);
+            this.densityGeometry.reset();
+        }
+        if (update.resetStroke) this.densityGeometry.reset();
+        const segments = this.densityGeometry.add(
+            update.points,
+            finite(update.radius),
+            finite(update.falloff),
+            finite(update.buildUpSeconds),
+        );
+        if (segments.length) {
+            this.densityDroppedSegments += appendBoundedDensitySegments(this.densitySegments, segments);
+            this.densityMaxEstimate = Math.max(this.densityMaxEstimate, ...segments.map((segment) => segment.strength));
+        }
+        const dt = Math.max(0, finite(update.dt));
+        const decayRate = Math.max(0, finite(update.decayRate));
+        if (this.densityMayBeNonzero && dt > 0 && decayRate > 0) {
+            const decay = Math.exp(-decayRate * Math.min(dt, 86_400));
+            this.densityDecay *= decay;
+            this.densityMaxEstimate *= decay;
+        }
+        if (segments.length || this.densityDecay < 1) this.invalidate();
     }
     setPaused(value: boolean) {
         if (value === this.paused) return;
@@ -1351,7 +1457,7 @@ export class AtmosphereRenderer {
             !c ||
             buffers.length < MAX_RENDER_PASSES ||
             !s ||
-            this.pipelines.length < 13 ||
+            this.pipelines.length < PIPELINE_COUNT ||
             this.textures.length < 7 ||
             this.textureViews.length < 7
         )
@@ -1405,7 +1511,7 @@ export class AtmosphereRenderer {
                 if (pipelineIndex === 0)
                     entries.push(
                         { binding: 1, resource: { buffer: this.cursorBuffer! } },
-                        { binding: 2, resource: this.densityView! },
+                        { binding: 2, resource: this.densityViews[this.densityActive] },
                         { binding: 3, resource: this.densitySampler! },
                     );
                 if (sourceTextureIndex !== undefined) {
@@ -1460,6 +1566,100 @@ export class AtmosphereRenderer {
             pass.draw(3);
             pass.end();
         };
+        const cursorPass = (
+            pipelineIndex: number,
+            target: GPUTextureView,
+            bindGroup: GPUBindGroup,
+            vertices: number,
+            instances: number,
+            label: string,
+            loadOp: GPULoadOp,
+        ) => {
+            if (gpuLabels && gpuLabels.length >= MAX_TIMESTAMPED_PASSES)
+                throw new Error('GPU timestamp query capacity exceeded');
+            const queryIndex = (gpuLabels?.length ?? 0) * 2;
+            const pass = enc.beginRenderPass({
+                colorAttachments: [{ view: target, loadOp, storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }],
+                ...(sampleGpu
+                    ? {
+                          timestampWrites: {
+                              querySet: this.querySet!,
+                              beginningOfPassWriteIndex: queryIndex,
+                              endOfPassWriteIndex: queryIndex + 1,
+                          },
+                      }
+                    : {}),
+            });
+            gpuLabels?.push(label);
+            pass.setPipeline(this.pipelines[pipelineIndex]);
+            pass.setBindGroup(0, bindGroup);
+            pass.draw(vertices, instances);
+            pass.end();
+        };
+        if (
+            this.densityMayBeNonzero &&
+            !this.densitySegments.length &&
+            this.densityMaxEstimate < DENSITY_EXTINCTION_THRESHOLD
+        ) {
+            for (const view of this.densityViews)
+                enc.beginRenderPass({
+                    colorAttachments: [
+                        { view, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } },
+                    ],
+                }).end();
+            this.densityMayBeNonzero = false;
+            this.densityMaxEstimate = 0;
+            this.densityDecay = 1;
+            this.bindGroups.clear();
+        }
+        if (this.densityMayBeNonzero && this.densityDecay < 0.999999) {
+            const next = 1 - this.densityActive,
+                pipeline = this.pipelines[CURSOR_DECAY_PIPELINE];
+            d.queue.writeBuffer(this.densityParamsBuffer!, 0, new Float32Array([this.densityDecay, 0, 0, 0]));
+            const group = d.createBindGroup({
+                layout: pipeline.getBindGroupLayout(0),
+                entries: [
+                    { binding: 0, resource: { buffer: this.densityParamsBuffer! } },
+                    { binding: 1, resource: this.densityViews[this.densityActive] },
+                    { binding: 2, resource: this.densitySampler! },
+                ],
+            });
+            cursorPass(CURSOR_DECAY_PIPELINE, this.densityViews[next], group, 3, 1, 'CURSOR:DECAY', 'clear');
+            this.densityActive = next;
+            this.densityDecay = 1;
+            this.bindGroups.clear();
+        }
+        if (this.densitySegments.length) {
+            const segments = this.densitySegments,
+                packed = new Float32Array(segments.length * 8);
+            segments.forEach((x, i) => packed.set([x.ax, x.ay, x.bx, x.by, x.radius, x.strength, x.falloff, 0], i * 8));
+            d.queue.writeBuffer(this.densitySegmentBuffer!, 0, packed);
+            d.queue.writeBuffer(
+                this.densityPaintParamsBuffer!,
+                0,
+                new Float32Array([this.densityWidth / this.densityHeight, 0, 0, 0]),
+            );
+            const pipeline = this.pipelines[CURSOR_PAINT_PIPELINE],
+                group = d.createBindGroup({
+                    layout: pipeline.getBindGroupLayout(0),
+                    entries: [
+                        { binding: 0, resource: { buffer: this.densityPaintParamsBuffer! } },
+                        { binding: 1, resource: { buffer: this.densitySegmentBuffer! } },
+                    ],
+                });
+            cursorPass(
+                CURSOR_PAINT_PIPELINE,
+                this.densityViews[this.densityActive],
+                group,
+                6,
+                segments.length,
+                'CURSOR:PAINT',
+                'load',
+            );
+            this.densitySegments = [];
+            this.densityMayBeNonzero = true;
+            this.bindGroups.clear();
+        }
         draw(this.textureViews[0], 0, undefined, false, 'base');
         data[0] = this.textures[2].width;
         data[1] = this.textures[2].height;
@@ -1599,6 +1799,7 @@ export class AtmosphereRenderer {
             frameTimingSlot.generation = this.adaptiveGeneration;
         }
         if (sampleGpu) {
+            if (gpuLabels!.length > MAX_TIMESTAMPED_PASSES) throw new Error('GPU timestamp resolve capacity exceeded');
             const bytes = gpuLabels!.length * 16;
             enc.resolveQuerySet(this.querySet!, 0, gpuLabels!.length * 2, this.queryResolveBuffer!, 0);
             enc.copyBufferToBuffer(this.queryResolveBuffer!, 0, this.queryReadbackBuffer!, 0, bytes);
@@ -1700,7 +1901,10 @@ export class AtmosphereRenderer {
         document.removeEventListener('visibilitychange', this.visibilityHandler);
         this.textures.forEach((texture) => texture.destroy());
         this.adjustmentTexture?.destroy();
-        this.densityTexture?.destroy();
+        this.densityTextures.forEach((texture) => texture.destroy());
+        this.densitySegmentBuffer?.destroy();
+        this.densityParamsBuffer?.destroy();
+        this.densityPaintParamsBuffer?.destroy();
         this.lutTextures.forEach(({ texture }) => texture.destroy());
         this.historyTexture?.destroy();
         this.textureViews = [];
