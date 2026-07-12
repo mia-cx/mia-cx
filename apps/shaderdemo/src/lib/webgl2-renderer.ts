@@ -159,6 +159,11 @@ export class WebGL2Renderer implements RenderBackend {
     private cachedPostParameters = new Float32Array(POST_PARAMETER_SCHEMA.length);
     private leadingKey = '';
     private cachedLeading: ReturnType<typeof leadingAdjustmentRegion> = [];
+    private webglProfile =
+        typeof location !== 'undefined' && new URLSearchParams(location.search).get('webglProfile') === '1';
+    private webglProfileFrame = 0;
+    private webglProfileCurrent: Map<string, number> | null = null;
+    private webglProfileTotals = new Map<string, number>();
     private constructor(
         private canvas: HTMLCanvasElement,
         private gl: WebGL2RenderingContext,
@@ -310,6 +315,7 @@ export class WebGL2Renderer implements RenderBackend {
         source?: WebGLTexture,
         aux?: WebGLTexture,
         cube?: WebGLTexture,
+        profileLabel?: string,
     ) {
         const gl = this.gl,
             p = this.programs.get(name)!;
@@ -352,7 +358,15 @@ export class WebGL2Renderer implements RenderBackend {
         bind(0, source);
         bind(1, aux);
         bind(1, cube, gl.TEXTURE_3D);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        if (this.webglProfileCurrent && profileLabel) {
+            const started = performance.now();
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+            gl.finish();
+            this.webglProfileCurrent.set(
+                profileLabel,
+                (this.webglProfileCurrent.get(profileLabel) ?? 0) + performance.now() - started,
+            );
+        } else gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     private uploadCube(data: Uint16Array, size: number) {
         const gl = this.gl,
@@ -371,17 +385,19 @@ export class WebGL2Renderer implements RenderBackend {
         const targets = this.colourTargets;
         if (!targets.length) return;
         const p = this.options.parameters;
+        const profilingFrame = this.webglProfile && this.webglProfileFrame < 2 + 5;
+        this.webglProfileCurrent = profilingFrame ? new Map() : null;
         if (!this.paused) this.simTime += Math.min((now - this.lastTick) / 1000, 0.1) * p.animationSpeed;
         this.lastTick = now;
         const internalResolution: [number, number] = [this.baseTargets[0].width, this.baseTargets[0].height];
-        const timer = !this.paused && this.timerQuery ? this.gl.createQuery() : null;
+        const timer = !profilingFrame && !this.paused && this.timerQuery ? this.gl.createQuery() : null;
         if (timer) this.gl.beginQuery(this.timerQuery!.TIME_ELAPSED_EXT, timer);
         let data = packUniform(internalResolution, this.simTime, this.options.seed, p, 0, this.frame),
             current = 0,
             next = 1;
         this.upload(data);
-        this.draw('BASE', this.baseTargets[0]);
-        this.draw('MATERIALIZE', targets[next], this.baseTargets[0].texture);
+        this.draw('BASE', this.baseTargets[0], undefined, undefined, undefined, 'base');
+        this.draw('MATERIALIZE', targets[next], this.baseTargets[0].texture, undefined, undefined, 'field-materialize');
         [current, next] = [next, current];
         const nextLeadingKey = JSON.stringify(
             this.options.colour.filter((x) => x.type === 'curve' || x.type === 'levels' || x.type === 'hsl'),
@@ -401,7 +417,14 @@ export class WebGL2Renderer implements RenderBackend {
             data.fill(0, 60);
             data.set([0, 0, 0, 1, 1, 1, 1], 60);
             this.upload(data);
-            this.draw('LUT', this.colourTargets[next], this.colourTargets[current].texture, undefined, tex);
+            this.draw(
+                'LUT',
+                this.colourTargets[next],
+                this.colourTargets[current].texture,
+                undefined,
+                tex,
+                'colour:adjustments',
+            );
             [current, next] = [next, current];
         }
         for (const e of this.options.colour) {
@@ -417,7 +440,14 @@ export class WebGL2Renderer implements RenderBackend {
                 data.fill(0, 60);
                 data.set([...a.domainMin, ...a.domainMax, e.values[0]], 60);
                 this.upload(data);
-                this.draw('LUT', this.colourTargets[next], this.colourTargets[current].texture, undefined, tex);
+                this.draw(
+                    'LUT',
+                    this.colourTargets[next],
+                    this.colourTargets[current].texture,
+                    undefined,
+                    tex,
+                    `colour:${e.type}`,
+                );
                 [current, next] = [next, current];
                 continue;
             }
@@ -447,7 +477,14 @@ export class WebGL2Renderer implements RenderBackend {
             data[58] = kind;
             this.upload(data);
             this.specialized('COLOUR_EFFECT', kind);
-            this.draw(`COLOUR_EFFECT:${kind}`, this.colourTargets[next], this.colourTargets[current].texture);
+            this.draw(
+                `COLOUR_EFFECT:${kind}`,
+                this.colourTargets[next],
+                this.colourTargets[current].texture,
+                undefined,
+                undefined,
+                `colour:${e.type}`,
+            );
             [current, next] = [next, current];
         }
         data = packUniform(internalResolution, this.simTime, this.options.seed, p, 0, this.frame);
@@ -467,7 +504,7 @@ export class WebGL2Renderer implements RenderBackend {
         let source: Target = this.colourTargets[current];
         if (postStages.some((e) => e.kind === 'datamosh') && !this.historyValid) {
             this.upload(data);
-            this.draw('COPY', this.history!, source.texture);
+            this.draw('COPY', this.history!, source.texture, undefined, undefined, 'post:history-copy');
             this.historyValid = true;
         }
         let postRan = false;
@@ -479,13 +516,20 @@ export class WebGL2Renderer implements RenderBackend {
                 data[0] = this.godRays!.width;
                 data[1] = this.godRays!.height;
                 this.upload(data);
-                this.draw('GOD_RAYS', this.godRays!, source.texture);
+                this.draw('GOD_RAYS', this.godRays!, source.texture, undefined, undefined, `${e.label}:rays`);
                 data[0] = internalResolution[0];
                 data[1] = internalResolution[1];
                 data[58] = 27;
                 this.upload(data);
                 this.specialized('POST_EFFECT', 27);
-                this.draw('POST_EFFECT:27', destination, source.texture, this.godRays!.texture);
+                this.draw(
+                    'POST_EFFECT:27',
+                    destination,
+                    source.texture,
+                    this.godRays!.texture,
+                    undefined,
+                    `${e.label}:composite`,
+                );
             } else {
                 data[58] =
                     e.kind === 'fused-vignette-film-grain'
@@ -495,14 +539,21 @@ export class WebGL2Renderer implements RenderBackend {
                           : POST_KIND_INDEX[e.kind];
                 this.upload(data);
                 this.specialized('POST_EFFECT', data[58]);
-                this.draw(`POST_EFFECT:${data[58]}`, destination, source.texture, this.history?.texture);
+                this.draw(
+                    `POST_EFFECT:${data[58]}`,
+                    destination,
+                    source.texture,
+                    this.history?.texture,
+                    undefined,
+                    e.label,
+                );
             }
             source = destination;
             postIndex = 1 - postIndex;
             postRan = true;
         }
         if (postRan && !this.paused) {
-            this.copy(source, this.history!);
+            this.copy(source, this.history!, 'post:history-copy');
             this.historyValid = true;
         }
         for (let i = 0; i < OCTAVE_COUNT; i++) {
@@ -510,21 +561,21 @@ export class WebGL2Renderer implements RenderBackend {
             if (octaveBlurIsActive(p, i)) {
                 const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
                 this.upload(data);
-                this.draw('BLUR', destination, source.texture);
+                this.draw('BLUR', destination, source.texture, undefined, undefined, `blur${i}`);
                 source = destination;
             }
             if (octaveEffectIsActive(p, i)) {
                 const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
                 this.upload(data);
                 this.specialized('OCTAVE', i);
-                this.draw(`OCTAVE:${i}`, destination, source.texture);
+                this.draw(`OCTAVE:${i}`, destination, source.texture, undefined, undefined, `octave${i}`);
                 source = destination;
             }
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
         this.upload(data);
-        this.draw('PRESENT', null, source.texture);
+        this.draw('PRESENT', null, source.texture, undefined, undefined, 'display');
         if (timer) {
             this.gl.endQuery(this.timerQuery!.TIME_ELAPSED_EXT);
             this.pendingTimerQueries.push({
@@ -536,7 +587,8 @@ export class WebGL2Renderer implements RenderBackend {
         if (!this.paused) {
             this.frame = (this.frame + 1) % 16777216;
         }
-        const sync = this.gl.fenceSync(this.gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        this.finishProfileFrame();
+        const sync = profilingFrame ? null : this.gl.fenceSync(this.gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
         if (sync) {
             this.pendingFence = {
                 sync,
@@ -559,12 +611,50 @@ export class WebGL2Renderer implements RenderBackend {
             this.adaptive.effectiveScale,
         );
     }
-    private copy(from: Target, to: Target) {
+    private copy(from: Target, to: Target, profileLabel?: string) {
         const gl = this.gl;
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, from.framebuffer);
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, to.framebuffer);
+        const started = this.webglProfileCurrent && profileLabel ? performance.now() : 0;
         gl.blitFramebuffer(0, 0, from.width, from.height, 0, 0, to.width, to.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        if (started) {
+            gl.finish();
+            this.webglProfileCurrent!.set(
+                profileLabel!,
+                (this.webglProfileCurrent!.get(profileLabel!) ?? 0) + performance.now() - started,
+            );
+        }
         this.currentFramebuffer = undefined;
+    }
+    private finishProfileFrame() {
+        if (!this.webglProfileCurrent) return;
+        if (++this.webglProfileFrame > 2)
+            for (const [label, ms] of this.webglProfileCurrent)
+                this.webglProfileTotals.set(label, (this.webglProfileTotals.get(label) ?? 0) + ms);
+        this.webglProfileCurrent = null;
+        if (this.webglProfileFrame !== 2 + 5) return;
+        this.webglProfile = false;
+        const passes = [...this.webglProfileTotals].map(([label, ms]) => ({ label, ms: ms / 5 }));
+        const sum = (test: (label: string) => boolean) =>
+            passes.filter((x) => test(x.label)).reduce((n, x) => n + x.ms, 0);
+        const fieldMs = sum((x) => x === 'base' || x === 'field-materialize'),
+            colourMs = sum((x) => x.startsWith('colour:')),
+            postMs = sum((x) => x.startsWith('post:')),
+            octavesMs = sum((x) => x.startsWith('blur') || x.startsWith('octave')),
+            presentMs = sum((x) => x === 'display');
+        this.onGpuStats?.({
+            totalMs: fieldMs + colourMs + postMs + octavesMs + presentMs,
+            fieldMs,
+            colourMs,
+            postMs,
+            octavesMs,
+            presentMs,
+            baseMs: fieldMs,
+            blurMs: sum((x) => x.startsWith('blur')),
+            octaveMs: sum((x) => x.startsWith('octave')),
+            displayMs: presentMs,
+            passes,
+        });
     }
     private resize() {
         const r = this.canvas.getBoundingClientRect(),

@@ -149,6 +149,17 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).not.toContain('performance.now() - this.fenceStartedAt');
     });
 
+    it('gates and bounds synchronous per-pass profiling', () => {
+        const implementation = WebGL2Renderer.toString();
+        expect(implementation).toContain('new URLSearchParams(location.search).get("webglProfile") === "1"');
+        expect(implementation).toContain('this.webglProfileFrame < 2 + 5');
+        expect(implementation).toContain('this.webglProfileFrame !== 2 + 5');
+        expect(implementation).toContain('"post:history-copy"');
+        expect(implementation).toContain('`blur${i}`');
+        expect(implementation).toContain('"display"');
+        expect(implementation).toContain('if (this.webglProfileCurrent && profileLabel)');
+    });
+
     it('renders one full-resolution frozen pause frame and restores adaptive rendering', () => {
         const implementation = WebGL2Renderer.toString();
         expect(implementation).toContain('this.paused ? this.options.renderScale : this.adaptive.effectiveScale');
@@ -157,6 +168,6 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).toContain('if (!preserveHistory) this.historyValid = false');
         expect(implementation).toContain('if (postRan && !this.paused)');
         expect(implementation).toContain('this.frame = (this.frame + 1)');
-        expect(implementation).toContain('const timer = !this.paused && this.timerQuery');
+        expect(implementation).toContain('const timer = !profilingFrame && !this.paused && this.timerQuery');
     });
 });
