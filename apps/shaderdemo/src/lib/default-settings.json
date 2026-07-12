@@ -659,6 +659,51 @@
                 "id": "post:scanline-displacement:0",
                 "type": "scanline-displacement",
                 "enabled": false
+            },
+            {
+                "id": "post:anamorphic-streaks:0",
+                "type": "anamorphic-streaks",
+                "enabled": false
+            },
+            {
+                "id": "post:diffraction-starburst:0",
+                "type": "diffraction-starburst",
+                "enabled": false
+            },
+            {
+                "id": "post:lens-dirt:0",
+                "type": "lens-dirt",
+                "enabled": false
+            },
+            {
+                "id": "post:lens-ghosts:0",
+                "type": "lens-ghosts",
+                "enabled": false
+            },
+            {
+                "id": "post:bokeh-bloom:0",
+                "type": "bokeh-bloom",
+                "enabled": false
+            },
+            {
+                "id": "post:gate-weave:0",
+                "type": "gate-weave",
+                "enabled": false
+            },
+            {
+                "id": "post:film-damage:0",
+                "type": "film-damage",
+                "enabled": false
+            },
+            {
+                "id": "post:radial-blur:0",
+                "type": "radial-blur",
+                "enabled": false
+            },
+            {
+                "id": "post:spin-blur:0",
+                "type": "spin-blur",
+                "enabled": false
             }
         ]
     },
