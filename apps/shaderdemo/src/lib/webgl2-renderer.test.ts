@@ -7,10 +7,34 @@ import {
     WEBGL2_SUPPORTED_COLOUR,
     WEBGL2_SUPPORTED_POST,
     WebGL2Renderer,
+    specializeWebGL2Shader,
 } from './webgl2-renderer';
 import * as shaders from './webgl2-shaders';
+import * as compactShaders from './webgl2-compact-shaders';
+import { PRESENT_SHADER_SOURCE } from './renderer';
 
 describe('WebGL2 parity backend', () => {
+    it('creates every stable integral shader variant without changing continuous uniforms', () => {
+        for (const [name, count, declaration] of [
+            ['POST_EFFECT', 28, 'const int kind = '] as const,
+            ['COLOUR_EFFECT', 11, 'const int k = '] as const,
+            ['OCTAVE', 5, 'const uint octave = '] as const,
+        ]) {
+            for (let index = 0; index < count; index++) {
+                const source = specializeWebGL2Shader(name, index);
+                expect(source).toContain(`${declaration}${index}${name === 'OCTAVE' ? 'u' : ''};`);
+                expect(source).toContain('_group_0_binding_0_fs');
+                expect(source).toBe(specializeWebGL2Shader(name, index));
+            }
+        }
+    });
+
+    it('lazily installs specialized programs and assigns samplers only at installation', () => {
+        const implementation = WebGL2Renderer.toString();
+        expect(implementation).toContain('this.programs.get(key) ?? this.installProgram');
+        expect(implementation).toContain('name !== "POST_EFFECT"');
+        expect(implementation).not.toContain('if (l) gl.uniform1i');
+    });
     it('uses the canonical translated multipass shader inventory', () => {
         expect(WEBGL2_STARTUP_SCALE).toBe(0.5);
         expect(WEBGL2_FRAGMENT_SOURCE).toBe(shaders.BASE);
@@ -42,6 +66,35 @@ describe('WebGL2 parity backend', () => {
         expect(WEBGL2_SUPPORTED_POST.size).toBe(25);
     });
 
+    it('uses compact native-resolution PRESENT with canonical FXAA math and sampling', () => {
+        const source = compactShaders.PRESENT;
+        expect(source.length).toBeLessThan(shaders.PRESENT.length / 5);
+        expect(source).not.toContain('U_block_0Fragment');
+        expect(source).toContain('vec2(gl_FragCoord.x,_present_resolution.y-gl_FragCoord.y)');
+        expect(source).toContain('textureLod(_group_0_binding_1_fs,uv,0.)');
+        expect(source.match(/sampleAt\(/g)).toHaveLength(10);
+        for (const constant of ['.299', '.587', '.114', '.0312', '.125', '.03125', '.0078125', '-8.', '8.']) {
+            expect(source).toContain(constant);
+            expect(PRESENT_SHADER_SOURCE).toContain(constant);
+        }
+        for (const position of [
+            '(-1.,-1.)',
+            '(1.,-1.)',
+            '(-1.,1.)',
+            '(1.,1.)',
+            '(1./3.-.5)',
+            '(2./3.-.5)',
+            '*-.5',
+            '*.5',
+        ]) {
+            expect(source).toContain(position);
+            expect(PRESENT_SHADER_SOURCE).toContain(position);
+        }
+        expect(source).toContain('(lb<lM-range*.5||lb>lM+range*.5)?a:b');
+        expect(PRESENT_SHADER_SOURCE).toContain('select(b,a,lb<lM-range*.5||lb>lM+range*.5)');
+        expect(WebGL2Renderer.toString()).toContain('name === "PRESENT" ?');
+    });
+
     it('covers adjustments, grade, every RGB effect, and LUT', () => {
         expect([...WEBGL2_SUPPORTED_COLOUR].sort()).toEqual(
             [...RGB_COLOUR_KINDS, 'curve', 'levels', 'hsl', 'colour-grade'].sort(),
@@ -53,7 +106,7 @@ describe('WebGL2 parity backend', () => {
         const plan = implementation.indexOf('rendererStagePlan');
         const rays = implementation.indexOf('"GOD_RAYS"');
         const composite = implementation.indexOf('this.godRays.texture');
-        const present = implementation.indexOf('"PRESENT"');
+        const present = implementation.lastIndexOf('"PRESENT"');
         expect(plan).toBeGreaterThan(0);
         expect(rays).toBeGreaterThan(plan);
         expect(composite).toBeGreaterThan(rays);

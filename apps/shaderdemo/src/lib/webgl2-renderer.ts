@@ -19,6 +19,7 @@ import { AdaptiveResolutionController } from './adaptive-resolution';
 import { isNeutralRgb, isRgbColour } from './colour-effects';
 import { FrameTelemetry } from './telemetry';
 import * as shader from './webgl2-shaders';
+import * as compactShader from './webgl2-compact-shaders';
 
 export const WEBGL2_STARTUP_SCALE = 0.5;
 /** WebGL2 implements the complete canonical inventory. Kept as an export for capability UI/tests. */
@@ -35,6 +36,26 @@ const VERTEX = `#version 300 es
 const vec2 P[3]=vec2[3](vec2(-1.,-1.),vec2(3.,-1.),vec2(-1.,3.));
 void main(){gl_Position=vec4(P[gl_VertexID],0.,1.);}`;
 type ProgramName = keyof typeof shader;
+type SpecializedProgramName = `${'POST_EFFECT' | 'COLOUR_EFFECT' | 'OCTAVE'}:${number}`;
+type ProgramKey = ProgramName | SpecializedProgramName;
+const SELECTORS = {
+    POST_EFFECT: 'float _e16 = _group_0_binding_0_fs.blurRadii[1].z;\n    int kind = int(_e16);',
+    COLOUR_EFFECT: 'float _e15 = _group_0_binding_0_fs.blurRadii[1].z;\n    int k = int(_e15);',
+    OCTAVE: 'float _e11 = _group_0_binding_0_fs.octaveIndex;\n    uint octave = uint(_e11);',
+} as const;
+export function specializeWebGL2Shader(name: keyof typeof SELECTORS, index: number): string {
+    const source = shader[name],
+        selector = SELECTORS[name];
+    const matches = source.split(selector).length - 1;
+    if (matches !== 1) throw new Error(`Expected exactly one ${name} selector, found ${matches}.`);
+    const replacement =
+        name === 'POST_EFFECT'
+            ? `const int kind = ${index};`
+            : name === 'COLOUR_EFFECT'
+              ? `const int k = ${index};`
+              : `const uint octave = ${index}u;`;
+    return source.replace(selector, replacement);
+}
 type TimerQueryExtension = { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number };
 type PendingTimerQuery = { query: WebGLQuery; scale: number; generation: number };
 type PendingFence = { sync: WebGLSync; submittedAt: number; scale: number; generation: number };
@@ -97,7 +118,7 @@ export class WebGL2Renderer implements RenderBackend {
     onStats: RenderBackend['onStats'];
     onGpuStats: RenderBackend['onGpuStats'];
     onLost: RenderBackend['onLost'];
-    private programs = new Map<ProgramName, WebGLProgram>();
+    private programs = new Map<ProgramKey, WebGLProgram>();
     private baseTargets: Target[] = [];
     private colourTargets: Target[] = [];
     private postTargets: Target[] = [];
@@ -126,6 +147,18 @@ export class WebGL2Renderer implements RenderBackend {
     private lutTextures = new Map<string, WebGLTexture>();
     private adjustmentTexture?: WebGLTexture;
     private samplerLocations = new Map<WebGLProgram, (WebGLUniformLocation | null)[]>();
+    private currentProgram: WebGLProgram | null = null;
+    private currentVao: WebGLVertexArrayObject | null = null;
+    private currentViewport = '';
+    private currentFramebuffer: WebGLFramebuffer | null | undefined = undefined;
+    private activeUnit = -1;
+    private boundTextures = new Map<string, WebGLTexture | null>();
+    private postPlanKey = '';
+    private cachedPostPlan: ReturnType<typeof rendererStagePlan> = [];
+    private postParameterKey = '';
+    private cachedPostParameters = new Float32Array(POST_PARAMETER_SCHEMA.length);
+    private leadingKey = '';
+    private cachedLeading: ReturnType<typeof leadingAdjustmentRegion> = [];
     private constructor(
         private canvas: HTMLCanvasElement,
         private gl: WebGL2RenderingContext,
@@ -157,19 +190,13 @@ export class WebGL2Renderer implements RenderBackend {
         if (!gl.getExtension('EXT_color_buffer_float'))
             throw new Error('WebGL2 floating-point render targets are unavailable.');
         const self = new WebGL2Renderer(canvas, gl, options);
-        for (const name of Object.keys(shader) as ProgramName[]) self.programs.set(name, program(gl, shader[name]));
+        for (const name of Object.keys(shader) as ProgramName[])
+            if (name !== 'POST_EFFECT' && name !== 'COLOUR_EFFECT' && name !== 'OCTAVE')
+                self.installProgram(name, name === 'PRESENT' ? compactShader.PRESENT : shader[name]);
         gl.bindBuffer(gl.UNIFORM_BUFFER, self.uniformBuffer);
         gl.bufferData(gl.UNIFORM_BUFFER, 180 * 4, gl.DYNAMIC_DRAW);
         gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, self.uniformBuffer);
-        for (const p of self.programs.values()) {
-            const i = gl.getUniformBlockIndex(p, 'U_block_0Fragment');
-            if (i !== gl.INVALID_INDEX) gl.uniformBlockBinding(p, i, 0);
-            self.samplerLocations.set(p, [
-                gl.getUniformLocation(p, '_group_0_binding_1_fs'),
-                gl.getUniformLocation(p, '_group_0_binding_3_fs'),
-                gl.getUniformLocation(p, '_group_0_binding_4_fs'),
-            ]);
-        }
+
         canvas.addEventListener('webglcontextlost', self.contextLost);
         canvas.addEventListener('webglcontextrestored', self.contextRestored);
         self.observer.observe(canvas);
@@ -178,6 +205,30 @@ export class WebGL2Renderer implements RenderBackend {
         self.render(performance.now());
         self.schedule();
         return self;
+    }
+    private installProgram(key: ProgramKey, source: string) {
+        const gl = this.gl,
+            p = program(gl, source);
+        this.programs.set(key, p);
+        const i = gl.getUniformBlockIndex(p, 'U_block_0Fragment');
+        if (i !== gl.INVALID_INDEX) gl.uniformBlockBinding(p, i, 0);
+        const locations = [
+            gl.getUniformLocation(p, '_group_0_binding_1_fs'),
+            gl.getUniformLocation(p, '_group_0_binding_3_fs'),
+            gl.getUniformLocation(p, '_group_0_binding_4_fs'),
+            gl.getUniformLocation(p, '_present_resolution'),
+        ];
+        this.samplerLocations.set(p, locations);
+        gl.useProgram(p);
+        this.currentProgram = p;
+        if (locations[0]) gl.uniform1i(locations[0], 0);
+        if (locations[1]) gl.uniform1i(locations[1], 1);
+        if (locations[2]) gl.uniform1i(locations[2], 1);
+        return p;
+    }
+    private specialized(name: keyof typeof SELECTORS, index: number) {
+        const key = `${name}:${index}` as SpecializedProgramName;
+        return this.programs.get(key) ?? this.installProgram(key, specializeWebGL2Shader(name, index));
     }
     private makeTarget(kind: WebGL2TargetKind, width: number, height: number): Target {
         const gl = this.gl,
@@ -203,9 +254,11 @@ export class WebGL2Renderer implements RenderBackend {
             null,
         );
         gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+        this.currentFramebuffer = framebuffer;
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
         if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE)
             throw new Error(`WebGL2 ${kind} framebuffer is incomplete.`);
+        this.boundTextures.clear();
         return { texture, framebuffer, width, height, kind };
     }
     private allTargets() {
@@ -252,7 +305,7 @@ export class WebGL2Renderer implements RenderBackend {
         this.gl.bufferSubData(this.gl.UNIFORM_BUFFER, 0, data);
     }
     private draw(
-        name: ProgramName,
+        name: ProgramKey,
         destination: Target | null,
         source?: WebGLTexture,
         aux?: WebGLTexture,
@@ -260,25 +313,41 @@ export class WebGL2Renderer implements RenderBackend {
     ) {
         const gl = this.gl,
             p = this.programs.get(name)!;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, destination?.framebuffer ?? null);
-        gl.viewport(0, 0, destination?.width ?? this.canvas.width, destination?.height ?? this.canvas.height);
-        gl.useProgram(p);
-        gl.bindVertexArray(this.vao);
-        const bind = (
-            unit: number,
-            tex: WebGLTexture | undefined,
-            target: number = gl.TEXTURE_2D,
-            binding = unit === 0
-                ? '_group_0_binding_1_fs'
-                : unit === 1
-                  ? '_group_0_binding_3_fs'
-                  : '_group_0_binding_4_fs',
-        ) => {
+        const framebuffer = destination?.framebuffer ?? null;
+        if (framebuffer !== this.currentFramebuffer) {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+            this.currentFramebuffer = framebuffer;
+        }
+        const width = destination?.width ?? this.canvas.width,
+            height = destination?.height ?? this.canvas.height;
+        const viewport = `${width}x${height}`;
+        if (viewport !== this.currentViewport) {
+            gl.viewport(0, 0, width, height);
+            this.currentViewport = viewport;
+        }
+        if (p !== this.currentProgram) {
+            gl.useProgram(p);
+            this.currentProgram = p;
+        }
+        if (name === 'PRESENT') {
+            const resolution = this.samplerLocations.get(p)![3];
+            if (resolution) gl.uniform2f(resolution, width, height);
+        }
+        if (this.vao !== this.currentVao) {
+            gl.bindVertexArray(this.vao);
+            this.currentVao = this.vao;
+        }
+        const bind = (unit: number, tex: WebGLTexture | undefined, target: number = gl.TEXTURE_2D) => {
             if (!tex) return;
-            gl.activeTexture(gl.TEXTURE0 + unit);
-            gl.bindTexture(target, tex);
-            const l = this.samplerLocations.get(p)![binding === '_group_0_binding_4_fs' ? 2 : unit];
-            if (l) gl.uniform1i(l, unit);
+            if (this.activeUnit !== unit) {
+                gl.activeTexture(gl.TEXTURE0 + unit);
+                this.activeUnit = unit;
+            }
+            const key = `${unit}:${target}`;
+            if (this.boundTextures.get(key) !== tex) {
+                gl.bindTexture(target, tex);
+                this.boundTextures.set(key, tex);
+            }
         };
         bind(0, source);
         bind(1, aux);
@@ -295,6 +364,7 @@ export class WebGL2Renderer implements RenderBackend {
         for (const key of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R])
             gl.texParameteri(gl.TEXTURE_3D, key, gl.CLAMP_TO_EDGE);
         gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA16F, size, size, size, 0, gl.RGBA, gl.HALF_FLOAT, data);
+        this.boundTextures.clear();
         return t;
     }
     private render(now: number) {
@@ -313,7 +383,17 @@ export class WebGL2Renderer implements RenderBackend {
         this.draw('BASE', this.baseTargets[0]);
         this.draw('MATERIALIZE', targets[next], this.baseTargets[0].texture);
         [current, next] = [next, current];
-        const adjustments = leadingAdjustmentRegion(this.options.colour);
+        const nextLeadingKey = JSON.stringify(
+            this.options.colour.filter((x) => x.type === 'curve' || x.type === 'levels' || x.type === 'hsl'),
+        );
+        if (nextLeadingKey !== this.leadingKey) {
+            this.leadingKey = nextLeadingKey;
+            this.cachedLeading = leadingAdjustmentRegion(this.options.colour);
+            if (this.adjustmentTexture) this.gl.deleteTexture(this.adjustmentTexture);
+            this.adjustmentTexture = undefined;
+            this.boundTextures.clear();
+        }
+        const adjustments = this.cachedLeading;
         if (adjustments.some((x) => !isNeutralAdjustment(x))) {
             const tex =
                 this.adjustmentTexture ??
@@ -366,15 +446,24 @@ export class WebGL2Renderer implements RenderBackend {
             data.set(values, 60);
             data[58] = kind;
             this.upload(data);
-            this.draw('COLOUR_EFFECT', this.colourTargets[next], this.colourTargets[current].texture);
+            this.specialized('COLOUR_EFFECT', kind);
+            this.draw(`COLOUR_EFFECT:${kind}`, this.colourTargets[next], this.colourTargets[current].texture);
             [current, next] = [next, current];
         }
         data = packUniform(internalResolution, this.simTime, this.options.seed, p, 0, this.frame);
-        data.set(
-            POST_PARAMETER_SCHEMA.map((x) => p[x.key]),
-            60,
-        );
-        const postStages = rendererStagePlan(this.options.post, p);
+        const postValues = POST_PARAMETER_SCHEMA.map((x) => p[x.key]);
+        const nextParameterKey = JSON.stringify(postValues);
+        if (nextParameterKey !== this.postParameterKey) {
+            this.postParameterKey = nextParameterKey;
+            this.cachedPostParameters = Float32Array.from(postValues);
+        }
+        data.set(this.cachedPostParameters, 60);
+        const nextPostKey = JSON.stringify([this.options.post, POST_PARAMETER_SCHEMA.map((x) => p[x.key])]);
+        if (nextPostKey !== this.postPlanKey) {
+            this.postPlanKey = nextPostKey;
+            this.cachedPostPlan = rendererStagePlan(this.options.post, p);
+        }
+        const postStages = this.cachedPostPlan;
         let source: Target = this.colourTargets[current];
         if (postStages.some((e) => e.kind === 'datamosh') && !this.historyValid) {
             this.upload(data);
@@ -395,7 +484,8 @@ export class WebGL2Renderer implements RenderBackend {
                 data[1] = internalResolution[1];
                 data[58] = 27;
                 this.upload(data);
-                this.draw('POST_EFFECT', destination, source.texture, this.godRays!.texture);
+                this.specialized('POST_EFFECT', 27);
+                this.draw('POST_EFFECT:27', destination, source.texture, this.godRays!.texture);
             } else {
                 data[58] =
                     e.kind === 'fused-vignette-film-grain'
@@ -404,7 +494,8 @@ export class WebGL2Renderer implements RenderBackend {
                           ? 26
                           : POST_KIND_INDEX[e.kind];
                 this.upload(data);
-                this.draw('POST_EFFECT', destination, source.texture, this.history?.texture);
+                this.specialized('POST_EFFECT', data[58]);
+                this.draw(`POST_EFFECT:${data[58]}`, destination, source.texture, this.history?.texture);
             }
             source = destination;
             postIndex = 1 - postIndex;
@@ -425,7 +516,8 @@ export class WebGL2Renderer implements RenderBackend {
             if (octaveEffectIsActive(p, i)) {
                 const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
                 this.upload(data);
-                this.draw('OCTAVE', destination, source.texture);
+                this.specialized('OCTAVE', i);
+                this.draw(`OCTAVE:${i}`, destination, source.texture);
                 source = destination;
             }
         }
@@ -472,6 +564,7 @@ export class WebGL2Renderer implements RenderBackend {
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, from.framebuffer);
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, to.framebuffer);
         gl.blitFramebuffer(0, 0, from.width, from.height, 0, 0, to.width, to.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        this.currentFramebuffer = undefined;
     }
     private resize() {
         const r = this.canvas.getBoundingClientRect(),
@@ -568,10 +661,10 @@ export class WebGL2Renderer implements RenderBackend {
             if (!assets[id] || assets[id] !== this.options.lutAssets?.[id]) {
                 this.gl.deleteTexture(texture);
                 this.lutTextures.delete(id);
+                this.boundTextures.clear();
             }
         this.options = o;
-        if (this.adjustmentTexture) this.gl.deleteTexture(this.adjustmentTexture);
-        this.adjustmentTexture = undefined;
+
         if (scaleChanged) this.adaptive.setCeiling(o.renderScale, performance.now());
         this.datamoshWasActive = datamoshIsActive(o.parameters);
         if (resize) this.recreateTargets();
