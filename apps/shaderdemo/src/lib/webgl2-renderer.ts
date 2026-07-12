@@ -810,7 +810,7 @@ export class WebGL2Renderer implements RenderBackend {
         if (this.destroyed) return;
         this.pollTimerQueries();
         if (this.pendingFence) return;
-        if ((!this.paused && now - this.lastPresented + 0.5 >= 1000 / 60) || this.invalid) this.render(now);
+        if ((!this.paused && now - this.lastPresented + 0.5 >= 1000 / 30) || this.invalid) this.render(now);
         if (!this.paused) this.schedule();
     };
     private contextLost = (e: Event) => {

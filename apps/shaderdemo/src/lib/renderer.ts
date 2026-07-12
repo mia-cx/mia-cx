@@ -64,6 +64,7 @@ export const GPU_TIMING_SAMPLE_INTERVAL = 30;
 export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 33;
 export const MAX_CURSOR_DENSITY_PASSES = 2;
 export const MAX_TIMESTAMPED_PASSES = MAX_RENDER_PASSES + MAX_CURSOR_DENSITY_PASSES;
+export const CURSOR_DENSITY_UNIFORM_BYTES = 32;
 const GPU_QUERY_COUNT = MAX_TIMESTAMPED_PASSES * 2;
 const PIPELINE_COUNT = 15;
 const CURSOR_DECAY_PIPELINE = 13;
@@ -1116,12 +1117,14 @@ export class AtmosphereRenderer {
             size: MAX_GPU_DENSITY_SEGMENTS * 32,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         });
+        // Both WGSL structs contain an f32 followed by a vec3f. vec3f has
+        // 16-byte alignment, so the binding's minimum size is 32 bytes.
         self.densityParamsBuffer = self.device.createBuffer({
-            size: 16,
+            size: CURSOR_DENSITY_UNIFORM_BYTES,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         self.densityPaintParamsBuffer = self.device.createBuffer({
-            size: 16,
+            size: CURSOR_DENSITY_UNIFORM_BYTES,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         self.recreateDensityTextures(1, 1);
@@ -1409,7 +1412,7 @@ export class AtmosphereRenderer {
         this.rafId = 0;
         if (this.destroyed) return;
         const animated = !this.paused;
-        const frameInterval = 1000 / 60;
+        const frameInterval = 1000 / 30;
         if (animated && this.nextRenderAt > 0 && now + 0.5 < this.nextRenderAt) {
             this.schedule();
             return;

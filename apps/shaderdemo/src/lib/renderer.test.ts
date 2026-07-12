@@ -8,6 +8,7 @@ import {
     BLOOM_TEXTURE_FORMAT,
     BLUR_SHADER_SOURCE,
     COMMON_SHADER_SOURCE,
+    CURSOR_DENSITY_UNIFORM_BYTES,
     FIELD_PARAMETER_SCHEMA,
     FIELD_BLEND_MODES,
     POST_BLEND_MODES,
@@ -199,10 +200,15 @@ describe('field configuration', () => {
         expect(source).toContain('sampleGpu(stats.totalMs');
         expect(source).toContain('lastFrameTimingAt');
         expect(source).not.toContain('adaptiveResolution.sample(dt');
-        expect(source).toContain('frameInterval = 1e3 / 60');
+        expect(source).toContain('frameInterval = 1e3 / 30');
         expect(source).toContain('now + 0.5 < this.nextRenderAt');
         expect(source).toContain('slot.resolve.destroy()');
         expect(source).toContain('slot.readback.destroy()');
+    });
+    it('allocates cursor uniform bindings with WGSL vec3 alignment', () => {
+        expect(CURSOR_DENSITY_UNIFORM_BYTES).toBe(32);
+        const source = AtmosphereRenderer.toString();
+        expect(source.match(/size: CURSOR_DENSITY_UNIFORM_BYTES/g)).toHaveLength(2);
     });
     it('renders one full-resolution frozen pause frame and restores adaptive rendering', () => {
         const source = AtmosphereRenderer.toString();
