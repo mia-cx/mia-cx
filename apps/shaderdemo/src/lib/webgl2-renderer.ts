@@ -58,7 +58,23 @@ export function specializeWebGL2Shader(name: keyof typeof SELECTORS, index: numb
 }
 type TimerQueryExtension = { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number };
 type PendingTimerQuery = { query: WebGLQuery; scale: number; generation: number };
-type PendingFence = { sync: WebGLSync; submittedAt: number; scale: number; generation: number };
+type PendingFence = {
+    sync: WebGLSync;
+    submittedAt: number;
+    scale: number;
+    generation: number;
+    ablationVariant?: number;
+};
+type AblationVariant =
+    | { label: 'baseline'; kind: 'baseline' }
+    | { label: string; kind: 'post'; index: number }
+    | { label: 'all-post'; kind: 'all-post' }
+    | { label: string; kind: 'octave'; index: number }
+    | { label: 'all-octaves'; kind: 'all-octaves' }
+    | { label: 'colour'; kind: 'colour' }
+    | { label: 'presentation-lite'; kind: 'presentation-lite' };
+const ABLATION_WARMUPS = 3,
+    ABLATION_SAMPLES = 8;
 const FENCE_POLL_MS = 4;
 const FENCE_EMERGENCY_MS = 750;
 export type WebGL2TargetKind = 'base' | 'colour' | 'post' | 'god-rays';
@@ -159,12 +175,13 @@ export class WebGL2Renderer implements RenderBackend {
     private cachedPostParameters = new Float32Array(POST_PARAMETER_SCHEMA.length);
     private leadingKey = '';
     private cachedLeading: ReturnType<typeof leadingAdjustmentRegion> = [];
-    private webglProfile =
-        typeof location !== 'undefined' && new URLSearchParams(location.search).get('webglProfile') === '1';
-    private webglProfileDeadline = performance.now() + 5000;
-    private webglProfileFrame = 0;
-    private webglProfileCurrent: Map<string, number> | null = null;
-    private webglProfileTotals = new Map<string, number>();
+    private webglAblate =
+        typeof location !== 'undefined' && new URLSearchParams(location.search).get('webglAblate') === '1';
+    private webglAblateDeadline = performance.now() + 5000;
+    private ablationVariants: AblationVariant[] | null = null;
+    private ablationVariant = 0;
+    private ablationSample = 0;
+    private ablationTotals: number[] = [];
     private constructor(
         private canvas: HTMLCanvasElement,
         private gl: WebGL2RenderingContext,
@@ -316,7 +333,7 @@ export class WebGL2Renderer implements RenderBackend {
         source?: WebGLTexture,
         aux?: WebGLTexture,
         cube?: WebGLTexture,
-        profileLabel?: string,
+        _profileLabel?: string,
     ) {
         const gl = this.gl,
             p = this.programs.get(name)!;
@@ -359,15 +376,7 @@ export class WebGL2Renderer implements RenderBackend {
         bind(0, source);
         bind(1, aux);
         bind(1, cube, gl.TEXTURE_3D);
-        if (this.webglProfileCurrent && profileLabel) {
-            const started = performance.now();
-            gl.drawArrays(gl.TRIANGLES, 0, 3);
-            gl.finish();
-            this.webglProfileCurrent.set(
-                profileLabel,
-                (this.webglProfileCurrent.get(profileLabel) ?? 0) + performance.now() - started,
-            );
-        } else gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     private uploadCube(data: Uint16Array, size: number) {
         const gl = this.gl,
@@ -386,15 +395,15 @@ export class WebGL2Renderer implements RenderBackend {
         const targets = this.colourTargets;
         if (!targets.length) return;
         const p = this.options.parameters;
-        // Let normal asynchronous adaptation settle first. Slow Safari devices reach the floor quickly;
-        // fast devices profile their stable scale after a bounded five-second wait.
-        const profileReady = this.adaptive.effectiveScale <= 0.126 || performance.now() >= this.webglProfileDeadline;
-        const profilingFrame = this.webglProfile && profileReady && this.webglProfileFrame < 2 + 5;
-        this.webglProfileCurrent = profilingFrame ? new Map() : null;
+        const ablationReady =
+            this.webglAblate &&
+            (this.adaptive.effectiveScale <= 0.126 || performance.now() >= this.webglAblateDeadline);
+        if (ablationReady && !this.ablationVariants) this.beginAblation(rendererStagePlan(this.options.post, p));
+        const ablation = this.ablationVariants?.[this.ablationVariant];
         if (!this.paused) this.simTime += Math.min((now - this.lastTick) / 1000, 0.1) * p.animationSpeed;
         this.lastTick = now;
         const internalResolution: [number, number] = [this.baseTargets[0].width, this.baseTargets[0].height];
-        const timer = !profilingFrame && !this.paused && this.timerQuery ? this.gl.createQuery() : null;
+        const timer = !ablationReady && !this.paused && this.timerQuery ? this.gl.createQuery() : null;
         if (timer) this.gl.beginQuery(this.timerQuery!.TIME_ELAPSED_EXT, timer);
         let data = packUniform(internalResolution, this.simTime, this.options.seed, p, 0, this.frame),
             current = 0,
@@ -414,7 +423,7 @@ export class WebGL2Renderer implements RenderBackend {
             this.boundTextures.clear();
         }
         const adjustments = this.cachedLeading;
-        if (adjustments.some((x) => !isNeutralAdjustment(x))) {
+        if (ablation?.kind !== 'colour' && adjustments.some((x) => !isNeutralAdjustment(x))) {
             const tex =
                 this.adjustmentTexture ??
                 (this.adjustmentTexture = this.uploadCube(composeAdjustmentLut(adjustments), ADJUSTMENT_LUT_SIZE));
@@ -432,6 +441,7 @@ export class WebGL2Renderer implements RenderBackend {
             [current, next] = [next, current];
         }
         for (const e of this.options.colour) {
+            if (ablation?.kind === 'colour') continue;
             if (e.type === 'curve' || e.type === 'levels' || e.type === 'hsl' || !e.enabled) continue;
             if (e.type === 'lut') {
                 if (!e.assetId || !this.options.lutAssets?.[e.assetId]) continue;
@@ -506,14 +516,15 @@ export class WebGL2Renderer implements RenderBackend {
         }
         const postStages = this.cachedPostPlan;
         let source: Target = this.colourTargets[current];
-        if (postStages.some((e) => e.kind === 'datamosh') && !this.historyValid) {
+        if (ablation?.kind !== 'all-post' && postStages.some((e) => e.kind === 'datamosh') && !this.historyValid) {
             this.upload(data);
             this.draw('COPY', this.history!, source.texture, undefined, undefined, 'post:history-copy');
             this.historyValid = true;
         }
         let postRan = false;
         let postIndex = 0;
-        for (const e of postStages) {
+        for (const [stageIndex, e] of postStages.entries()) {
+            if (ablation?.kind === 'all-post' || (ablation?.kind === 'post' && ablation.index === stageIndex)) continue;
             if (e.kind === 'datamosh' && !this.historyValid) continue;
             const destination = this.postTargets[postIndex];
             if (e.kind === 'god-rays') {
@@ -562,6 +573,7 @@ export class WebGL2Renderer implements RenderBackend {
         }
         for (let i = 0; i < OCTAVE_COUNT; i++) {
             data[29] = i;
+            if (ablation?.kind === 'all-octaves' || (ablation?.kind === 'octave' && ablation.index === i)) continue;
             if (octaveBlurIsActive(p, i)) {
                 const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
                 this.upload(data);
@@ -579,7 +591,14 @@ export class WebGL2Renderer implements RenderBackend {
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
         this.upload(data);
-        this.draw('PRESENT', null, source.texture, undefined, undefined, 'display');
+        this.draw(
+            ablation?.kind === 'presentation-lite' ? 'DISPLAY' : 'PRESENT',
+            null,
+            source.texture,
+            undefined,
+            undefined,
+            'display',
+        );
         if (timer) {
             this.gl.endQuery(this.timerQuery!.TIME_ELAPSED_EXT);
             this.pendingTimerQueries.push({
@@ -591,14 +610,14 @@ export class WebGL2Renderer implements RenderBackend {
         if (!this.paused) {
             this.frame = (this.frame + 1) % 16777216;
         }
-        this.finishProfileFrame();
-        const sync = profilingFrame ? null : this.gl.fenceSync(this.gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        const sync = this.gl.fenceSync(this.gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
         if (sync) {
             this.pendingFence = {
                 sync,
                 submittedAt: performance.now(),
                 scale: this.adaptive.effectiveScale,
                 generation: this.adaptiveGeneration,
+                ablationVariant: this.ablationVariants ? this.ablationVariant : undefined,
             };
             this.scheduleFencePoll();
         }
@@ -615,50 +634,69 @@ export class WebGL2Renderer implements RenderBackend {
             this.adaptive.effectiveScale,
         );
     }
-    private copy(from: Target, to: Target, profileLabel?: string) {
+    private copy(from: Target, to: Target, _profileLabel?: string) {
         const gl = this.gl;
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, from.framebuffer);
         gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, to.framebuffer);
-        const started = this.webglProfileCurrent && profileLabel ? performance.now() : 0;
         gl.blitFramebuffer(0, 0, from.width, from.height, 0, 0, to.width, to.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
-        if (started) {
-            gl.finish();
-            this.webglProfileCurrent!.set(
-                profileLabel!,
-                (this.webglProfileCurrent!.get(profileLabel!) ?? 0) + performance.now() - started,
-            );
-        }
         this.currentFramebuffer = undefined;
     }
-    private finishProfileFrame() {
-        if (!this.webglProfileCurrent) return;
-        if (++this.webglProfileFrame > 2)
-            for (const [label, ms] of this.webglProfileCurrent)
-                this.webglProfileTotals.set(label, (this.webglProfileTotals.get(label) ?? 0) + ms);
-        this.webglProfileCurrent = null;
-        if (this.webglProfileFrame !== 2 + 5) return;
-        this.webglProfile = false;
-        const passes = [...this.webglProfileTotals].map(([label, ms]) => ({ label, ms: ms / 5 }));
-        const sum = (test: (label: string) => boolean) =>
-            passes.filter((x) => test(x.label)).reduce((n, x) => n + x.ms, 0);
-        const fieldMs = sum((x) => x === 'base' || x === 'field-materialize'),
-            colourMs = sum((x) => x.startsWith('colour:')),
-            postMs = sum((x) => x.startsWith('post:')),
-            octavesMs = sum((x) => x.startsWith('blur') || x.startsWith('octave')),
-            presentMs = sum((x) => x === 'display');
+    private beginAblation(postStages: ReturnType<typeof rendererStagePlan>) {
+        const variants: AblationVariant[] = [{ label: 'baseline', kind: 'baseline' }];
+        postStages.forEach((stage, index) =>
+            variants.push({ label: `post:${index}:${stage.label}`, kind: 'post', index }),
+        );
+        if (postStages.length) variants.push({ label: 'all-post', kind: 'all-post' });
+        for (let index = 0; index < OCTAVE_COUNT; index++)
+            if (
+                octaveBlurIsActive(this.options.parameters, index) ||
+                octaveEffectIsActive(this.options.parameters, index)
+            )
+                variants.push({ label: `octave:${index}`, kind: 'octave', index });
+        if (variants.some((x) => x.kind === 'octave')) variants.push({ label: 'all-octaves', kind: 'all-octaves' });
+        variants.push({ label: 'colour', kind: 'colour' });
+        // DISPLAY is the existing simple texture-to-canvas path, so it is a valid PRESENT replacement.
+        variants.push({ label: 'presentation-lite', kind: 'presentation-lite' });
+        this.ablationVariants = variants;
+        this.ablationTotals = variants.map(() => 0);
+        // Freeze scale/evidence and discard queries submitted before the diagnostic boundary.
+        this.adaptiveGeneration++;
+        for (const pending of this.pendingTimerQueries) this.gl.deleteQuery(pending.query);
+        this.pendingTimerQueries = [];
+    }
+    private finishAblation() {
+        const variants = this.ablationVariants!;
+        const averages = this.ablationTotals.map((total) => total / ABLATION_SAMPLES);
+        const baseline = averages[0];
+        const passes = variants.map((variant, index) => ({
+            label: `ablation:${variant.label}`,
+            ms: index === 0 ? baseline : baseline - averages[index],
+        }));
+        const cost = (kind: AblationVariant['kind']) =>
+            variants.reduce((sum, variant, index) => sum + (variant.kind === kind ? baseline - averages[index] : 0), 0);
+        const groupCost = (kind: AblationVariant['kind']) => {
+            const index = variants.findIndex((variant) => variant.kind === kind);
+            return index < 0 ? 0 : baseline - averages[index];
+        };
+        const colourMs = cost('colour'),
+            postMs = groupCost('all-post'),
+            octavesMs = groupCost('all-octaves'),
+            presentMs = cost('presentation-lite');
         this.onGpuStats?.({
-            totalMs: fieldMs + colourMs + postMs + octavesMs + presentMs,
-            fieldMs,
+            totalMs: baseline,
+            fieldMs: Math.max(0, baseline - colourMs - postMs - octavesMs - presentMs),
             colourMs,
             postMs,
             octavesMs,
             presentMs,
-            baseMs: fieldMs,
-            blurMs: sum((x) => x.startsWith('blur')),
-            octaveMs: sum((x) => x.startsWith('octave')),
+            baseMs: 0,
+            blurMs: 0,
+            octaveMs: octavesMs,
             displayMs: presentMs,
             passes,
         });
+        this.webglAblate = false;
+        this.ablationVariants = null;
     }
     private resize() {
         const r = this.canvas.getBoundingClientRect(),
@@ -716,7 +754,16 @@ export class WebGL2Renderer implements RenderBackend {
         }
         this.gl.deleteSync(pending.sync);
         this.pendingFence = null;
-        if (!this.timerQuery && pending.generation === this.adaptiveGeneration) {
+        if (pending.ablationVariant !== undefined && this.ablationVariants) {
+            if (this.ablationSample >= ABLATION_WARMUPS)
+                this.ablationTotals[pending.ablationVariant] += now - pending.submittedAt;
+            this.ablationSample++;
+            if (this.ablationSample === ABLATION_WARMUPS + ABLATION_SAMPLES) {
+                this.ablationSample = 0;
+                this.ablationVariant++;
+                if (this.ablationVariant === this.ablationVariants.length) this.finishAblation();
+            }
+        } else if (!this.timerQuery && pending.generation === this.adaptiveGeneration) {
             const nextScale = this.adaptive.sampleGpu(
                 now - pending.submittedAt,
                 now,

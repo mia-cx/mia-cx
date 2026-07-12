@@ -149,15 +149,24 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).not.toContain('performance.now() - this.fenceStartedAt');
     });
 
-    it('gates and bounds synchronous per-pass profiling', () => {
+    it('gates and bounds asynchronous fence ablation without changing the normal path', () => {
         const implementation = WebGL2Renderer.toString();
-        expect(implementation).toContain('new URLSearchParams(location.search).get("webglProfile") === "1"');
-        expect(implementation).toContain('this.webglProfileFrame < 2 + 5');
-        expect(implementation).toContain('this.webglProfileFrame !== 2 + 5');
-        expect(implementation).toContain('"post:history-copy"');
-        expect(implementation).toContain('`blur${i}`');
-        expect(implementation).toContain('"display"');
-        expect(implementation).toContain('if (this.webglProfileCurrent && profileLabel)');
+        expect(implementation).toContain('new URLSearchParams(location.search).get("webglAblate") === "1"');
+        expect(implementation).toContain('ablationSample === ABLATION_WARMUPS + ABLATION_SAMPLES');
+        expect(implementation).toContain('pending.ablationVariant !== void 0');
+        expect(implementation).toContain('label: `ablation:${variant.label}`');
+        expect(implementation).not.toContain('.finish()');
+        expect(implementation).not.toContain('readPixels');
+    });
+
+    it('uses canonical continuity-preserving ablation skips', () => {
+        const implementation = WebGL2Renderer.toString();
+        expect(implementation).toContain('ablation?.kind === "post" && ablation.index === stageIndex');
+        expect(implementation).toContain('ablation?.kind === "octave" && ablation.index === i');
+        expect(implementation).toContain('ablation?.kind === "all-post"');
+        expect(implementation).toContain('ablation?.kind === "all-octaves"');
+        expect(implementation).toContain('ablation?.kind !== "colour"');
+        expect(implementation).toContain('ablation?.kind === "presentation-lite" ? "DISPLAY" : "PRESENT"');
     });
 
     it('renders one full-resolution frozen pause frame and restores adaptive rendering', () => {
@@ -168,6 +177,6 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).toContain('if (!preserveHistory) this.historyValid = false');
         expect(implementation).toContain('if (postRan && !this.paused)');
         expect(implementation).toContain('this.frame = (this.frame + 1)');
-        expect(implementation).toContain('const timer = !profilingFrame && !this.paused && this.timerQuery');
+        expect(implementation).toContain('const timer = !ablationReady && !this.paused && this.timerQuery');
     });
 });
