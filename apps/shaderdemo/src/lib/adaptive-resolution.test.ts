@@ -36,6 +36,15 @@ describe('predictive adaptive resolution', () => {
         expect(c.effectiveScale).toBe(1);
     });
 
+    it('drops promptly at the default thresholds when frames miss 60 fps', () => {
+        const c = new AdaptiveResolutionController(1);
+        c.reset(0);
+        let changed: number | undefined;
+        for (let now = 0; now <= 600 && changed === undefined; now += 24) changed = c.sample(24, now);
+        expect(changed).toBeDefined();
+        expect(c.effectiveScale).toBeLessThan(1);
+    });
+
     it('uses GPU timing to see headroom hidden by 60 Hz vsync', () => {
         const c = controller({ upSustainMs: 400 });
         c.sampleGpu(30, 0);

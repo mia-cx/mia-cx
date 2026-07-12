@@ -32,9 +32,9 @@ export class AdaptiveResolutionController {
         this.config = {
             minScale: options.minScale ?? 0.25,
             quantum: options.quantum ?? 0.025,
-            warmupMs: options.warmupMs ?? 1_000,
-            trialWarmupMs: options.trialWarmupMs ?? 300,
-            downSustainMs: options.downSustainMs ?? 250,
+            warmupMs: options.warmupMs ?? 250,
+            trialWarmupMs: options.trialWarmupMs ?? 200,
+            downSustainMs: options.downSustainMs ?? 150,
             upSustainMs: options.upSustainMs ?? 2_000,
             overloadedFrameMs: options.overloadedFrameMs ?? 18,
             targetMs: options.targetMs ?? 14.75,
