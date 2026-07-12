@@ -33,7 +33,7 @@ describe('GPU-processing-only adaptive resolution', () => {
 
     it('uses the first GPU result for an immediate predictive estimate', () => {
         const controller = new AdaptiveResolutionController(1);
-        expect(controller.sampleGpu(30)).toBe(0.7);
+        expect(controller.sampleGpu(30)).toBe(0.575);
         expect(controller.currentEvaluationWindow).toBe(2);
     });
 

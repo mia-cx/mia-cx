@@ -185,6 +185,8 @@ describe('field configuration', () => {
         expect(source).toContain('sampleGpu(stats.totalMs');
         expect(source).toContain('lastFrameTimingAt');
         expect(source).not.toContain('adaptiveResolution.sample(dt');
+        expect(source).toContain('frameInterval = 1e3 / 60');
+        expect(source).toContain('now + 0.5 < this.nextRenderAt');
         expect(source).toContain('slot.resolve.destroy()');
         expect(source).toContain('slot.readback.destroy()');
     });

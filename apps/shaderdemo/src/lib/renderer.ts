@@ -913,6 +913,7 @@ export class AtmosphereRenderer {
     private simTime = 0;
     private frameIndex = 0;
     private lastTime = performance.now();
+    private nextRenderAt = 0;
     private statsStartedAt = this.lastTime;
     private statsFrames = 0;
     private frameTelemetry = new FrameTelemetry();
@@ -1176,6 +1177,7 @@ export class AtmosphereRenderer {
     setPaused(value: boolean) {
         this.paused = value;
         this.lastTime = performance.now();
+        this.nextRenderAt = 0;
         this.statsStartedAt = this.lastTime;
         this.statsFrames = 0;
         this.frameTelemetry.reset();
@@ -1205,6 +1207,11 @@ export class AtmosphereRenderer {
         this.rafId = 0;
         if (this.destroyed) return;
         const animated = !this.paused;
+        const frameInterval = 1000 / 60;
+        if (animated && this.nextRenderAt > 0 && now + 0.5 < this.nextRenderAt) {
+            this.schedule();
+            return;
+        }
         const dt = Math.min(0.1, Math.max(0, (now - this.lastTime) / 1000));
         this.lastTime = now;
         if (animated) this.simTime = advanceSimulationTime(this.simTime, dt, this.options.parameters.animationSpeed);
@@ -1212,6 +1219,12 @@ export class AtmosphereRenderer {
             this.render();
             this.invalid = false;
             if (animated) {
+                if (this.nextRenderAt === 0 || now - this.nextRenderAt > frameInterval * 2)
+                    this.nextRenderAt = now + frameInterval;
+                else {
+                    do this.nextRenderAt += frameInterval;
+                    while (this.nextRenderAt <= now);
+                }
                 this.frameTelemetry.recordRenderedFrame(now);
                 this.statsFrames += 1;
                 if (document.hidden) this.resetAdaptive(now);
