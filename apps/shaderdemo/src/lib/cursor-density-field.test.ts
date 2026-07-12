@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CursorDensityField, densityPressureCoverage } from './cursor-density-field';
+import { CursorDensityField, MovementEnvelope, densityPressureCoverage } from './cursor-density-field';
 
 const maximum = (field: CursorDensityField) => field.snapshot().data.reduce((a, b) => Math.max(a, b), 0);
 
@@ -38,18 +38,16 @@ describe('CursorDensityField', () => {
         expect(field.snapshot().width).toBe(1024);
     });
 
-    it('builds gradually per event and caps exactly', () => {
+    it('repeated stamps use max rather than accumulating', () => {
         const field = new CursorDensityField();
         field.resize(200, 200);
         field.deposit(0, 0, 0.5, 2, 0.08);
         const first = maximum(field);
-        expect(first).toBeLessThan(255);
+        expect(first).toBeLessThan(1);
         field.deposit(0, 0, 0.5, 2, 0.08);
-        expect(maximum(field)).toBeGreaterThan(first);
+        expect(maximum(field)).toBe(first);
         for (let index = 0; index < 100; index++) field.deposit(0, 0, 0.5, 2, 0.08);
-        expect(maximum(field)).toBe(1);
-        field.deposit(0, 0, 0.5, 2, 0.08);
-        expect(maximum(field)).toBe(1);
+        expect(maximum(field)).toBe(first);
     });
 
     it('commits overlapping curve subsegments once and makes end intensity-neutral', () => {
@@ -193,5 +191,49 @@ describe('CursorDensityField', () => {
         field.endStroke(true, 0.08, 1);
         const { data, width, height } = field.snapshot();
         expect(data[Math.floor(height / 2) * width + Math.floor(width / 2)]).toBe(0);
+    });
+
+    it('uses elapsed movement time rather than event frequency', () => {
+        const lowRate = new MovementEnvelope();
+        const highRate = new MovementEnvelope();
+        let a = 0,
+            b = 0;
+        for (let t = 0; t <= 400; t += 100) a = lowRate.strength(t, 0.4);
+        for (let t = 0; t <= 400; t += 4) b = highRate.strength(t, 0.4);
+        expect(a).toBeCloseTo(b, 10);
+        expect(a).toBe(1);
+    });
+
+    it('starts dim, reaches full, and resets after a pause', () => {
+        const envelope = new MovementEnvelope();
+        expect(envelope.strength(0, 0.4)).toBeCloseTo(0.05);
+        for (let time = 100; time <= 400; time += 100) envelope.strength(time, 0.4);
+        expect(envelope.strength(400, 0.4)).toBe(1);
+        expect(envelope.strength(600, 0.4)).toBeCloseTo(0.05);
+        expect(envelope.strength(601, 0)).toBe(1);
+    });
+
+    it('rasterizes and commits one coalesced large-radius batch once', () => {
+        const field = new CursorDensityField();
+        field.resize(256, 256);
+        const version = field.version;
+        const points = Array.from({ length: 40 }, (_, i) => ({
+            x: -0.9 + i * 0.045,
+            y: Math.sin(i / 6) * 0.2,
+            timeStamp: i * 2,
+        }));
+        expect(field.addStrokeBatch(points, 0.8, 1, 0)).toBe(true);
+        expect(field.rasterPasses).toBe(1);
+        expect(field.version).toBe(version + 1);
+        expect(maximum(field)).toBeGreaterThan(0);
+    });
+
+    it('does not paint stationary input or bridge ended strokes', () => {
+        const field = new CursorDensityField();
+        field.resize(256, 256);
+        expect(field.addStrokeBatch([{ x: -0.8, y: 0, timeStamp: 0 }], 0.1, 1, 0)).toBe(false);
+        field.endStroke(false);
+        expect(field.addStrokeBatch([{ x: 0.8, y: 0, timeStamp: 20 }], 0.1, 1, 0)).toBe(false);
+        expect(maximum(field)).toBe(0);
     });
 });

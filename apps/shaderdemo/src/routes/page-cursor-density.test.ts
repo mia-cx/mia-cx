@@ -10,9 +10,7 @@ describe('cursor density animation', () => {
         expect(animation).toContain('if (!paused)');
         expect(animation.indexOf('cursorState.tick(dt)')).toBeGreaterThan(animation.indexOf('if (!paused)'));
         expect(animation.indexOf('cursorDensityField.tick(')).toBeGreaterThan(animation.indexOf('if (!paused)'));
-        expect(animation).toContain(
-            'if (densityTick.changed) renderer?.setCursorDensityField?.(cursorDensityField.snapshot())',
-        );
+        expect(animation).toContain('if (painted || densityTick.changed)');
         expect(animation).not.toContain('if (!paused && !document.hidden)');
     });
 });

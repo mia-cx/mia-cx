@@ -59,6 +59,7 @@
     let renderer: RenderBackend | undefined;
     const cursorState = new CursorState();
     const cursorDensityField = new CursorDensityField();
+    let densityPoints: { x: number; y: number; timeStamp: number }[] = [];
     const initialDefaults = defaultShaderSettings();
     let options: RenderOptions = $state({
         seed: initialDefaults.seed,
@@ -195,17 +196,13 @@
                 options.parameters.cursorEnabled !== 0 &&
                 options.parameters.cursorDensityPressureEnabled !== 0
             ) {
-                cursorDensityField.addStrokePoint(
-                    cursorState.x,
-                    cursorState.y,
-                    options.parameters.cursorDensityRadius,
-                    options.parameters.cursorDensityPressureFalloff,
-                    options.parameters.cursorDensityBuildUp,
-                );
-            } else if (depositDensity) cursorDensityField.endStroke(false);
+                densityPoints.push({ x: cursorState.x, y: cursorState.y, timeStamp: sample.timeStamp });
+            } else if (depositDensity) {
+                densityPoints = [];
+                cursorDensityField.endStroke(false);
+            }
         }
         sendCursor();
-        renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
     }
     function pointerDown(event: PointerEvent) {
         canvas.setPointerCapture(event.pointerId);
@@ -219,8 +216,8 @@
         sendCursor();
     }
     function pointerLeave() {
+        densityPoints = [];
         cursorDensityField.endStroke(false);
-        renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
         cursorState.leave();
         sendCursor();
     }
@@ -393,8 +390,15 @@
                 }
                 const rect = canvas.getBoundingClientRect();
                 resizeCursorDensity(rect);
+                const painted = cursorDensityField.addStrokeBatch(
+                    densityPoints,
+                    options.parameters.cursorDensityRadius,
+                    options.parameters.cursorDensityPressureFalloff,
+                    options.parameters.cursorDensityBuildUp,
+                );
+                densityPoints = [];
                 const densityTick = cursorDensityField.tick(dt, options.parameters.cursorDensityDecay);
-                if (densityTick.changed) renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
+                if (painted || densityTick.changed) renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
             }
             cursorTime = now;
             cursorFrame = requestAnimationFrame(animateCursor);
@@ -403,6 +407,7 @@
         const visibility = () => {
             renderer?.setPaused(document.hidden || paused);
             if (document.hidden) {
+                densityPoints = [];
                 cursorDensityField.endStroke(false);
                 cursorState.leave();
                 sendCursor();

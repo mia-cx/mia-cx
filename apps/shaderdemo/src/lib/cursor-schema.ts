@@ -29,7 +29,7 @@ export const CURSOR_EFFECT_GROUPS = [
             p('cursorDensityRadius', 'Radius', 0.02, 1, 0.01, 0.22, true),
             p('cursorDensityPressureFalloff', 'Falloff', 0, 8, 0.05, 1, true),
             p('cursorDensityStrength', 'Density strength', -3, 3, 0.01, 1),
-            p('cursorDensityBuildUp', 'Build-up', 0.001, 0.25, 0.001, 0.04, true),
+            p('cursorDensityBuildUp', 'Build-up time', 0, 2, 0.01, 0.4, true),
             p('cursorDensityDecay', 'Decay', 0.01, 5, 0.01, 0.7, true),
             p('cursorDensityBulgeStrength', 'Bulge strength', -1, 1, 0.01, 0.18),
             p('cursorDensityBulgeFalloff', 'Bulge falloff', 0.25, 4, 0.05, 1.5),

@@ -12,12 +12,12 @@ describe('CursorState', () => {
             'Radius',
             'Falloff',
             'Density strength',
-            'Build-up',
+            'Build-up time',
             'Decay',
             'Bulge strength',
             'Bulge falloff',
         ]);
-        expect(densityGroups[0][2][3]).toMatchObject({ min: 0.001, max: 0.25, default: 0.04 });
+        expect(densityGroups[0][2][3]).toMatchObject({ min: 0, max: 2, default: 0.4 });
         expect(CURSOR_EFFECT_GROUPS.some(([label]) => label.toLowerCase().includes('halogen'))).toBe(false);
         expect(CURSOR_PARAMETER_KEYS.some((key) => key.includes('Halogen'))).toBe(false);
     });
