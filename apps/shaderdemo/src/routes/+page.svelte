@@ -14,7 +14,13 @@
         type GpuTimingStats,
     } from '$lib/renderer';
     import { selectRenderBackend, type RenderBackend } from '$lib/render-backend';
-    import { GpuTelemetry, type FrameRollingSummary, type GpuRollingSummary } from '$lib/telemetry';
+    import {
+        CursorInteractionTelemetry,
+        GpuTelemetry,
+        type CursorInteractionRollingSummary,
+        type FrameRollingSummary,
+        type GpuRollingSummary,
+    } from '$lib/telemetry';
     import {
         defaultShaderSettings,
         normalizeSavedSettings,
@@ -83,8 +89,10 @@
     let frameStats: FrameRollingSummary | undefined = $state();
     let gpuStats: GpuTimingStats | null | undefined = $state();
     let gpuRolling: GpuRollingSummary | undefined = $state();
+    let cursorCpuRolling: CursorInteractionRollingSummary | undefined = $state();
     let effectiveRenderScale = $state(1);
     const gpuTelemetry = new GpuTelemetry();
+    const cursorCpuTelemetry = new CursorInteractionTelemetry();
     const number = (value: number | undefined) => (value === undefined ? '…' : value.toFixed(1));
     const parameterTabs = [
         { id: 'field', label: 'Field' },
@@ -360,6 +368,7 @@
                 ];
                 instance.onStats = (_value, _width, _height, rolling, renderScale) => {
                     frameStats = rolling;
+                    cursorCpuRolling = cursorCpuTelemetry.summary(performance.now());
                     if (renderScale !== undefined) effectiveRenderScale = renderScale;
                 };
                 instance.onGpuStats = (value) => {
@@ -383,6 +392,7 @@
             cursorTime = performance.now();
         const animateCursor = (now: number) => {
             if (!document.hidden) {
+                const totalStart = performance.now();
                 const dt = (now - cursorTime) / 1000;
                 if (!paused) {
                     cursorState.tick(dt);
@@ -390,15 +400,36 @@
                 }
                 const rect = canvas.getBoundingClientRect();
                 resizeCursorDensity(rect);
+                const inputStart = performance.now();
+                const batch = densityPoints;
+                const pointCount = batch.length;
+                densityPoints = [];
+                const inputMs = performance.now() - inputStart;
+                const rasterStart = performance.now();
                 const painted = cursorDensityField.addStrokeBatch(
-                    densityPoints,
+                    batch,
                     options.parameters.cursorDensityRadius,
                     options.parameters.cursorDensityPressureFalloff,
                     options.parameters.cursorDensityBuildUp,
                 );
-                densityPoints = [];
+                const rasterMs = performance.now() - rasterStart;
+                const decayStart = performance.now();
                 const densityTick = cursorDensityField.tick(dt, options.parameters.cursorDensityDecay);
+                const decayMs = performance.now() - decayStart;
+                const uploadStart = performance.now();
                 if (painted || densityTick.changed) renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
+                const uploadSubmitMs = performance.now() - uploadStart;
+                const snapshot = cursorDensityField.snapshot();
+                cursorCpuTelemetry.record(now, {
+                    inputMs,
+                    rasterMs,
+                    decayMs,
+                    uploadSubmitMs,
+                    totalMs: performance.now() - totalStart,
+                    pointCount,
+                    width: snapshot.width,
+                    height: snapshot.height,
+                });
             }
             cursorTime = now;
             cursorFrame = requestAnimationFrame(animateCursor);
@@ -485,6 +516,52 @@
                                 </ul>
                             </details>
                         {/if}
+                        <details class="per-effect-timings cursor-interaction-timings">
+                            <summary>Cursor interaction (CPU)</summary>
+                            <ul>
+                                <li>
+                                    <span>INPUT / BATCH</span><span
+                                        >{number(cursorCpuRolling?.windows[5000]?.inputMs)}ms</span
+                                    >
+                                </li>
+                                <li>
+                                    <span>RASTER (spline / max)</span><span
+                                        >{number(cursorCpuRolling?.windows[5000]?.rasterMs)}ms</span
+                                    >
+                                </li>
+                                <li>
+                                    <span>DECAY</span><span>{number(cursorCpuRolling?.windows[5000]?.decayMs)}ms</span>
+                                </li>
+                                <li>
+                                    <span>UPLOAD / SUBMIT (CPU)</span><span
+                                        >{number(cursorCpuRolling?.windows[5000]?.uploadSubmitMs)}ms</span
+                                    >
+                                </li>
+                                <li>
+                                    <span>TOTAL 1s / 5s / 30s</span><span
+                                        >{number(cursorCpuRolling?.windows[1000]?.totalMs)} / {number(
+                                            cursorCpuRolling?.windows[5000]?.totalMs,
+                                        )} / {number(cursorCpuRolling?.windows[30000]?.totalMs)}ms</span
+                                    >
+                                </li>
+                                <li><span>TOTAL RMS 5s</span><span>{number(cursorCpuRolling?.rms5sMs)}ms</span></li>
+                                <li>
+                                    <span>Latest batch</span><span
+                                        >{cursorCpuRolling?.latest?.pointCount ?? 0} points</span
+                                    >
+                                </li>
+                                <li>
+                                    <span>Density upload</span><span
+                                        >{cursorCpuRolling?.latest?.width ?? 0}×{cursorCpuRolling?.latest?.height ?? 0} R8</span
+                                    >
+                                </li>
+                                <li><span>CURSOR GPU</span><span>INCLUDED IN FIELD</span></li>
+                            </ul>
+                            <small
+                                >Cursor density is sampled inline by Field. Upload / submit is CPU call time, not GPU
+                                completion.</small
+                            >
+                        </details>
                     {:else}
                         GPU timing…
                     {/if}

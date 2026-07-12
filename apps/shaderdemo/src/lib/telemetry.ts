@@ -2,6 +2,24 @@ import type { GpuTimingStats } from './renderer';
 
 export const FRAME_WINDOWS_MS = [500, 2_000, 10_000] as const;
 export const GPU_WINDOWS_MS = [1_000, 5_000, 30_000] as const;
+export const INTERACTION_WINDOWS_MS = [1_000, 5_000, 30_000] as const;
+
+export interface CursorInteractionSample {
+    inputMs: number;
+    rasterMs: number;
+    decayMs: number;
+    uploadSubmitMs: number;
+    totalMs: number;
+    pointCount: number;
+    width: number;
+    height: number;
+}
+
+export interface CursorInteractionRollingSummary {
+    windows: Record<(typeof INTERACTION_WINDOWS_MS)[number], CursorInteractionSample | undefined>;
+    rms5sMs?: number;
+    latest?: Pick<CursorInteractionSample, 'pointCount' | 'width' | 'height'>;
+}
 
 export interface FrameWindowStats {
     fps: number;
@@ -159,5 +177,45 @@ export class GpuTelemetry {
 
     get sampleCount() {
         return this.samples.size;
+    }
+}
+
+/** CPU wall-clock work performed by each cursor animation frame (including zero-work frames). */
+export class CursorInteractionTelemetry {
+    private samples = new TimeBuffer<CursorInteractionSample>(30_000, 1_800);
+
+    record(timestampMs: number, sample: CursorInteractionSample) {
+        this.samples.push(timestampMs, sample);
+    }
+
+    summary(nowMs: number): CursorInteractionRollingSummary {
+        this.samples.prune(nowMs);
+        const windows = {} as CursorInteractionRollingSummary['windows'];
+        for (const windowMs of INTERACTION_WINDOWS_MS) {
+            const samples = this.samples.current(nowMs, windowMs).map(({ value }) => value);
+            if (samples.length) {
+                const mean = (key: keyof CursorInteractionSample) =>
+                    samples.reduce((sum, sample) => sum + sample[key], 0) / samples.length;
+                windows[windowMs] = {
+                    inputMs: mean('inputMs'),
+                    rasterMs: mean('rasterMs'),
+                    decayMs: mean('decayMs'),
+                    uploadSubmitMs: mean('uploadSubmitMs'),
+                    totalMs: mean('totalMs'),
+                    pointCount: mean('pointCount'),
+                    width: mean('width'),
+                    height: mean('height'),
+                };
+            }
+        }
+        const fiveSeconds = this.samples.current(nowMs, 5_000).map(({ value }) => value);
+        const latest = fiveSeconds[fiveSeconds.length - 1];
+        return {
+            windows,
+            rms5sMs: fiveSeconds.length
+                ? Math.sqrt(fiveSeconds.reduce((sum, sample) => sum + sample.totalMs ** 2, 0) / fiveSeconds.length)
+                : undefined,
+            latest: latest ? { pointCount: latest.pointCount, width: latest.width, height: latest.height } : undefined,
+        };
     }
 }
