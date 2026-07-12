@@ -182,6 +182,8 @@ describe('field configuration', () => {
         expect(source).toContain('beginComputePass');
         expect(source).toContain('resolveQuerySet(this.frameTimingQuerySet');
         expect(source).toContain('sampleGpu(gpuMs');
+        expect(source).toContain('sampleGpu(stats.totalMs');
+        expect(source).toContain('lastFrameTimingAt');
         expect(source).not.toContain('adaptiveResolution.sample(dt');
         expect(source).toContain('slot.resolve.destroy()');
         expect(source).toContain('slot.readback.destroy()');

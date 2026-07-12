@@ -927,6 +927,7 @@ export class AtmosphereRenderer {
     private frameTimingQuerySet?: GPUQuerySet;
     private frameTimingSlots: FrameTimingSlot[] = [];
     private frameTimingCursor = 0;
+    private lastFrameTimingAt = 0;
     private adaptiveGeneration = 0;
     private readonly visibilityHandler = () => {
         if (document.hidden) this.resetAdaptive(performance.now());
@@ -1197,6 +1198,7 @@ export class AtmosphereRenderer {
     }
     private resetAdaptive(now: number) {
         this.adaptiveGeneration += 1;
+        this.lastFrameTimingAt = 0;
         this.adaptiveResolution.reset(now);
     }
     private tick = (now: number) => {
@@ -1485,11 +1487,12 @@ export class AtmosphereRenderer {
         }
         d.queue.submit([enc.finish()]);
         if (frameTimingSlot) this.readFrameTiming(frameTimingSlot);
-        if (sampleGpu) this.readGpuTimestamps(gpuLabels!);
+        if (sampleGpu)
+            this.readGpuTimestamps(gpuLabels!, this.adaptiveResolution.effectiveScale, this.adaptiveGeneration);
         this.renderedFrames += 1;
         if (!this.paused) this.frameIndex = (this.frameIndex + 1) % 16_777_216;
     }
-    private readGpuTimestamps(labels: string[]) {
+    private readGpuTimestamps(labels: string[], sampledScale: number, generation: number) {
         const buffer = this.queryReadbackBuffer!;
         buffer
             .mapAsync(GPUMapMode.READ)
@@ -1498,6 +1501,19 @@ export class AtmosphereRenderer {
                     const values = new BigUint64Array(buffer.getMappedRange()).slice(0, labels.length * 2);
                     const stats = aggregateGpuTimestamps(values, labels);
                     this.gpuStatsCallback?.(stats);
+                    const now = performance.now();
+                    // The dedicated two-timestamp ring is preferred. Some WebGPU implementations accept
+                    // those empty timestamp passes but never return a mappable result, so retain the proven
+                    // detailed timestamp path as a processing-time-only fallback rather than falling back to rAF.
+                    if (
+                        generation === this.adaptiveGeneration &&
+                        !this.paused &&
+                        !document.hidden &&
+                        (this.lastFrameTimingAt === 0 || now - this.lastFrameTimingAt > 1_000)
+                    ) {
+                        const nextScale = this.adaptiveResolution.sampleGpu(stats.totalMs, now, true, sampledScale);
+                        if (nextScale !== undefined) this.recreateTargets();
+                    }
                 }
             })
             .catch(() => {})
@@ -1529,6 +1545,7 @@ export class AtmosphereRenderer {
                 const values = new BigUint64Array(slot.readback.getMappedRange());
                 if (values.length < 2 || values[1] <= values[0]) return;
                 const gpuMs = Number(values[1] - values[0]) / 1_000_000;
+                this.lastFrameTimingAt = performance.now();
                 const nextScale = this.adaptiveResolution.sampleGpu(gpuMs, performance.now(), true, slot.scale);
                 if (nextScale !== undefined) this.recreateTargets();
             })
