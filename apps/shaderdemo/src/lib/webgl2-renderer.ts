@@ -37,6 +37,9 @@ void main(){gl_Position=vec4(P[gl_VertexID],0.,1.);}`;
 type ProgramName = keyof typeof shader;
 type TimerQueryExtension = { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number };
 type PendingTimerQuery = { query: WebGLQuery; scale: number; generation: number };
+type PendingFence = { sync: WebGLSync; submittedAt: number; scale: number; generation: number };
+const FENCE_POLL_MS = 4;
+const FENCE_EMERGENCY_MS = 750;
 export type WebGL2TargetKind = 'base' | 'colour' | 'post' | 'god-rays';
 type Target = {
     texture: WebGLTexture;
@@ -103,7 +106,8 @@ export class WebGL2Renderer implements RenderBackend {
     private uniformBuffer: WebGLBuffer;
     private vao: WebGLVertexArrayObject;
     private raf = 0;
-    private fence: WebGLSync | null = null;
+    private pendingFence: PendingFence | null = null;
+    private fencePollTimer: ReturnType<typeof setTimeout> | undefined;
     private paused = false;
     private destroyed = false;
     private invalid = true;
@@ -120,6 +124,8 @@ export class WebGL2Renderer implements RenderBackend {
     private telemetry = new FrameTelemetry();
     private observer: ResizeObserver;
     private lutTextures = new Map<string, WebGLTexture>();
+    private adjustmentTexture?: WebGLTexture;
+    private samplerLocations = new Map<WebGLProgram, (WebGLUniformLocation | null)[]>();
     private constructor(
         private canvas: HTMLCanvasElement,
         private gl: WebGL2RenderingContext,
@@ -132,6 +138,7 @@ export class WebGL2Renderer implements RenderBackend {
         this.vao = vao;
         this.adaptive = new AdaptiveResolutionController(options.renderScale, {
             initialScale: Math.min(WEBGL2_STARTUP_SCALE, options.renderScale),
+            severeSamples: 1,
         });
         this.timerQuery = gl.getExtension('EXT_disjoint_timer_query_webgl2') ?? undefined;
         this.observer = new ResizeObserver(() => {
@@ -157,6 +164,11 @@ export class WebGL2Renderer implements RenderBackend {
         for (const p of self.programs.values()) {
             const i = gl.getUniformBlockIndex(p, 'U_block_0Fragment');
             if (i !== gl.INVALID_INDEX) gl.uniformBlockBinding(p, i, 0);
+            self.samplerLocations.set(p, [
+                gl.getUniformLocation(p, '_group_0_binding_1_fs'),
+                gl.getUniformLocation(p, '_group_0_binding_3_fs'),
+                gl.getUniformLocation(p, '_group_0_binding_4_fs'),
+            ]);
         }
         canvas.addEventListener('webglcontextlost', self.contextLost);
         canvas.addEventListener('webglcontextrestored', self.contextRestored);
@@ -234,9 +246,7 @@ export class WebGL2Renderer implements RenderBackend {
         this.adaptiveGeneration += 1;
     }
     private upload(data: Float32Array) {
-        const gl = this.gl;
-        gl.bindBuffer(gl.UNIFORM_BUFFER, this.uniformBuffer);
-        gl.bufferSubData(gl.UNIFORM_BUFFER, 0, data);
+        this.gl.bufferSubData(this.gl.UNIFORM_BUFFER, 0, data);
     }
     private draw(
         name: ProgramName,
@@ -264,7 +274,7 @@ export class WebGL2Renderer implements RenderBackend {
             if (!tex) return;
             gl.activeTexture(gl.TEXTURE0 + unit);
             gl.bindTexture(target, tex);
-            const l = gl.getUniformLocation(p, binding);
+            const l = this.samplerLocations.get(p)![binding === '_group_0_binding_4_fs' ? 2 : unit];
             if (l) gl.uniform1i(l, unit);
         };
         bind(0, source);
@@ -302,12 +312,13 @@ export class WebGL2Renderer implements RenderBackend {
         [current, next] = [next, current];
         const adjustments = leadingAdjustmentRegion(this.options.colour);
         if (adjustments.some((x) => !isNeutralAdjustment(x))) {
-            const tex = this.uploadCube(composeAdjustmentLut(adjustments), ADJUSTMENT_LUT_SIZE);
+            const tex =
+                this.adjustmentTexture ??
+                (this.adjustmentTexture = this.uploadCube(composeAdjustmentLut(adjustments), ADJUSTMENT_LUT_SIZE));
             data.fill(0, 60);
             data.set([0, 0, 0, 1, 1, 1, 1], 60);
             this.upload(data);
             this.draw('LUT', this.colourTargets[next], this.colourTargets[current].texture, undefined, tex);
-            this.gl.deleteTexture(tex);
             [current, next] = [next, current];
         }
         for (const e of this.options.colour) {
@@ -430,7 +441,16 @@ export class WebGL2Renderer implements RenderBackend {
         if (!this.paused) {
             this.frame = (this.frame + 1) % 16777216;
         }
-        this.fence = this.gl.fenceSync(this.gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        const sync = this.gl.fenceSync(this.gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        if (sync) {
+            this.pendingFence = {
+                sync,
+                submittedAt: performance.now(),
+                scale: this.adaptive.effectiveScale,
+                generation: this.adaptiveGeneration,
+            };
+            this.scheduleFencePoll();
+        }
         this.gl.flush();
         this.invalid = false;
         this.lastPresented = now;
@@ -488,19 +508,40 @@ export class WebGL2Renderer implements RenderBackend {
             if (nextScale !== undefined) this.recreateTargets();
         }
     }
+    private scheduleFencePoll() {
+        if (this.fencePollTimer === undefined)
+            this.fencePollTimer = setTimeout(() => {
+                this.fencePollTimer = undefined;
+                this.pollFence();
+            }, FENCE_POLL_MS);
+    }
+    private pollFence() {
+        const pending = this.pendingFence;
+        if (!pending || this.destroyed) return;
+        const status = this.gl.clientWaitSync(pending.sync, 0, 0);
+        const now = performance.now();
+        if (status === this.gl.TIMEOUT_EXPIRED && now - pending.submittedAt < FENCE_EMERGENCY_MS) {
+            this.scheduleFencePoll();
+            return;
+        }
+        this.gl.deleteSync(pending.sync);
+        this.pendingFence = null;
+        if (!this.timerQuery && pending.generation === this.adaptiveGeneration) {
+            const nextScale = this.adaptive.sampleGpu(
+                now - pending.submittedAt,
+                now,
+                !this.paused && !document.hidden,
+                pending.scale,
+            );
+            if (nextScale !== undefined) this.recreateTargets();
+        }
+        this.schedule();
+    }
     private tick = (now: number) => {
         this.raf = 0;
         if (this.destroyed) return;
         this.pollTimerQueries();
-        if (this.fence) {
-            const s = this.gl.clientWaitSync(this.fence, 0, 0);
-            if (s === this.gl.TIMEOUT_EXPIRED) {
-                this.schedule();
-                return;
-            }
-            this.gl.deleteSync(this.fence);
-            this.fence = null;
-        }
+        if (this.pendingFence) return;
         if ((!this.paused && now - this.lastPresented + 0.5 >= 1000 / 60) || this.invalid) this.render(now);
         if (!this.paused) this.schedule();
     };
@@ -526,6 +567,8 @@ export class WebGL2Renderer implements RenderBackend {
                 this.lutTextures.delete(id);
             }
         this.options = o;
+        if (this.adjustmentTexture) this.gl.deleteTexture(this.adjustmentTexture);
+        this.adjustmentTexture = undefined;
         if (scaleChanged) this.adaptive.setCeiling(o.renderScale, performance.now());
         this.datamoshWasActive = datamoshIsActive(o.parameters);
         if (resize) this.recreateTargets();
@@ -546,7 +589,8 @@ export class WebGL2Renderer implements RenderBackend {
         if (this.destroyed) return;
         this.destroyed = true;
         if (this.raf) cancelAnimationFrame(this.raf);
-        if (this.fence) this.gl.deleteSync(this.fence);
+        if (this.fencePollTimer !== undefined) clearTimeout(this.fencePollTimer);
+        if (this.pendingFence) this.gl.deleteSync(this.pendingFence.sync);
         for (const pending of this.pendingTimerQueries) this.gl.deleteQuery(pending.query);
         this.pendingTimerQueries = [];
         this.observer.disconnect();
