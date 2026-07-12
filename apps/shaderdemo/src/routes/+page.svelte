@@ -75,6 +75,7 @@
     let frameStats: FrameRollingSummary | undefined = $state();
     let gpuStats: GpuTimingStats | null | undefined = $state();
     let gpuRolling: GpuRollingSummary | undefined = $state();
+    let effectiveRenderScale = $state(1);
     const gpuTelemetry = new GpuTelemetry();
     const number = (value: number | undefined) => (value === undefined ? '…' : value.toFixed(1));
     const parameterTabs = [
@@ -295,7 +296,10 @@
             .then((instance) => {
                 if (disposed) return instance.destroy();
                 renderer = instance;
-                instance.onStats = (_value, _width, _height, rolling) => (frameStats = rolling);
+                instance.onStats = (_value, _width, _height, rolling, renderScale) => {
+                    frameStats = rolling;
+                    if (renderScale !== undefined) effectiveRenderScale = renderScale;
+                };
                 instance.onGpuStats = (value) => {
                     gpuStats = value;
                     if (value) {
@@ -346,7 +350,9 @@
                         FPS paused/reset<br />frame RMS paused/reset
                     {:else}
                         FPS .5s {number(frameStats?.windows[500]?.fps)} · 2s {number(frameStats?.windows[2000]?.fps)} · 10s
-                        {number(frameStats?.windows[10000]?.fps)}<br />frame RMS {number(frameStats?.rms2sMs)}ms
+                        {number(frameStats?.windows[10000]?.fps)}<br />frame RMS {number(frameStats?.rms2sMs)}ms ·
+                        render
+                        {effectiveRenderScale.toFixed(2)}×
                     {/if}<br />
                     {#if gpuStats === null}
                         GPU timing unavailable

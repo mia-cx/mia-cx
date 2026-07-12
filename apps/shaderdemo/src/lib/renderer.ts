@@ -1,4 +1,5 @@
 import { FrameTelemetry, type FrameRollingSummary } from './telemetry';
+import { AdaptiveResolutionController } from './adaptive-resolution';
 import { ADJUSTMENT_LUT_SIZE, composeAdjustmentLut, isNeutralAdjustment } from './adjustments';
 import defaultSettingsFixture from './default-settings.json';
 import {
@@ -802,7 +803,12 @@ else if(kind==27){rgb=blend(rgb,textureSample(history,samp,uv).rgb,u.post[8].x);
 else{let g=frameHash(floor(pos.xy/p(31)),u32(u.frameIndex))-.5;rgb+=g*p(30);let e=smoothstep(1.-p(27),1.,length(uv*2.-1.)*.707);rgb*=1.-e*p(26);}return vec4f(rgb,1.);}`;
 export const PRESENT_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
-    /* wgsl */ `@group(0) @binding(1) var src:texture_2d<f32>;@group(0) @binding(2) var samp:sampler;@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f{return vec4f(textureSample(src,samp,pos.xy/u.resolution).rgb,1.);}`;
+    /* wgsl */ `@group(0) @binding(1) var src:texture_2d<f32>;@group(0) @binding(2) var samp:sampler;
+fn luma(c:vec3f)->f32{return dot(c,vec3f(.299,.587,.114));}
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f{let uv=pos.xy/u.resolution;let texel=1./vec2f(textureDimensions(src));let rgbM=textureSample(src,samp,uv).rgb;let lM=luma(rgbM);let lNW=luma(textureSample(src,samp,uv+vec2f(-1.,-1.)*texel).rgb);let lNE=luma(textureSample(src,samp,uv+vec2f(1.,-1.)*texel).rgb);let lSW=luma(textureSample(src,samp,uv+vec2f(-1.,1.)*texel).rgb);let lSE=luma(textureSample(src,samp,uv+vec2f(1.,1.)*texel).rgb);let range=max(max(max(lNW,lNE),max(lSW,lSE)),lM)-min(min(min(lNW,lNE),min(lSW,lSE)),lM);if(range<max(.0312,lM*.125)){return vec4f(rgbM,1.);}var dir=vec2f(-((lNW+lNE)-(lSW+lSE)),(lNW+lSW)-(lNE+lSE));let reduce=max((lNW+lNE+lSW+lSE)*.03125,.0078125);dir=clamp(dir/(min(abs(dir.x),abs(dir.y))+reduce),vec2f(-8.),vec2f(8.))*texel;let a=.5*(textureSample(src,samp,uv+dir*(1./3.-.5)).rgb+textureSample(src,samp,uv+dir*(2./3.-.5)).rgb);let b=a*.5+.25*(textureSample(src,samp,uv+dir*-.5).rgb+textureSample(src,samp,uv+dir*.5).rgb);let lb=luma(b);return vec4f(select(b,a,lb<lM-range*.5||lb>lM+range*.5),1.);}`;
+const COPY_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `@group(0) @binding(1) var src:texture_2d<f32>;@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f{return vec4f(textureLoad(src,vec2i(pos.xy),0).rgb,1.);}`;
 export const COLOUR_EFFECT_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
@@ -901,6 +907,7 @@ export class AtmosphereRenderer {
     private statsStartedAt = this.lastTime;
     private statsFrames = 0;
     private frameTelemetry = new FrameTelemetry();
+    private adaptiveResolution: AdaptiveResolutionController;
     private destroyed = false;
     private invalid = true;
     readonly gpuTimingSupported = false;
@@ -911,7 +918,7 @@ export class AtmosphereRenderer {
     private renderedFrames = 0;
     private gpuStatsCallback?: (stats: GpuTimingStats | null) => void;
     paused = false;
-    onStats?: (fps: number, width: number, height: number, rolling?: FrameRollingSummary) => void;
+    onStats?: (fps: number, width: number, height: number, rolling?: FrameRollingSummary, renderScale?: number) => void;
     get onGpuStats() {
         return this.gpuStatsCallback;
     }
@@ -925,6 +932,7 @@ export class AtmosphereRenderer {
         private canvas: HTMLCanvasElement,
         public options: RenderOptions,
     ) {
+        this.adaptiveResolution = new AdaptiveResolutionController(options.renderScale);
         this.observer = new ResizeObserver(() => {
             this.resize();
             this.invalidate();
@@ -969,7 +977,7 @@ export class AtmosphereRenderer {
             make(PRESENT_SHADER_SOURCE, format),
             make(COLOUR_EFFECT_SHADER_SOURCE, 'rgba16float'),
             make(LUT_SHADER_SOURCE, 'rgba16float'),
-            make(PRESENT_SHADER_SOURCE, POST_TEXTURE_FORMAT),
+            make(COPY_SHADER_SOURCE, POST_TEXTURE_FORMAT),
         ]);
         self.buffers = Array.from({ length: MAX_RENDER_PASSES }, () =>
             self.device!.createBuffer({
@@ -1015,6 +1023,7 @@ export class AtmosphereRenderer {
             this.canvas.width = size.width;
             this.canvas.height = size.height;
             this.recreateTargets();
+            this.adaptiveResolution.reset(performance.now());
         }
     }
     private recreateTargets() {
@@ -1025,7 +1034,7 @@ export class AtmosphereRenderer {
         this.bindGroups.clear();
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
         // Scalar field, linear Colour/Octaves, and display-space Post ping-pong.
-        const size = scaledSize(this.canvas.width, this.canvas.height, this.options.renderScale);
+        const size = scaledSize(this.canvas.width, this.canvas.height, this.adaptiveResolution.effectiveScale);
         this.textures = [
             ...Array.from({ length: 2 }, () =>
                 this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage }),
@@ -1063,12 +1072,14 @@ export class AtmosphereRenderer {
         this.historyValid = false;
     }
     setOptions(options: RenderOptions) {
+        const scaleChanged = this.options.renderScale !== options.renderScale;
         const changed =
             this.options.renderScale !== options.renderScale ||
             this.options.parameters.godRaysRenderScale !== options.parameters.godRaysRenderScale;
         const resetHistory =
             this.options.seed !== options.seed || (datamoshIsActive(options.parameters) && !this.datamoshWasActive);
         this.options = options;
+        if (scaleChanged) this.adaptiveResolution.setCeiling(options.renderScale, performance.now());
         this.datamoshWasActive = datamoshIsActive(options.parameters);
         this.updateAdjustmentLut();
         this.updateCubeLuts();
@@ -1130,7 +1141,14 @@ export class AtmosphereRenderer {
         this.statsStartedAt = this.lastTime;
         this.statsFrames = 0;
         this.frameTelemetry.reset();
-        this.onStats?.(0, this.canvas.width, this.canvas.height, this.frameTelemetry.summary(this.lastTime));
+        this.adaptiveResolution.reset(this.lastTime);
+        this.onStats?.(
+            0,
+            this.canvas.width,
+            this.canvas.height,
+            this.frameTelemetry.summary(this.lastTime),
+            this.adaptiveResolution.effectiveScale,
+        );
         this.invalidate();
     }
     invalidate() {
@@ -1153,11 +1171,19 @@ export class AtmosphereRenderer {
             if (animated) {
                 this.frameTelemetry.recordRenderedFrame(now);
                 this.statsFrames += 1;
+                const nextScale = this.adaptiveResolution.sample(dt * 1_000, now, !document.hidden);
+                if (nextScale !== undefined) this.recreateTargets();
             }
             const statsElapsed = now - this.statsStartedAt;
             if (animated && statsElapsed >= 500) {
                 const rolling = this.frameTelemetry.summary(now);
-                this.onStats?.(rolling.windows[500]?.fps ?? 0, this.canvas.width, this.canvas.height, rolling);
+                this.onStats?.(
+                    rolling.windows[500]?.fps ?? 0,
+                    this.canvas.width,
+                    this.canvas.height,
+                    rolling,
+                    this.adaptiveResolution.effectiveScale,
+                );
                 this.statsStartedAt = now;
                 this.statsFrames = 0;
             }
