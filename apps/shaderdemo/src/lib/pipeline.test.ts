@@ -31,6 +31,24 @@ describe('ordered pipeline helpers', () => {
         const items = migratePost(p).map((x) => ({ ...x, enabled: x.type === 'bloom' || x.type === 'sharpen' }));
         expect(rendererStagePlan(items.reverse(), p).map((x) => x.kind)).toEqual(['sharpen', 'bloom']);
     });
+    it('fuses only adjacent active vignette and film grain, preserving order and barriers', () => {
+        const p = defaultParameters();
+        p.vignetteAmount = p.filmGrainAmount = p.sharpen = 1;
+        const item = (type: 'vignette' | 'film-grain' | 'sharpen', n: number) => ({
+            id: `${type}-${n}`,
+            type,
+            enabled: true,
+        });
+        expect(rendererStagePlan([item('vignette', 1), item('film-grain', 1)], p)).toMatchObject([
+            { kind: 'fused-vignette-film-grain', label: 'post:fused [vignette #1 + film-grain #1]' },
+        ]);
+        expect(rendererStagePlan([item('film-grain', 1), item('vignette', 1)], p)[0].kind).toBe(
+            'fused-film-grain-vignette',
+        );
+        expect(
+            rendererStagePlan([item('vignette', 1), item('sharpen', 1), item('film-grain', 1)], p).map((x) => x.kind),
+        ).toEqual(['vignette', 'sharpen', 'film-grain']);
+    });
     it('segments scalar runs without moving them across RGB materialization', () => {
         const stack = [
             createColour('curve', 'curve-a'),

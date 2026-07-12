@@ -12,6 +12,7 @@ import {
     FIELD_BLEND_MODES,
     POST_BLEND_MODES,
     POST_EFFECT_SHADER_SOURCE,
+    POST_TEXTURE_FORMAT,
     POST_PARAMETER_SCHEMA,
     DISPLAY_SHADER_SOURCE,
     GOD_RAYS_SHADER_SOURCE,
@@ -43,6 +44,11 @@ import { defaultShaderSettings, normalizeSavedSettings } from './settings';
 import defaultSettingsFixture from './default-settings.json';
 
 describe('field configuration', () => {
+    it('uses dedicated rgba8 Post targets and ordered fused shader kinds', () => {
+        expect(POST_TEXTURE_FORMAT).toBe('rgba8unorm');
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('else if(kind==25)');
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('else{let g=frameHash');
+    });
     it('re-hashes film grain independently every rendered frame instead of translating a fixed field', () => {
         expect(POST_EFFECT_SHADER_SOURCE).toContain('frameHash(floor(pos.xy/p(31)),u32(u.frameIndex))');
         expect(POST_EFFECT_SHADER_SOURCE).toContain('frame*0xc2b2ae35u');
@@ -60,7 +66,7 @@ describe('field configuration', () => {
         const source = AtmosphereRenderer.toString();
         const adjustments = source.indexOf('colour:adjustments');
         const rgb = source.indexOf('const colourOccurrences');
-        const post = source.indexOf('post:${effect.kind}');
+        const post = source.indexOf('effect.label');
         const octave = source.indexOf('octave${octave + 1}');
         const display = source.indexOf('getCurrentTexture');
         expect([adjustments, rgb, post, octave, display]).not.toContain(-1);

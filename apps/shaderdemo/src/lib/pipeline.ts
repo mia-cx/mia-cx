@@ -272,10 +272,46 @@ export function leadingAdjustmentRegion(items: readonly ColourEffect[]): Adjustm
     return result;
 }
 
-export function postRendererPlan(items: PostEffect[], parameters: ShaderParameters) {
-    return items
-        .filter((x) => x.enabled && !isNeutralPost(x.type, parameters))
-        .map((x) => ({ id: x.id, kind: x.type, label: POST_LABELS[x.type] }));
+export type PostRendererStage = {
+    id: string;
+    kind: PostEffectKind | 'fused-vignette-film-grain' | 'fused-film-grain-vignette';
+    label: string;
+};
+
+/** Fuse only the two pointwise operations whose exact ordered formulas are implemented by the Post shader. */
+export function postRendererPlan(items: PostEffect[], parameters: ShaderParameters): PostRendererStage[] {
+    const active = items.filter((x) => x.enabled && !isNeutralPost(x.type, parameters));
+    const occurrences = new Map<PostEffectKind, number>();
+    const numbered = active.map((effect) => {
+        const occurrence = (occurrences.get(effect.type) ?? 0) + 1;
+        occurrences.set(effect.type, occurrence);
+        return { effect, occurrence };
+    });
+    const result: PostRendererStage[] = [];
+    for (let i = 0; i < numbered.length; i++) {
+        const first = numbered[i],
+            second = numbered[i + 1];
+        if (
+            second &&
+            ((first.effect.type === 'vignette' && second.effect.type === 'film-grain') ||
+                (first.effect.type === 'film-grain' && second.effect.type === 'vignette'))
+        ) {
+            const vignette = first.effect.type === 'vignette' ? first : second;
+            const grain = first.effect.type === 'film-grain' ? first : second;
+            result.push({
+                id: `${first.effect.id}+${second.effect.id}`,
+                kind: first.effect.type === 'vignette' ? 'fused-vignette-film-grain' : 'fused-film-grain-vignette',
+                label: `post:fused [vignette #${vignette.occurrence} + film-grain #${grain.occurrence}]`,
+            });
+            i++;
+        } else
+            result.push({
+                id: first.effect.id,
+                kind: first.effect.type,
+                label: `post:${first.effect.type} #${first.occurrence}`,
+            });
+    }
+    return result;
 }
 export function rendererStagePlan(items: PostEffect[], parameters: ShaderParameters) {
     return postRendererPlan(items, parameters);

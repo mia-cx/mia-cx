@@ -657,6 +657,7 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
 
 export const GOD_RAYS_TEXTURE_FORMAT: GPUTextureFormat = 'rgba16float';
 export const BLOOM_TEXTURE_FORMAT: GPUTextureFormat = 'rgba16float';
+export const POST_TEXTURE_FORMAT: GPUTextureFormat = 'rgba8unorm';
 
 export const GOD_RAYS_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
@@ -789,7 +790,9 @@ else if(kind==20){let w=vec2f(sin(uv.y*p(91)+u.time*p(92)),cos(uv.x*p(91)*.7+u.t
 else if(kind==21){let d=vec2f(cos(p(95)),sin(p(95)))*p(94)*px;rgb=vec3f(textureSample(src,samp,safe(uv+d)).r,rgb.g,textureSample(src,samp,safe(uv-d)).b);}
 else if(kind==22){let d=uv-.5;let seg=6.2831853/p(98);let a=abs(fract((atan2(d.y,d.x)+seg*.5)/seg)*seg-seg*.5);let q=.5+length(d)*vec2f(cos(a),sin(a));rgb=mix(rgb,textureSample(src,samp,safe(q)).rgb,p(97));}
 else if(kind==23){let bs=p(101);let block=floor(pos.xy/bs);let shift=(hash(block+vec2f(u.frameIndex))-.5)*p(100)*.2;let q=safe(uv+vec2f(shift,0));let current=textureSample(src,samp,q).rgb;let previous=textureSample(history,samp,q).rgb;rgb=mix(current,previous,clamp(p(100),0.,1.));}
-else{let line=floor(pos.y);let tear=(hash(vec2f(line,floor(u.time*p(105))))-.5)*step(.92,hash(vec2f(line,7.)));let shift=(sin(uv.y*p(104)+u.time*p(105))+tear)*p(103);rgb=textureSample(src,samp,safe(uv+vec2f(shift,0))).rgb;}return vec4f(rgb,1.);}`;
+else if(kind==24){let line=floor(pos.y);let tear=(hash(vec2f(line,floor(u.time*p(105))))-.5)*step(.92,hash(vec2f(line,7.)));let shift=(sin(uv.y*p(104)+u.time*p(105))+tear)*p(103);rgb=textureSample(src,samp,safe(uv+vec2f(shift,0))).rgb;}
+else if(kind==25){let e=smoothstep(1.-p(27),1.,length(uv*2.-1.)*.707);rgb*=1.-e*p(26);let g=frameHash(floor(pos.xy/p(31)),u32(u.frameIndex))-.5;rgb+=g*p(30);}
+else{let g=frameHash(floor(pos.xy/p(31)),u32(u.frameIndex))-.5;rgb+=g*p(30);let e=smoothstep(1.-p(27),1.,length(uv*2.-1.)*.707);rgb*=1.-e*p(26);}return vec4f(rgb,1.);}`;
 export const PRESENT_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `@group(0) @binding(1) var src:texture_2d<f32>;@group(0) @binding(2) var samp:sampler;@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f{return vec4f(textureSample(src,samp,pos.xy/u.resolution).rgb,1.);}`;
@@ -955,10 +958,11 @@ export class AtmosphereRenderer {
             make(BLOOM_BLUR_SHADER_SOURCE, BLOOM_TEXTURE_FORMAT),
             make(GOD_RAYS_SHADER_SOURCE, GOD_RAYS_TEXTURE_FORMAT),
             make(MATERIALIZE_SHADER_SOURCE, 'rgba16float'),
-            make(POST_EFFECT_SHADER_SOURCE, 'rgba16float'),
+            make(POST_EFFECT_SHADER_SOURCE, POST_TEXTURE_FORMAT),
             make(PRESENT_SHADER_SOURCE, format),
             make(COLOUR_EFFECT_SHADER_SOURCE, 'rgba16float'),
             make(LUT_SHADER_SOURCE, 'rgba16float'),
+            make(PRESENT_SHADER_SOURCE, POST_TEXTURE_FORMAT),
         ]);
         self.buffers = Array.from({ length: MAX_RENDER_PASSES }, () =>
             self.device!.createBuffer({
@@ -1013,7 +1017,7 @@ export class AtmosphereRenderer {
         this.textureViews = [];
         this.bindGroups.clear();
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
-        // Scalar field ping-pong, followed by non-aliasing RGBA16F colour/post ping-pong.
+        // Scalar field, linear Colour/Octaves, and display-space Post ping-pong.
         const size = scaledSize(this.canvas.width, this.canvas.height, this.options.renderScale);
         this.textures = [
             ...Array.from({ length: 2 }, () =>
@@ -1026,11 +1030,18 @@ export class AtmosphereRenderer {
                     usage: usage | GPUTextureUsage.COPY_SRC,
                 }),
             ),
+            ...Array.from({ length: 2 }, () =>
+                this.device!.createTexture({
+                    size: [size.width, size.height],
+                    format: POST_TEXTURE_FORMAT,
+                    usage: usage | GPUTextureUsage.COPY_SRC,
+                }),
+            ),
         ];
         this.textureViews = this.textures.map((texture) => texture.createView());
         this.historyTexture = this.device.createTexture({
             size: [size.width, size.height],
-            format: 'rgba16float',
+            format: POST_TEXTURE_FORMAT,
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
         });
         this.historyView = this.historyTexture.createView();
@@ -1146,9 +1157,9 @@ export class AtmosphereRenderer {
             !c ||
             buffers.length < MAX_RENDER_PASSES ||
             !s ||
-            this.pipelines.length < 12 ||
-            this.textures.length < 4 ||
-            this.textureViews.length < 4
+            this.pipelines.length < 13 ||
+            this.textures.length < 6 ||
+            this.textureViews.length < 6
         )
             return;
         const enc = d.createCommandEncoder();
@@ -1296,25 +1307,44 @@ export class AtmosphereRenderer {
             POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
         );
-        const postOccurrences = new Map<string, number>();
+        if (postStages.some((effect) => effect.kind === 'datamosh') && !this.historyValid && this.historyTexture) {
+            draw(this.textureViews[4], 12, rgbaCurrent, false, 'history-initialize');
+            enc.copyTextureToTexture({ texture: this.textures[4] }, { texture: this.historyTexture }, [
+                this.textures[4].width,
+                this.textures[4].height,
+            ]);
+            this.historyValid = true;
+        }
+        let postRan = false;
         for (const effect of postStages) {
             if (effect.kind === 'datamosh' && !this.historyValid) continue;
-            const occurrence = (postOccurrences.get(effect.kind) ?? 0) + 1;
-            postOccurrences.set(effect.kind, occurrence);
-            const destination = rgbaCurrent === 2 ? 3 : 2;
-            data[58] = POST_KIND_INDEX[effect.kind];
-            draw(this.textureViews[destination], 8, rgbaCurrent, true, `post:${effect.kind} #${occurrence}`);
+            const destination = !postRan ? 4 : rgbaCurrent === 4 ? 5 : 4;
+            data[58] =
+                effect.kind === 'fused-vignette-film-grain'
+                    ? 25
+                    : effect.kind === 'fused-film-grain-vignette'
+                      ? 26
+                      : POST_KIND_INDEX[effect.kind];
+            draw(this.textureViews[destination], 8, rgbaCurrent, true, effect.label);
             rgbaCurrent = destination;
+            postRan = true;
+        }
+        if (postRan && !this.paused && this.historyTexture) {
+            enc.copyTextureToTexture({ texture: this.textures[rgbaCurrent] }, { texture: this.historyTexture }, [
+                this.textures[rgbaCurrent].width,
+                this.textures[rgbaCurrent].height,
+            ]);
+            this.historyValid = true;
         }
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
             data[29] = octave;
             if (octaveBlurIsActive(this.options.parameters, octave)) {
-                const destination = rgbaCurrent === 2 ? 3 : 2;
+                const destination = rgbaCurrent >= 4 ? 2 : rgbaCurrent === 2 ? 3 : 2;
                 draw(this.textureViews[destination], 1, rgbaCurrent, true, `blur${octave + 1}`);
                 rgbaCurrent = destination;
             }
             if (octaveEffectIsActive(this.options.parameters, octave)) {
-                const destination = rgbaCurrent === 2 ? 3 : 2;
+                const destination = rgbaCurrent >= 4 ? 2 : rgbaCurrent === 2 ? 3 : 2;
                 draw(this.textureViews[destination], 2, rgbaCurrent, true, `octave${octave + 1}`);
                 rgbaCurrent = destination;
             }
@@ -1322,13 +1352,6 @@ export class AtmosphereRenderer {
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
         draw(c.getCurrentTexture().createView(), 9, rgbaCurrent, true, 'display');
-        if (!this.paused && this.historyTexture) {
-            enc.copyTextureToTexture({ texture: this.textures[rgbaCurrent] }, { texture: this.historyTexture }, [
-                this.textures[rgbaCurrent].width,
-                this.textures[rgbaCurrent].height,
-            ]);
-            this.historyValid = true;
-        }
         if (sampleGpu) {
             const bytes = gpuLabels!.length * 16;
             enc.resolveQuerySet(this.querySet!, 0, gpuLabels!.length * 2, this.queryResolveBuffer!, 0);
