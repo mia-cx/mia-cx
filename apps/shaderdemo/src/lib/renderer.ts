@@ -1420,11 +1420,11 @@ export class AtmosphereRenderer {
             this.queryReadbackBusy = true;
         }
         d.queue.submit([enc.finish()]);
-        if (sampleGpu) this.readGpuTimestamps(gpuLabels!);
+        if (sampleGpu) this.readGpuTimestamps(gpuLabels!, this.adaptiveResolution.effectiveScale);
         this.renderedFrames += 1;
         if (!this.paused) this.frameIndex = (this.frameIndex + 1) % 16_777_216;
     }
-    private readGpuTimestamps(labels: string[]) {
+    private readGpuTimestamps(labels: string[], sampledScale: number) {
         const buffer = this.queryReadbackBuffer!;
         buffer
             .mapAsync(GPUMapMode.READ)
@@ -1437,6 +1437,7 @@ export class AtmosphereRenderer {
                         stats.totalMs,
                         performance.now(),
                         !this.paused && !document.hidden,
+                        sampledScale,
                     );
                     if (nextScale !== undefined) this.recreateTargets();
                 }

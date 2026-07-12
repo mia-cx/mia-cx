@@ -1,65 +1,72 @@
 import { describe, expect, it } from 'vitest';
-import { AdaptiveResolutionController, type AdaptiveResolutionOptions } from './adaptive-resolution';
+import { AdaptiveResolutionController } from './adaptive-resolution';
 
-const controller = (extra: AdaptiveResolutionOptions = {}) =>
-    new AdaptiveResolutionController(1, { warmupMs: 0, trialWarmupMs: 0, downSustainMs: 0, ...extra });
+const renderWindow = (controller: AdaptiveResolutionController, ms: number, gpuMs?: number) => {
+    const count = controller.currentEvaluationWindow;
+    let changed: number | undefined;
+    for (let frame = 0; frame < count; frame += 1) changed = controller.sample(ms, frame, true, gpuMs) ?? changed;
+    return changed;
+};
 
-describe('predictive adaptive resolution', () => {
-    it('makes a substantial model-based jump on first overload', () => {
-        expect(controller().sample(30, 0)).toBe(0.675);
+describe('progressive predictive adaptive resolution', () => {
+    it('evaluates after exactly 1, 2, 4, ... 512 consecutive frames and then stays at 512', () => {
+        const controller = new AdaptiveResolutionController(1);
+        const schedule = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 512];
+        for (const window of schedule) {
+            expect(controller.currentEvaluationWindow).toBe(window);
+            for (let frame = 1; frame < window; frame += 1) {
+                expect(controller.sample(16.67, frame)).toBeUndefined();
+                expect(controller.currentEvaluationWindow).toBe(window);
+            }
+            expect(controller.sample(16.67, window)).toBeUndefined();
+        }
     });
 
-    it('uses its candidate measurement to refine toward the budget', () => {
-        const c = controller();
-        expect(c.sampleGpu(30, 0)).toBe(0.675);
-        expect(c.sampleGpu(18, 500)).toBe(0.55);
+    it('uses the first valid rendered frame for an immediate estimate', () => {
+        const controller = new AdaptiveResolutionController(1);
+        expect(controller.sample(30, 0)).toBe(0.7);
+        expect(controller.currentEvaluationWindow).toBe(2);
     });
 
-    it('fits fixed plus quadratic pixel cost from two scales', () => {
-        const c = controller();
-        c.sampleGpu(24, 0); // actual workload is 4 + 20 * scale²
-        const trial = c.effectiveScale;
-        const result = c.sampleGpu(4 + 20 * trial * trial, 500);
-        expect(result).toBeCloseTo(Math.round(Math.sqrt(10.75 / 20) / 0.025) * 0.025);
+    it('uses nearest-rank p99, retaining one slow frame in a small window', () => {
+        const controller = new AdaptiveResolutionController(1);
+        renderWindow(controller, 16.67); // advance to two frames
+        expect(controller.sample(16.67, 1)).toBeUndefined();
+        expect(controller.sample(40, 2)).toBeLessThan(1);
     });
 
-    it('honours floor and ceiling', () => {
-        const c = controller();
-        c.sample(200, 0);
-        expect(c.effectiveScale).toBeGreaterThanOrEqual(0.25);
-        expect(c.setCeiling(0.4, 10)).toBeLessThanOrEqual(0.4);
-    });
-
-    it('settles without oscillating inside hysteresis', () => {
-        const c = controller();
-        for (let now = 0; now < 1_000; now += 17) expect(c.sample(16.67, now)).toBeUndefined();
-        expect(c.effectiveScale).toBe(1);
-    });
-
-    it('drops promptly at the default thresholds when frames miss 60 fps', () => {
-        const c = new AdaptiveResolutionController(1);
-        c.reset(0);
-        let changed: number | undefined;
-        for (let now = 0; now <= 600 && changed === undefined; now += 24) changed = c.sample(24, now);
+    it('targets a sub-refresh budget with safety headroom', () => {
+        const controller = new AdaptiveResolutionController(1, { targetMs: 15.5 });
+        const changed = controller.sample(20, 0);
         expect(changed).toBeDefined();
-        expect(c.effectiveScale).toBeLessThan(1);
+        expect(changed!).toBeLessThan(0.9);
     });
 
-    it('uses GPU timing to see headroom hidden by 60 Hz vsync', () => {
-        const c = controller({ upSustainMs: 400 });
-        c.sampleGpu(30, 0);
-        const reduced = c.effectiveScale;
-        expect(c.sample(16.67, 100)).toBeUndefined();
-        expect(c.sampleGpu(8, 500)).toBeGreaterThan(reduced);
+    it('does not downscale forever when rAF is locked to 60 Hz', () => {
+        const controller = new AdaptiveResolutionController(1);
+        for (let frame = 0; frame < 1_200; frame += 1) controller.sample(16.67, frame);
+        expect(controller.effectiveScale).toBe(1);
     });
 
-    it('resets evidence while inactive and during warmup', () => {
-        const c = controller({ downSustainMs: 100 });
-        c.sample(30, 0);
-        c.sample(30, 50, false);
-        expect(c.sample(30, 60)).toBeUndefined();
-        const warming = new AdaptiveResolutionController(1, { warmupMs: 200, downSustainMs: 0 });
-        warming.reset(500);
-        expect(warming.sample(30, 600)).toBeUndefined();
+    it('uses corrected GPU timing to upscale when vsync conceals headroom', () => {
+        const controller = new AdaptiveResolutionController(1);
+        controller.sample(30, 0);
+        const reduced = controller.effectiveScale;
+        controller.sampleGpu(8, 1);
+        expect(controller.sample(16.67, 2)).toBeUndefined();
+        expect(controller.sample(16.67, 3)).toBeGreaterThan(reduced);
+    });
+
+    it('honours scale bounds and restarts at one frame on reset and ceiling changes', () => {
+        const controller = new AdaptiveResolutionController(1);
+        controller.sample(1_000, 0);
+        expect(controller.effectiveScale).toBeGreaterThanOrEqual(0.25);
+        expect(controller.currentEvaluationWindow).toBe(2);
+        controller.reset(1);
+        expect(controller.currentEvaluationWindow).toBe(1);
+        expect(controller.setCeiling(0.4, 2)).toBeLessThanOrEqual(0.4);
+        expect(controller.currentEvaluationWindow).toBe(1);
+        controller.sample(30, 3, false);
+        expect(controller.currentEvaluationWindow).toBe(1);
     });
 });
