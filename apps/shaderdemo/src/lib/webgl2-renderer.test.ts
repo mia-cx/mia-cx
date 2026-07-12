@@ -61,12 +61,15 @@ describe('WebGL2 parity backend', () => {
         }
     });
 
-    it('keeps generated WebGL2 density head and trail formulas in parity with canonical WGSL', () => {
-        expect(shaders.BASE).toContain('float headEnergy = pow(clamp(_e183, 0.0, 1.0), max(_e188, 0.1));');
+    it('keeps the generated WebGL2 density max envelope in parity with canonical WGSL', () => {
+        expect(shaders.BASE).toContain('float headEnergy = pow(clamp(_e185, 0.0, 1.0), max(_e190, 0.1));');
+        expect(shaders.BASE).toContain('densityPressureEnvelope = clamp((_e69 * headEnergy), 0.0, 1.0);');
         expect(shaders.BASE).toContain(
-            'float trail = ((_e277 * exp((-(sample_.z) * _e281))) * min((sample_.w / max(_e287, 0.0001)), 1.0));',
+            'float trail = clamp((((_e277 * exp((-(sample_.z) * _e281))) * min((sample_.w / max(_e287, 0.0001)), 1.0)) * _e295), 0.0, 1.0);',
         );
-        expect(shaders.BASE).toContain('float _e277 = cursorWeight(td, _e64, _e276);');
+        expect(shaders.BASE).toContain('float _e277 = cursorWeight(td, _e66, _e276);');
+        expect(shaders.BASE).toContain('densityPressureEnvelope = max(_e300, trail);');
+        expect(shaders.BASE).toContain('cursorDensity = (_e336 + (_e338 * _e339));');
         expect(shaders.BASE).not.toContain('halogen');
     });
 

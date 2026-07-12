@@ -541,7 +541,7 @@ fn cursorWeight(delta:vec2f,radius:f32,falloff:f32)->f32 { return exp(-pow(lengt
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
-    var cursorDensity=0.; var cursorDepth=0.;
+    var cursorDensity=0.; var cursorDepth=0.; var densityPressureEnvelope=0.;
     // Exact master bypass preserves the historical field bit-for-bit and avoids every cursor loop.
     if(cp(0u)!=0.) {
         let center=cursor.state0.xy; let velocity=cursor.state0.zw;
@@ -558,7 +558,7 @@ fn cursorWeight(delta:vec2f,radius:f32,falloff:f32)->f32 { return exp(-pow(lengt
         if(cp(22u)!=0.) { q-=direction*dot(delta,direction)*cp(23u)*weight; }
         if(cp(24u)!=0.) {
             let headEnergy=pow(clamp(cursor.state1.w,0.,1.),max(cp(28u),.1));
-            cursorDensity+=cp(25u)*weight*headEnergy;
+            densityPressureEnvelope=clamp(weight*headEnergy,0.,1.);
         }
         if(cp(33u)!=0.) { q=center+delta/(1.+cp(34u)*weight); }
         if(cp(35u)!=0.) { q+=direction*cp(36u)*weight; }
@@ -567,10 +567,11 @@ fn cursorWeight(delta:vec2f,radius:f32,falloff:f32)->f32 { return exp(-pow(lengt
         if(cp(24u)!=0. || cp(29u)!=0.) {
             for(var i=0u;i<16u;i++) { if(i<trailLimit) {
                 let sample=cursor.trail[i]; let td=q-sample.xy;
-                if(cp(24u)!=0.) { let trail=cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(27u))*min(sample.w/max(cp(3u),.0001),1.); cursorDensity+=cp(25u)*cp(26u)*trail; }
+                if(cp(24u)!=0.) { let trail=clamp(cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(27u))*min(sample.w/max(cp(3u),.0001),1.)*cp(26u),0.,1.); densityPressureEnvelope=max(densityPressureEnvelope,trail); }
                 if(cp(29u)!=0.) { let wake=cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(32u))*sin(length(td)*cp(31u)-sample.z*cp(31u)); q-=direction*cp(30u)*wake; }
             } }
         }
+        cursorDensity+=cp(25u)*densityPressureEnvelope;
         if(cp(39u)!=0.) { let rd=q-cursor.click.xy; let age=cursor.click.z; let ring=length(rd)-age*cp(44u); let envelope=exp(-age*cp(45u))*exp(-pow(ring/max(cp(42u),.0001),2.)); let wave=sin(ring*cp(43u))*envelope*cp(46u)*cursor.click.w; q+=normalize(rd+vec2f(.000001))*cp(40u)*wave; cursorDensity+=cp(41u)*wave; }
     }
     // Interpret field size against a 1080px reference height, not the render target's physical pixels.

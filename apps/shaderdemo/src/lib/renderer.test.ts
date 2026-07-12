@@ -45,13 +45,15 @@ import { defaultShaderSettings, normalizeSavedSettings } from './settings';
 import defaultSettingsFixture from './default-settings.json';
 
 describe('field configuration', () => {
-    it('applies motion-faded density pressure head and age/speed-faded path before thresholding', () => {
+    it('applies density pressure as one clamped, non-accumulating head/trail max envelope', () => {
         expect(BASE_SHADER_SOURCE).toContain('let headEnergy=pow(clamp(cursor.state1.w,0.,1.),max(cp(28u),.1))');
-        expect(BASE_SHADER_SOURCE).toContain('cursorDensity+=cp(25u)*weight*headEnergy');
+        expect(BASE_SHADER_SOURCE).toContain('densityPressureEnvelope=clamp(weight*headEnergy,0.,1.)');
         expect(BASE_SHADER_SOURCE).toContain(
-            'let trail=cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(27u))*min(sample.w/max(cp(3u),.0001),1.)',
+            'let trail=clamp(cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(27u))*min(sample.w/max(cp(3u),.0001),1.)*cp(26u),0.,1.)',
         );
-        expect(BASE_SHADER_SOURCE).toContain('cursorDensity+=cp(25u)*cp(26u)*trail');
+        expect(BASE_SHADER_SOURCE).toContain('densityPressureEnvelope=max(densityPressureEnvelope,trail)');
+        expect(BASE_SHADER_SOURCE).toContain('cursorDensity+=cp(25u)*densityPressureEnvelope');
+        expect(BASE_SHADER_SOURCE).not.toContain('cursorDensity+=cp(25u)*cp(26u)*trail');
         expect(BASE_SHADER_SOURCE.indexOf('natural+=cursorDensity')).toBeLessThan(
             BASE_SHADER_SOURCE.indexOf('if(u.thresholdEnabled<.5)'),
         );

@@ -40,7 +40,7 @@ export const CURSOR_EFFECT_GROUPS = [
         'cursorDensityPressureEnabled',
         [
             p('cursorDensityPressureStrength', 'Strength', -3, 3, 0.01, 1),
-            p('cursorDensityPressureTrailAmount', 'Trail amount', 0, 3, 0.01, 1),
+            p('cursorDensityPressureTrailAmount', 'Trail amount', 0, 1, 0.01, 1),
             p('cursorDensityPressureTrailDecay', 'Trail decay', 0.01, 10, 0.01, 2),
             p('cursorDensityPressureStillFade', 'Still fade / head decay', 0.1, 8, 0.1, 1),
         ],

@@ -13,6 +13,11 @@ describe('CursorState', () => {
             'Trail decay',
             'Still fade / head decay',
         ]);
+        expect(densityGroups[0][2].find(({ label }) => label === 'Trail amount')).toMatchObject({
+            min: 0,
+            max: 1,
+            default: 1,
+        });
         expect(CURSOR_EFFECT_GROUPS.some(([label]) => label.toLowerCase().includes('halogen'))).toBe(false);
         expect(CURSOR_PARAMETER_KEYS.some((key) => key.includes('Halogen'))).toBe(false);
     });
