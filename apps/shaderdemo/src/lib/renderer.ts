@@ -1430,7 +1430,14 @@ export class AtmosphereRenderer {
             .then(() => {
                 if (!this.destroyed) {
                     const values = new BigUint64Array(buffer.getMappedRange()).slice(0, labels.length * 2);
-                    this.gpuStatsCallback?.(aggregateGpuTimestamps(values, labels));
+                    const stats = aggregateGpuTimestamps(values, labels);
+                    this.gpuStatsCallback?.(stats);
+                    const nextScale = this.adaptiveResolution.sampleGpu(
+                        stats.totalMs,
+                        performance.now(),
+                        !this.paused && !document.hidden,
+                    );
+                    if (nextScale !== undefined) this.recreateTargets();
                 }
             })
             .catch(() => {})
