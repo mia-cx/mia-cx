@@ -1,72 +1,77 @@
 import { describe, expect, it } from 'vitest';
 import { AdaptiveResolutionController } from './adaptive-resolution';
 
-const renderWindow = (controller: AdaptiveResolutionController, ms: number, gpuMs?: number) => {
+const gpuWindow = (controller: AdaptiveResolutionController, ms: number) => {
     const count = controller.currentEvaluationWindow;
     let changed: number | undefined;
-    for (let frame = 0; frame < count; frame += 1) changed = controller.sample(ms, frame, true, gpuMs) ?? changed;
+    for (let sample = 0; sample < count; sample += 1)
+        changed = controller.sampleGpu(ms, sample, true, controller.effectiveScale) ?? changed;
     return changed;
 };
 
-describe('progressive predictive adaptive resolution', () => {
-    it('evaluates after exactly 1, 2, 4, ... 512 consecutive frames and then stays at 512', () => {
+describe('GPU-processing-only adaptive resolution', () => {
+    it('advances after exactly 1, 2, 4, ... 512 GPU samples and continues at 512', () => {
         const controller = new AdaptiveResolutionController(1);
-        const schedule = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 512];
-        for (const window of schedule) {
+        for (const window of [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 512]) {
             expect(controller.currentEvaluationWindow).toBe(window);
-            for (let frame = 1; frame < window; frame += 1) {
-                expect(controller.sample(16.67, frame)).toBeUndefined();
+            for (let sample = 1; sample < window; sample += 1) {
+                controller.sampleGpu(14.5);
                 expect(controller.currentEvaluationWindow).toBe(window);
             }
-            expect(controller.sample(16.67, window)).toBeUndefined();
+            controller.sampleGpu(14.5);
         }
+        controller.reset();
+        expect(controller.currentEvaluationWindow).toBe(1);
     });
 
-    it('uses the first valid rendered frame for an immediate estimate', () => {
+    it('never lets rAF/vsync samples advance the schedule or change scale', () => {
         const controller = new AdaptiveResolutionController(1);
-        expect(controller.sample(30, 0)).toBe(0.7);
-        expect(controller.currentEvaluationWindow).toBe(2);
-    });
-
-    it('uses nearest-rank p99, retaining one slow frame in a small window', () => {
-        const controller = new AdaptiveResolutionController(1);
-        renderWindow(controller, 16.67); // advance to two frames
-        expect(controller.sample(16.67, 1)).toBeUndefined();
-        expect(controller.sample(40, 2)).toBeLessThan(1);
-    });
-
-    it('targets a sub-refresh budget with safety headroom', () => {
-        const controller = new AdaptiveResolutionController(1, { targetMs: 15.5 });
-        const changed = controller.sample(20, 0);
-        expect(changed).toBeDefined();
-        expect(changed!).toBeLessThan(0.9);
-    });
-
-    it('does not downscale forever when rAF is locked to 60 Hz', () => {
-        const controller = new AdaptiveResolutionController(1);
-        for (let frame = 0; frame < 1_200; frame += 1) controller.sample(16.67, frame);
+        for (let frame = 0; frame < 2_000; frame += 1) controller.sample(frame % 2 ? 8 : 40, frame);
+        expect(controller.currentEvaluationWindow).toBe(1);
         expect(controller.effectiveScale).toBe(1);
     });
 
-    it('uses corrected GPU timing to upscale when vsync conceals headroom', () => {
+    it('uses the first GPU result for an immediate predictive estimate', () => {
         const controller = new AdaptiveResolutionController(1);
-        controller.sample(30, 0);
-        const reduced = controller.effectiveScale;
-        controller.sampleGpu(8, 1);
-        expect(controller.sample(16.67, 2)).toBeUndefined();
-        expect(controller.sample(16.67, 3)).toBeGreaterThan(reduced);
+        expect(controller.sampleGpu(30)).toBe(0.7);
+        expect(controller.currentEvaluationWindow).toBe(2);
     });
 
-    it('honours scale bounds and restarts at one frame on reset and ceiling changes', () => {
+    it('uses nearest-rank p99 so a single outlier lowers scale', () => {
         const controller = new AdaptiveResolutionController(1);
-        controller.sample(1_000, 0);
-        expect(controller.effectiveScale).toBeGreaterThanOrEqual(0.25);
-        expect(controller.currentEvaluationWindow).toBe(2);
-        controller.reset(1);
+        controller.sampleGpu(14.5); // first window, no movement
+        controller.sampleGpu(5);
+        expect(controller.sampleGpu(40)).toBeLessThan(1);
+    });
+
+    it('lowers under sustained load and raises back to the user ceiling with headroom', () => {
+        const controller = new AdaptiveResolutionController(1);
+        for (let i = 0; i < 8; i += 1) gpuWindow(controller, 30);
+        expect(controller.effectiveScale).toBeLessThan(1);
+        for (let i = 0; i < 12 && controller.effectiveScale < 1; i += 1) gpuWindow(controller, 6);
+        expect(controller.effectiveScale).toBe(1);
+    });
+
+    it('recovers across a low-power to charger performance transition', () => {
+        const controller = new AdaptiveResolutionController(1);
+        for (let i = 0; i < 6; i += 1) gpuWindow(controller, 24);
+        const lowPowerScale = controller.effectiveScale;
+        expect(lowPowerScale).toBeLessThan(1);
+        for (let i = 0; i < 12 && controller.effectiveScale < 1; i += 1) gpuWindow(controller, 7);
+        expect(controller.effectiveScale).toBeGreaterThan(lowPowerScale);
+        expect(controller.effectiveScale).toBe(1);
+    });
+
+    it('has a global 0.125 minimum and resets safely on lifecycle and ceiling changes', () => {
+        const controller = new AdaptiveResolutionController(1);
+        for (let i = 0; i < 20; i += 1) gpuWindow(controller, 1_000);
+        expect(controller.minScale).toBe(0.125);
+        expect(controller.effectiveScale).toBe(0.125);
+        controller.reset();
         expect(controller.currentEvaluationWindow).toBe(1);
-        expect(controller.setCeiling(0.4, 2)).toBeLessThanOrEqual(0.4);
+        expect(controller.setCeiling(0.4)).toBeLessThanOrEqual(0.4);
         expect(controller.currentEvaluationWindow).toBe(1);
-        controller.sample(30, 3, false);
+        controller.sampleGpu(30, 0, false);
         expect(controller.currentEvaluationWindow).toBe(1);
     });
 });

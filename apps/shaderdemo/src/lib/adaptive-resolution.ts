@@ -2,10 +2,9 @@ export interface AdaptiveResolutionOptions {
     minScale?: number;
     quantum?: number;
     maxWindowFrames?: number;
+    /** Upper edge of the processing-time hysteresis band. */
     targetMs?: number;
-    /** A 60 Hz rAF is quantised to about 16.67 ms; values at or below this limit are not overload. */
-    vsyncLockMs?: number;
-    /** GPU time below this value has enough margin to attempt a larger render scale. */
+    /** Lower edge of the processing-time hysteresis band. */
     headroomMs?: number;
     assumedFixedMs?: number;
     maxDownRatio?: number;
@@ -20,7 +19,7 @@ const nearestRankP99 = (values: number[]) => {
     return sorted[Math.max(0, Math.ceil(sorted.length * 0.99) - 1)];
 };
 
-/** Predictive controller for a fixed + pixelCost * scale² workload. */
+/** Predictive controller for a fixed + pixelCost * scale² GPU workload. */
 export class AdaptiveResolutionController {
     readonly minScale: number;
     readonly quantum: number;
@@ -28,17 +27,15 @@ export class AdaptiveResolutionController {
     private scale: number;
     private ceiling: number;
     private windowFrames = 1;
-    private frameSamples: number[] = [];
     private gpuSamples: GpuSample[] = [];
     private observations: Observation[] = [];
 
     constructor(ceiling: number, options: AdaptiveResolutionOptions = {}) {
         this.config = {
-            minScale: options.minScale ?? 0.25,
+            minScale: options.minScale ?? 0.125,
             quantum: options.quantum ?? 0.025,
             maxWindowFrames: options.maxWindowFrames ?? 512,
             targetMs: options.targetMs ?? 15.5,
-            vsyncLockMs: options.vsyncLockMs ?? 17.25,
             headroomMs: options.headroomMs ?? 13.5,
             assumedFixedMs: options.assumedFixedMs ?? 1.5,
             maxDownRatio: options.maxDownRatio ?? 0.55,
@@ -68,66 +65,53 @@ export class AdaptiveResolutionController {
 
     reset(_nowMs = 0) {
         this.windowFrames = 1;
-        this.frameSamples = [];
         this.gpuSamples = [];
         this.observations = [];
     }
 
-    /** Add one consecutive rendered-frame interval. The very first valid frame evaluates immediately. */
-    sample(frameMs: number, nowMs = 0, active = true, gpuMs?: number): number | undefined {
-        if (!active || !Number.isFinite(frameMs) || frameMs <= 0) {
+    /**
+     * Legacy rAF input. It deliberately cannot advance or influence GPU adaptation: rAF deltas include
+     * compositor/vsync waiting and are not processing measurements.
+     */
+    sample(_frameMs: number, nowMs = 0, active = true, _gpuMs?: number): undefined {
+        if (!active) this.reset(nowMs);
+        return undefined;
+    }
+
+    /** Add one asynchronously read total-GPU-frame timestamp, attributed to the scale which rendered it. */
+    sampleGpu(gpuMs: number, nowMs = 0, active = true, sampledScale = this.scale): number | undefined {
+        if (!active) {
             this.reset(nowMs);
             return undefined;
         }
-        this.frameSamples.push(frameMs);
-        if (Number.isFinite(gpuMs) && gpuMs! > 0) this.gpuSamples.push({ scale: this.scale, ms: gpuMs! });
-        if (this.frameSamples.length < this.windowFrames) return undefined;
+        if (!Number.isFinite(gpuMs) || gpuMs <= 0 || !Number.isFinite(sampledScale)) return undefined;
 
-        const rafP99 = nearestRankP99(this.frameSamples);
-        const currentGpu = this.gpuSamples.filter((sample) => Math.abs(sample.scale - this.scale) < this.quantum / 2);
-        const gpuP99 = currentGpu.length ? nearestRankP99(currentGpu.map((sample) => sample.ms)) : undefined;
-        this.frameSamples = [];
+        // Results already in flight when a scale changed remain useful as model observations, but must not
+        // contaminate or advance the consecutive processing window for the new scale.
+        if (Math.abs(sampledScale - this.scale) >= this.quantum / 2) {
+            this.record(sampledScale, gpuMs);
+            return undefined;
+        }
+
+        this.gpuSamples.push({ scale: sampledScale, ms: gpuMs });
+        if (this.gpuSamples.length < this.windowFrames) return undefined;
+
+        const p99 = nearestRankP99(this.gpuSamples.map((sample) => sample.ms));
         this.gpuSamples = [];
         this.windowFrames = Math.min(this.config.maxWindowFrames, this.windowFrames * 2);
+        this.record(this.scale, p99);
 
-        // Missed refreshes are authoritative. At/near 16.67 ms is a successful vsync lock, not evidence
-        // that reducing scale can reveal the 15–16 ms internal budget.
-        if (rafP99 > this.config.vsyncLockMs) {
-            const measured = Math.max(rafP99, gpuP99 ?? 0);
-            this.record(measured);
-            return this.move(this.predict(measured, false));
-        }
-
-        // Beneath vsync, only corrected GPU timestamps can prove otherwise-hidden headroom.
-        if (gpuP99 !== undefined) {
-            this.record(gpuP99);
-            if (gpuP99 < this.config.headroomMs && this.scale < this.ceiling)
-                return this.move(this.predict(gpuP99, true));
-            if (gpuP99 > this.config.targetMs && this.scale > this.minScale)
-                return this.move(this.predict(gpuP99, false));
-        } else if (rafP99 < this.config.headroomMs && this.scale < this.ceiling) {
-            this.record(rafP99);
-            return this.move(this.predict(rafP99, true));
-        }
+        if (p99 > this.config.targetMs && this.scale > this.minScale) return this.move(this.predict(p99, false));
+        if (p99 < this.config.headroomMs && this.scale < this.ceiling) return this.move(this.predict(p99, true));
         return undefined;
     }
 
-    /** Add an asynchronously read corrected GPU timestamp without counting another rendered frame. */
-    sampleGpu(gpuMs: number, nowMs = 0, active = true, sampledScale = this.scale): undefined {
-        if (!active || !Number.isFinite(gpuMs) || gpuMs <= 0) {
-            this.reset(nowMs);
-            return undefined;
-        }
-        this.gpuSamples.push({ scale: sampledScale, ms: gpuMs });
-        return undefined;
-    }
-
-    private record(ms: number) {
+    private record(scale: number, ms: number) {
         const existing = this.observations.find(
-            (observation) => Math.abs(observation.scale - this.scale) < this.quantum / 2,
+            (observation) => Math.abs(observation.scale - scale) < this.quantum / 2,
         );
         if (existing) existing.ms = ms;
-        else this.observations.push({ scale: this.scale, ms });
+        else this.observations.push({ scale, ms });
         if (this.observations.length > 8) this.observations.shift();
     }
 
@@ -155,7 +139,9 @@ export class AdaptiveResolutionController {
 
     private move(candidate: number) {
         const bounded = Math.min(this.ceiling, Math.max(this.minScale, candidate));
-        const next = Math.round(bounded / this.quantum) * this.quantum;
+        let next = Math.round(bounded / this.quantum) * this.quantum;
+        if (bounded === this.minScale) next = this.minScale;
+        if (bounded === this.ceiling) next = this.ceiling;
         if (Math.abs(next - this.scale) < this.quantum * 0.75) return undefined;
         this.scale = Math.round(next * 1_000) / 1_000;
         return this.scale;

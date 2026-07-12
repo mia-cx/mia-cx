@@ -51,6 +51,14 @@ export const OCTAVE_COUNT = 5;
 export const GPU_TIMING_SAMPLE_INTERVAL = 30;
 export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 33;
 const GPU_QUERY_COUNT = MAX_RENDER_PASSES * 2;
+export const GPU_FRAME_TIMING_RING_SIZE = 3;
+type FrameTimingSlot = {
+    resolve: GPUBuffer;
+    readback: GPUBuffer;
+    busy: boolean;
+    scale: number;
+    generation: number;
+};
 export interface GpuTimingStats {
     totalMs: number;
     fieldMs: number;
@@ -916,6 +924,13 @@ export class AtmosphereRenderer {
     private queryResolveBuffer?: GPUBuffer;
     private queryReadbackBuffer?: GPUBuffer;
     private queryReadbackBusy = false;
+    private frameTimingQuerySet?: GPUQuerySet;
+    private frameTimingSlots: FrameTimingSlot[] = [];
+    private frameTimingCursor = 0;
+    private adaptiveGeneration = 0;
+    private readonly visibilityHandler = () => {
+        if (document.hidden) this.resetAdaptive(performance.now());
+    };
     private renderedFrames = 0;
     private gpuStatsCallback?: (stats: GpuTimingStats | null) => void;
     paused = false;
@@ -1007,11 +1022,29 @@ export class AtmosphereRenderer {
                 size,
                 usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
             });
+            self.frameTimingQuerySet = self.device.createQuerySet({
+                type: 'timestamp',
+                count: GPU_FRAME_TIMING_RING_SIZE * 2,
+            });
+            self.frameTimingSlots = Array.from({ length: GPU_FRAME_TIMING_RING_SIZE }, () => ({
+                resolve: self.device!.createBuffer({
+                    size: 16,
+                    usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
+                }),
+                readback: self.device!.createBuffer({
+                    size: 16,
+                    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+                }),
+                busy: false,
+                scale: self.adaptiveResolution.effectiveScale,
+                generation: 0,
+            }));
         }
         self.device.lost.then((info) => {
             if (!self.destroyed) self.onLost?.(`GPU device lost: ${info.message || info.reason}`);
         });
         self.observer.observe(canvas);
+        document.addEventListener('visibilitychange', self.visibilityHandler);
         self.resize();
         self.schedule();
         return self;
@@ -1024,7 +1057,7 @@ export class AtmosphereRenderer {
             this.canvas.width = size.width;
             this.canvas.height = size.height;
             this.recreateTargets();
-            this.adaptiveResolution.reset(performance.now());
+            this.resetAdaptive(performance.now());
         }
     }
     private recreateTargets() {
@@ -1080,7 +1113,10 @@ export class AtmosphereRenderer {
         const resetHistory =
             this.options.seed !== options.seed || (datamoshIsActive(options.parameters) && !this.datamoshWasActive);
         this.options = options;
-        if (scaleChanged) this.adaptiveResolution.setCeiling(options.renderScale, performance.now());
+        if (scaleChanged) {
+            this.adaptiveResolution.setCeiling(options.renderScale, performance.now());
+            this.adaptiveGeneration += 1;
+        }
         this.datamoshWasActive = datamoshIsActive(options.parameters);
         this.updateAdjustmentLut();
         this.updateCubeLuts();
@@ -1142,7 +1178,7 @@ export class AtmosphereRenderer {
         this.statsStartedAt = this.lastTime;
         this.statsFrames = 0;
         this.frameTelemetry.reset();
-        this.adaptiveResolution.reset(this.lastTime);
+        this.resetAdaptive(this.lastTime);
         this.onStats?.(
             0,
             this.canvas.width,
@@ -1159,6 +1195,10 @@ export class AtmosphereRenderer {
     private schedule() {
         if (!this.destroyed && !this.rafId) this.rafId = requestAnimationFrame(this.tick);
     }
+    private resetAdaptive(now: number) {
+        this.adaptiveGeneration += 1;
+        this.adaptiveResolution.reset(now);
+    }
     private tick = (now: number) => {
         this.rafId = 0;
         if (this.destroyed) return;
@@ -1172,8 +1212,7 @@ export class AtmosphereRenderer {
             if (animated) {
                 this.frameTelemetry.recordRenderedFrame(now);
                 this.statsFrames += 1;
-                const nextScale = this.adaptiveResolution.sample(dt * 1_000, now, !document.hidden);
-                if (nextScale !== undefined) this.recreateTargets();
+                if (document.hidden) this.resetAdaptive(now);
             }
             const statsElapsed = now - this.statsStartedAt;
             if (animated && statsElapsed >= 500) {
@@ -1207,6 +1246,17 @@ export class AtmosphereRenderer {
         )
             return;
         const enc = d.createCommandEncoder();
+        const frameTimingSlot = this.acquireFrameTimingSlot();
+        const frameTimingQueryIndex = frameTimingSlot ? this.frameTimingSlots.indexOf(frameTimingSlot) * 2 : -1;
+        if (frameTimingSlot) {
+            const timingStart = enc.beginComputePass({
+                timestampWrites: {
+                    querySet: this.frameTimingQuerySet!,
+                    beginningOfPassWriteIndex: frameTimingQueryIndex,
+                },
+            });
+            timingStart.end();
+        }
         const sampleGpu = Boolean(
             this.querySet && !this.queryReadbackBusy && this.renderedFrames % GPU_TIMING_SAMPLE_INTERVAL === 0,
         );
@@ -1413,6 +1463,20 @@ export class AtmosphereRenderer {
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
         draw(c.getCurrentTexture().createView(), 9, rgbaCurrent, true, 'display');
+        if (frameTimingSlot) {
+            const timingEnd = enc.beginComputePass({
+                timestampWrites: {
+                    querySet: this.frameTimingQuerySet!,
+                    endOfPassWriteIndex: frameTimingQueryIndex + 1,
+                },
+            });
+            timingEnd.end();
+            enc.resolveQuerySet(this.frameTimingQuerySet!, frameTimingQueryIndex, 2, frameTimingSlot.resolve, 0);
+            enc.copyBufferToBuffer(frameTimingSlot.resolve, 0, frameTimingSlot.readback, 0, 16);
+            frameTimingSlot.busy = true;
+            frameTimingSlot.scale = this.adaptiveResolution.effectiveScale;
+            frameTimingSlot.generation = this.adaptiveGeneration;
+        }
         if (sampleGpu) {
             const bytes = gpuLabels!.length * 16;
             enc.resolveQuerySet(this.querySet!, 0, gpuLabels!.length * 2, this.queryResolveBuffer!, 0);
@@ -1420,11 +1484,12 @@ export class AtmosphereRenderer {
             this.queryReadbackBusy = true;
         }
         d.queue.submit([enc.finish()]);
-        if (sampleGpu) this.readGpuTimestamps(gpuLabels!, this.adaptiveResolution.effectiveScale);
+        if (frameTimingSlot) this.readFrameTiming(frameTimingSlot);
+        if (sampleGpu) this.readGpuTimestamps(gpuLabels!);
         this.renderedFrames += 1;
         if (!this.paused) this.frameIndex = (this.frameIndex + 1) % 16_777_216;
     }
-    private readGpuTimestamps(labels: string[], sampledScale: number) {
+    private readGpuTimestamps(labels: string[]) {
         const buffer = this.queryReadbackBuffer!;
         buffer
             .mapAsync(GPUMapMode.READ)
@@ -1433,13 +1498,6 @@ export class AtmosphereRenderer {
                     const values = new BigUint64Array(buffer.getMappedRange()).slice(0, labels.length * 2);
                     const stats = aggregateGpuTimestamps(values, labels);
                     this.gpuStatsCallback?.(stats);
-                    const nextScale = this.adaptiveResolution.sampleGpu(
-                        stats.totalMs,
-                        performance.now(),
-                        !this.paused && !document.hidden,
-                        sampledScale,
-                    );
-                    if (nextScale !== undefined) this.recreateTargets();
                 }
             })
             .catch(() => {})
@@ -1450,11 +1508,44 @@ export class AtmosphereRenderer {
                 this.queryReadbackBusy = false;
             });
     }
+    private acquireFrameTimingSlot() {
+        if (!this.frameTimingQuerySet || !this.frameTimingSlots.length) return undefined;
+        for (let offset = 0; offset < this.frameTimingSlots.length; offset += 1) {
+            const index = (this.frameTimingCursor + offset) % this.frameTimingSlots.length;
+            const slot = this.frameTimingSlots[index];
+            if (!slot.busy) {
+                this.frameTimingCursor = (index + 1) % this.frameTimingSlots.length;
+                return slot;
+            }
+        }
+        return undefined;
+    }
+    private readFrameTiming(slot: FrameTimingSlot) {
+        slot.readback
+            .mapAsync(GPUMapMode.READ)
+            .then(() => {
+                if (this.destroyed || slot.generation !== this.adaptiveGeneration || this.paused || document.hidden)
+                    return;
+                const values = new BigUint64Array(slot.readback.getMappedRange());
+                if (values.length < 2 || values[1] <= values[0]) return;
+                const gpuMs = Number(values[1] - values[0]) / 1_000_000;
+                const nextScale = this.adaptiveResolution.sampleGpu(gpuMs, performance.now(), true, slot.scale);
+                if (nextScale !== undefined) this.recreateTargets();
+            })
+            .catch(() => {})
+            .finally(() => {
+                try {
+                    if (slot.readback.mapState === 'mapped') slot.readback.unmap();
+                } catch {}
+                slot.busy = false;
+            });
+    }
     destroy() {
         if (this.destroyed) return;
         this.destroyed = true;
         if (this.rafId) cancelAnimationFrame(this.rafId);
         this.observer.disconnect();
+        document.removeEventListener('visibilitychange', this.visibilityHandler);
         this.textures.forEach((texture) => texture.destroy());
         this.adjustmentTexture?.destroy();
         this.lutTextures.forEach(({ texture }) => texture.destroy());
@@ -1469,6 +1560,15 @@ export class AtmosphereRenderer {
         this.querySet?.destroy();
         this.queryResolveBuffer?.destroy();
         this.queryReadbackBuffer?.destroy();
+        this.frameTimingQuerySet?.destroy();
+        for (const slot of this.frameTimingSlots) {
+            try {
+                if (slot.readback.mapState === 'mapped') slot.readback.unmap();
+            } catch {}
+            slot.resolve.destroy();
+            slot.readback.destroy();
+        }
+        this.frameTimingSlots = [];
         try {
             this.context?.unconfigure();
         } catch {}

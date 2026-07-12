@@ -27,6 +27,7 @@ import {
     PARAMETER_SCHEMA,
     UNIFORM_FLOATS,
     GPU_TIMING_SAMPLE_INTERVAL,
+    GPU_FRAME_TIMING_RING_SIZE,
     aggregateGpuTimestamps,
     advanceSimulationTime,
     bindGroupCacheKey,
@@ -172,6 +173,18 @@ describe('field configuration', () => {
         expect(DISPLAY_SHADER_SOURCE).not.toContain('/255.');
         expect(DISPLAY_SHADER_SOURCE).toContain('if(u.blurRadii[1].w<=.5)');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('textureSample(adjustmentLut');
+    });
+    it('uses a nonblocking per-frame two-query timing ring separate from sparse pass telemetry', () => {
+        const source = AtmosphereRenderer.toString();
+        expect(GPU_FRAME_TIMING_RING_SIZE).toBeGreaterThanOrEqual(3);
+        expect(GPU_TIMING_SAMPLE_INTERVAL).toBe(30);
+        expect(source).toContain('acquireFrameTimingSlot');
+        expect(source).toContain('beginComputePass');
+        expect(source).toContain('resolveQuerySet(this.frameTimingQuerySet');
+        expect(source).toContain('sampleGpu(gpuMs');
+        expect(source).not.toContain('adaptiveResolution.sample(dt');
+        expect(source).toContain('slot.resolve.destroy()');
+        expect(source).toContain('slot.readback.destroy()');
     });
     it('derives individual pass durations from sequential completion timestamps', () => {
         const stats = aggregateGpuTimestamps(
