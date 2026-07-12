@@ -76,15 +76,22 @@ describe('field configuration', () => {
         expect(octave).toBeLessThan(display);
         expect(source).not.toContain('lighting:${effect.kind}');
     });
-    it('samples Paint.NET Zoom Blur’s 64-step contraction path at bounded quarter-resolution taps', () => {
+    it('samples Paint.NET Zoom Blur’s 64-step contraction path at a selectable render scale', () => {
         const distance = PARAMETER_SCHEMA.find(({ key }) => key === 'godRaysAmount');
         expect(distance).toMatchObject({ label: 'Distance', min: -100, max: 100, default: 0 });
         expect(GOD_RAYS_SHADER_SOURCE).toContain('1.-u.post[2].z/16384.');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('pow(contraction,progress*64.)');
         expect(PARAMETER_SCHEMA.find(({ key }) => key === 'godRaysSamples')).toMatchObject({
-            min: 64,
+            min: 1,
             max: 128,
             default: 64,
+        });
+        expect(PARAMETER_SCHEMA.find(({ key }) => key === 'godRaysRenderScale')).toMatchObject({
+            label: 'Render scale',
+            min: 0.25,
+            max: 1,
+            step: 0.25,
+            default: 1,
         });
         expect(PARAMETER_SCHEMA.find(({ key }) => key === 'godRaysFalloff')).toMatchObject({
             min: 0,
@@ -98,12 +105,12 @@ describe('field configuration', () => {
         expect(GOD_RAYS_SHADER_SOURCE).toContain('for(var i=0u;i<128u;i++)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('center+(startUv-center)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('textureSampleLevel(src,samp,uv,0.)');
+        expect(GOD_RAYS_SHADER_SOURCE).toContain('let rgb=textureSampleLevel(src,samp,uv,0.).rgb');
         expect(GOD_RAYS_SHADER_SOURCE).not.toContain('textureSample(src,samp,uv)');
         expect(GOD_RAYS_TEXTURE_FORMAT).toBe('rgba16float');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('var sum=vec3f(0)');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('sum+=rgb*weight');
-        expect(GOD_RAYS_SHADER_SOURCE).toContain('var adjustmentLut:texture_2d<f32>');
-        expect(GOD_RAYS_SHADER_SOURCE.match(/textureLoad\(adjustmentLut/g)).toHaveLength(2);
+        expect(GOD_RAYS_SHADER_SOURCE).not.toContain('adjustmentLut');
         expect(GOD_RAYS_SHADER_SOURCE).toContain('threshold<=0.');
         expect(DISPLAY_SHADER_SOURCE).toContain('textureSample(godRays,samp,uv).rgb');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('vec3f(1),textureSample(godRays');
@@ -247,7 +254,7 @@ describe('field configuration', () => {
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
         expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(162);
+        expect(PARAMETER_SCHEMA).toHaveLength(163);
         expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(PARAMETER_SCHEMA.length);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);
@@ -537,7 +544,7 @@ describe('field configuration', () => {
             'sharpenEnabled',
             'filmGrainEnabled',
         ] as const;
-        expect(POST_PARAMETER_SCHEMA).toHaveLength(107);
+        expect(POST_PARAMETER_SCHEMA).toHaveLength(108);
         expect(POST_PARAMETER_SCHEMA.slice(35, 40).map(({ key }) => key)).toEqual(toggleKeys);
         expect(POST_PARAMETER_SCHEMA.slice(35, 40).every(({ default: value }) => value === 1)).toBe(true);
         const parameters = defaultParameters();

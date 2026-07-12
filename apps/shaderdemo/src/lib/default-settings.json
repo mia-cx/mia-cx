@@ -76,6 +76,7 @@
             "godRaysCenterX": 0,
             "godRaysCenterY": -2,
             "godRaysSamples": 64,
+            "godRaysRenderScale": 1,
             "bloomEnabled": 1,
             "bloomThreshold": 0.27,
             "bloomKnee": 0.32,

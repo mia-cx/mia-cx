@@ -48,7 +48,7 @@ export const FIELD_PARAMETER_SCHEMA = withCanonicalDefaults(FIELD_PARAMETER_SCHE
 
 export const OCTAVE_COUNT = 5;
 export const GPU_TIMING_SAMPLE_INTERVAL = 30;
-export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 32;
+export const MAX_RENDER_PASSES = 2 * OCTAVE_COUNT + 33;
 const GPU_QUERY_COUNT = MAX_RENDER_PASSES * 2;
 export interface GpuTimingStats {
     totalMs: number;
@@ -175,7 +175,7 @@ export const POST_PARAMETER_SCHEMA = [
     { key: 'godRaysSoftness', label: 'Softness', min: 0, max: 1, step: 0.01, default: 0.25 },
     { key: 'godRaysCenterX', label: 'Center X', min: -2, max: 2, step: 0.01, default: 0 },
     { key: 'godRaysCenterY', label: 'Center Y', min: -2, max: 2, step: 0.01, default: 0 },
-    { key: 'godRaysSamples', label: 'Samples', min: 64, max: 128, step: 1, default: 64 },
+    { key: 'godRaysSamples', label: 'Samples', min: 1, max: 128, step: 1, default: 64 },
     { key: 'bloomEnabled', label: 'Enabled', min: 0, max: 1, step: 1, default: 0 },
     { key: 'bloomThreshold', label: 'Threshold', min: 0, max: 2, step: 0.01, default: 0.75 },
     { key: 'bloomKnee', label: 'Softness', min: 0, max: 1, step: 0.01, default: 0.25 },
@@ -266,6 +266,7 @@ export const POST_PARAMETER_SCHEMA = [
     { key: 'scanlineFrequency', label: 'Frequency', min: 1, max: 500, step: 1, default: 120 },
     { key: 'scanlineSpeed', label: 'Speed', min: 0, max: 10, step: 0.1, default: 1 },
     { key: 'godRaysFalloff', label: 'Falloff', min: 0, max: 16, step: 0.1, default: 4 },
+    { key: 'godRaysRenderScale', label: 'Render scale', min: 0.25, max: 1, step: 0.25, default: 1 },
 ] as const;
 
 /** Numeric order is persisted; append only. */
@@ -673,13 +674,7 @@ export const POST_TEXTURE_FORMAT: GPUTextureFormat = 'rgba8unorm';
 export const GOD_RAYS_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
-@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler; @group(0) @binding(3) var adjustmentLut:texture_2d<f32>;
-fn adjusted(v:f32)->vec3f { let f=clamp(v,0.,1.); if(u.blurRadii[1].w<=.5) { return vec3f(f); } let p=f*4095.; let lo=i32(floor(p)); let hi=min(lo+1,4095); return mix(textureLoad(adjustmentLut,vec2i(lo,0),0).rgb,textureLoad(adjustmentLut,vec2i(hi,0),0).rgb,p-f32(lo)); }
-fn graded(v:f32)->vec3f {
- var rgb=adjusted(v);
- if(u.post[0].x>.5) { rgb*=exp2(u.post[0].y); let temp=(u.post[0].z-6500.)/2000.; rgb*=vec3f(1.+temp*.08,1.,1.-temp*.08); rgb+=vec3f(u.post[0].w*.25,u.post[0].w*.5,-u.post[0].w*.25); rgb=(rgb-.5)*(1.+u.post[1].x)+.5; let l=dot(rgb,vec3f(.2126,.7152,.0722)); let range=clamp(max(rgb.r,max(rgb.g,rgb.b))-min(rgb.r,min(rgb.g,rgb.b)),0.,1.); rgb=mix(vec3f(l),rgb,1.+u.post[1].y+u.post[1].z*(1.-range)); rgb+=u.post[1].w*(1.-smoothstep(0.,.5,l))+u.post[2].x*smoothstep(.5,1.,l); }
- return rgb;
-}
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f {
  let startUv=pos.xy/u.resolution; let center=vec2f(.5)+u.post[3].zw*.5;
  // Paint.NET contracts the source vector by Amount/16384 for each of 64 iterations.
@@ -688,7 +683,7 @@ fn graded(v:f32)->vec3f {
  for(var i=0u;i<128u;i++) { if(i<count) {
   let progress=f32(i)/max(f32(count-1u),1.); let uv=center+(startUv-center)*pow(contraction,progress*64.);
   if(all(uv>=vec2f(0)) && all(uv<=vec2f(1))) {
-   let v=pow(clamp(textureSampleLevel(src,samp,uv,0.).r,0.,1.),u.finalContrast); let rgb=graded(v); let luminance=dot(max(rgb,vec3f(0)),vec3f(.2126,.7152,.0722));
+   let rgb=textureSampleLevel(src,samp,uv,0.).rgb; let luminance=dot(max(rgb,vec3f(0)),vec3f(.2126,.7152,.0722));
    let threshold=u.post[3].x; let softness=max(u.post[3].y,.00001); let weight=select(smoothstep(threshold-softness,threshold+softness,luminance),1.,threshold<=0.); let travel=(startUv-uv)*vec2f(u.resolution.x/u.resolution.y,1.); let attenuation=1./(1.+u.post[26].z*dot(travel,travel)*16.); sum+=rgb*weight*attenuation; visible+=1.;
   }
  } }
@@ -803,6 +798,7 @@ else if(kind==22){let d=uv-.5;let seg=6.2831853/p(98);let a=abs(fract((atan2(d.y
 else if(kind==23){let bs=p(101);let block=floor(pos.xy/bs);let shift=(hash(block+vec2f(u.frameIndex))-.5)*p(100)*.2;let q=safe(uv+vec2f(shift,0));let current=textureSample(src,samp,q).rgb;let previous=textureSample(history,samp,q).rgb;rgb=mix(current,previous,clamp(p(100),0.,1.));}
 else if(kind==24){let line=floor(pos.y);let tear=(hash(vec2f(line,floor(u.time*p(105))))-.5)*step(.92,hash(vec2f(line,7.)));let shift=(sin(uv.y*p(104)+u.time*p(105))+tear)*p(103);rgb=textureSample(src,samp,safe(uv+vec2f(shift,0))).rgb;}
 else if(kind==25){let e=smoothstep(1.-p(27),1.,length(uv*2.-1.)*.707);rgb*=1.-e*p(26);let g=frameHash(floor(pos.xy/p(31)),u32(u.frameIndex))-.5;rgb+=g*p(30);}
+else if(kind==27){rgb=blend(rgb,textureSample(history,samp,uv).rgb,u.post[8].x);}
 else{let g=frameHash(floor(pos.xy/p(31)),u32(u.frameIndex))-.5;rgb+=g*p(30);let e=smoothstep(1.-p(27),1.,length(uv*2.-1.)*.707);rgb*=1.-e*p(26);}return vec4f(rgb,1.);}`;
 export const PRESENT_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
@@ -1048,6 +1044,14 @@ export class AtmosphereRenderer {
                     usage: usage | GPUTextureUsage.COPY_SRC,
                 }),
             ),
+            this.device.createTexture({
+                size: [
+                    Math.max(1, Math.round(size.width * this.options.parameters.godRaysRenderScale)),
+                    Math.max(1, Math.round(size.height * this.options.parameters.godRaysRenderScale)),
+                ],
+                format: GOD_RAYS_TEXTURE_FORMAT,
+                usage,
+            }),
         ];
         this.textureViews = this.textures.map((texture) => texture.createView());
         this.historyTexture = this.device.createTexture({
@@ -1059,7 +1063,9 @@ export class AtmosphereRenderer {
         this.historyValid = false;
     }
     setOptions(options: RenderOptions) {
-        const changed = this.options.renderScale !== options.renderScale;
+        const changed =
+            this.options.renderScale !== options.renderScale ||
+            this.options.parameters.godRaysRenderScale !== options.parameters.godRaysRenderScale;
         const resetHistory =
             this.options.seed !== options.seed || (datamoshIsActive(options.parameters) && !this.datamoshWasActive);
         this.options = options;
@@ -1169,8 +1175,8 @@ export class AtmosphereRenderer {
             buffers.length < MAX_RENDER_PASSES ||
             !s ||
             this.pipelines.length < 13 ||
-            this.textures.length < 6 ||
-            this.textureViews.length < 6
+            this.textures.length < 7 ||
+            this.textureViews.length < 7
         )
             return;
         const enc = d.createCommandEncoder();
@@ -1194,12 +1200,13 @@ export class AtmosphereRenderer {
             usesSampler = false,
             gpuLabel = '',
             lutId?: string,
+            auxiliaryTextureIndex?: number,
         ) => {
             const uniformSlot = passIndex++;
             const buffer = buffers[uniformSlot];
             d.queue.writeBuffer(buffer, 0, data);
             const pipeline = this.pipelines[pipelineIndex];
-            const cacheKey = `${bindGroupCacheKey(pipelineIndex, sourceTextureIndex, uniformSlot)}:${lutId ?? ''}`;
+            const cacheKey = `${bindGroupCacheKey(pipelineIndex, sourceTextureIndex, uniformSlot)}:${lutId ?? ''}:${auxiliaryTextureIndex ?? ''}`;
             let bindGroup = this.bindGroups.get(cacheKey);
             if (!bindGroup) {
                 const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer } }];
@@ -1213,10 +1220,14 @@ export class AtmosphereRenderer {
                     } else if (pipelineIndex === 4) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
                         entries.push({ binding: 4, resource: this.textureViews[4] });
-                    } else if (pipelineIndex === 6) {
-                        entries.push({ binding: 3, resource: this.adjustmentView! });
                     } else if (pipelineIndex === 8) {
-                        entries.push({ binding: 3, resource: this.historyView! });
+                        entries.push({
+                            binding: 3,
+                            resource:
+                                auxiliaryTextureIndex === undefined
+                                    ? this.historyView!
+                                    : this.textureViews[auxiliaryTextureIndex],
+                        });
                     } else if (pipelineIndex === 11 && lutId) {
                         entries.push({
                             binding: 3,
@@ -1330,6 +1341,18 @@ export class AtmosphereRenderer {
         for (const effect of postStages) {
             if (effect.kind === 'datamosh' && !this.historyValid) continue;
             const destination = !postRan ? 4 : rgbaCurrent === 4 ? 5 : 4;
+            if (effect.kind === 'god-rays') {
+                data[0] = this.textures[6].width;
+                data[1] = this.textures[6].height;
+                draw(this.textureViews[6], 6, rgbaCurrent, true, `${effect.label}:rays`);
+                data[0] = this.textures[4].width;
+                data[1] = this.textures[4].height;
+                data[58] = 27;
+                draw(this.textureViews[destination], 8, rgbaCurrent, true, `${effect.label}:composite`, undefined, 6);
+                rgbaCurrent = destination;
+                postRan = true;
+                continue;
+            }
             data[58] =
                 effect.kind === 'fused-vignette-film-grain'
                     ? 25
