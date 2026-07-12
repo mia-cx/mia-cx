@@ -95,4 +95,15 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).toContain('if (nextScale !== void 0) this.recreateTargets()');
         expect(implementation).not.toContain('performance.now() - this.fenceStartedAt');
     });
+
+    it('renders one full-resolution frozen pause frame and restores adaptive rendering', () => {
+        const implementation = WebGL2Renderer.toString();
+        expect(implementation).toContain('this.paused ? this.options.renderScale : this.adaptive.effectiveScale');
+        expect(implementation).toContain('if (v === this.paused) return');
+        expect(implementation).toContain('this.recreateTargets(v)');
+        expect(implementation).toContain('if (!preserveHistory) this.historyValid = false');
+        expect(implementation).toContain('if (postRan && !this.paused)');
+        expect(implementation).toContain('this.frame = (this.frame + 1)');
+        expect(implementation).toContain('const timer = !this.paused && this.timerQuery');
+    });
 });

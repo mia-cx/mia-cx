@@ -190,6 +190,17 @@ describe('field configuration', () => {
         expect(source).toContain('slot.resolve.destroy()');
         expect(source).toContain('slot.readback.destroy()');
     });
+    it('renders one full-resolution frozen pause frame and restores adaptive rendering', () => {
+        const source = AtmosphereRenderer.toString();
+        expect(source).toContain('this.paused ? this.options.renderScale : this.adaptiveResolution.effectiveScale');
+        expect(source).toContain('if (value === this.paused) return');
+        expect(source).toContain('this.recreateTargets(value)');
+        expect(source).toContain('if (!preserveHistory) this.historyTexture?.destroy()');
+        expect(source).toContain('if (postRan && !this.paused && this.historyTexture)');
+        expect(source).toContain('this.renderedFrames += 1');
+        expect(source).toContain('const frameTimingSlot = this.paused ?');
+        expect(source).toContain('!this.paused && this.querySet');
+    });
     it('derives individual pass durations from sequential completion timestamps', () => {
         const stats = aggregateGpuTimestamps(
             [0n, 2_000_000n, 0n, 8_000_000n, 0n, 21_000_000n, 0n, 22_400_000n],

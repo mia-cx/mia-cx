@@ -1072,15 +1072,18 @@ export class AtmosphereRenderer {
             this.resetAdaptive(performance.now());
         }
     }
-    private recreateTargets() {
+    private recreateTargets(preserveHistory = this.paused) {
         if (!this.device) return;
         this.textures.forEach((texture) => texture.destroy());
-        this.historyTexture?.destroy();
+        if (!preserveHistory) this.historyTexture?.destroy();
         this.textureViews = [];
         this.bindGroups.clear();
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
         // Scalar field, linear Colour/Octaves, and display-space Post ping-pong.
-        const size = scaledSize(this.canvas.width, this.canvas.height, this.adaptiveResolution.effectiveScale);
+        // A paused redraw is deliberately a one-off quality pass.  Do not move the adaptive controller:
+        // its effective scale is the scale to which we return when animation resumes.
+        const targetScale = this.paused ? this.options.renderScale : this.adaptiveResolution.effectiveScale;
+        const size = scaledSize(this.canvas.width, this.canvas.height, targetScale);
         this.textures = [
             ...Array.from({ length: 2 }, () =>
                 this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage }),
@@ -1109,13 +1112,15 @@ export class AtmosphereRenderer {
             }),
         ];
         this.textureViews = this.textures.map((texture) => texture.createView());
-        this.historyTexture = this.device.createTexture({
-            size: [size.width, size.height],
-            format: POST_TEXTURE_FORMAT,
-            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-        });
-        this.historyView = this.historyTexture.createView();
-        this.historyValid = false;
+        if (!preserveHistory || !this.historyTexture) {
+            this.historyTexture = this.device.createTexture({
+                size: [size.width, size.height],
+                format: POST_TEXTURE_FORMAT,
+                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+            });
+            this.historyView = this.historyTexture.createView();
+            this.historyValid = false;
+        }
     }
     setOptions(options: RenderOptions) {
         const scaleChanged = this.options.renderScale !== options.renderScale;
@@ -1185,6 +1190,7 @@ export class AtmosphereRenderer {
         this.bindGroups.clear();
     }
     setPaused(value: boolean) {
+        if (value === this.paused) return;
         this.paused = value;
         this.lastTime = performance.now();
         this.nextRenderAt = 0;
@@ -1192,6 +1198,9 @@ export class AtmosphereRenderer {
         this.statsFrames = 0;
         this.frameTelemetry.reset();
         this.resetAdaptive(this.lastTime);
+        // Allocate full-ceiling targets for the single frozen pause frame, or restore the controller's
+        // pre-pause effective scale before continuous rendering resumes.
+        this.recreateTargets(value);
         this.onStats?.(
             0,
             this.canvas.width,
@@ -1271,7 +1280,7 @@ export class AtmosphereRenderer {
         )
             return;
         const enc = d.createCommandEncoder();
-        const frameTimingSlot = this.acquireFrameTimingSlot();
+        const frameTimingSlot = this.paused ? undefined : this.acquireFrameTimingSlot();
         const frameTimingQueryIndex = frameTimingSlot ? this.frameTimingSlots.indexOf(frameTimingSlot) * 2 : -1;
         if (frameTimingSlot) {
             const timingStart = enc.beginComputePass({
@@ -1283,7 +1292,10 @@ export class AtmosphereRenderer {
             timingStart.end();
         }
         const sampleGpu = Boolean(
-            this.querySet && !this.queryReadbackBusy && this.renderedFrames % GPU_TIMING_SAMPLE_INTERVAL === 0,
+            !this.paused &&
+                this.querySet &&
+                !this.queryReadbackBusy &&
+                this.renderedFrames % GPU_TIMING_SAMPLE_INTERVAL === 0,
         );
         const gpuLabels: string[] | undefined = sampleGpu ? [] : undefined;
         const data = packUniform(
@@ -1513,7 +1525,7 @@ export class AtmosphereRenderer {
         void d.queue.onSubmittedWorkDone().then(
             () => {
                 this.submissionPending = false;
-                if (!this.destroyed && !this.paused) this.schedule();
+                if (!this.destroyed && (!this.paused || this.invalid)) this.schedule();
             },
             () => {
                 this.submissionPending = false;
@@ -1526,8 +1538,10 @@ export class AtmosphereRenderer {
         if (frameTimingSlot) this.readFrameTiming(frameTimingSlot);
         if (sampleGpu)
             this.readGpuTimestamps(gpuLabels!, this.adaptiveResolution.effectiveScale, this.adaptiveGeneration);
-        this.renderedFrames += 1;
-        if (!this.paused) this.frameIndex = (this.frameIndex + 1) % 16_777_216;
+        if (!this.paused) {
+            this.renderedFrames += 1;
+            this.frameIndex = (this.frameIndex + 1) % 16_777_216;
+        }
     }
     private readGpuTimestamps(labels: string[], sampledScale: number, generation: number) {
         const buffer = this.queryReadbackBuffer!;

@@ -217,13 +217,16 @@ export class WebGL2Renderer implements RenderBackend {
             ...(this.history ? [this.history] : []),
         ];
     }
-    private recreateTargets() {
+    private recreateTargets(preserveHistory = this.paused) {
         const gl = this.gl;
-        for (const x of this.allTargets()) {
+        for (const x of this.allTargets().filter((target) => !preserveHistory || target !== this.history)) {
             gl.deleteTexture(x.texture);
             gl.deleteFramebuffer(x.framebuffer);
         }
-        const size = scaledSize(this.canvas.width, this.canvas.height, this.adaptive.effectiveScale);
+        // Pausing uses full configured quality without teaching the adaptive controller that this should
+        // become its continuous workload.  Its effective scale remains the resume scale.
+        const targetScale = this.paused ? this.options.renderScale : this.adaptive.effectiveScale;
+        const size = scaledSize(this.canvas.width, this.canvas.height, targetScale);
         this.baseTargets = [
             this.makeTarget('base', size.width, size.height),
             this.makeTarget('base', size.width, size.height),
@@ -236,13 +239,13 @@ export class WebGL2Renderer implements RenderBackend {
             this.makeTarget('post', size.width, size.height),
             this.makeTarget('post', size.width, size.height),
         ];
-        this.history = this.makeTarget('post', size.width, size.height);
+        if (!preserveHistory || !this.history) this.history = this.makeTarget('post', size.width, size.height);
         this.godRays = this.makeTarget(
             'god-rays',
             Math.max(1, Math.round(size.width * this.options.parameters.godRaysRenderScale)),
             Math.max(1, Math.round(size.height * this.options.parameters.godRaysRenderScale)),
         );
-        this.historyValid = false;
+        if (!preserveHistory) this.historyValid = false;
         this.adaptiveGeneration += 1;
     }
     private upload(data: Float32Array) {
@@ -301,7 +304,7 @@ export class WebGL2Renderer implements RenderBackend {
         if (!this.paused) this.simTime += Math.min((now - this.lastTick) / 1000, 0.1) * p.animationSpeed;
         this.lastTick = now;
         const internalResolution: [number, number] = [this.baseTargets[0].width, this.baseTargets[0].height];
-        const timer = this.timerQuery ? this.gl.createQuery() : null;
+        const timer = !this.paused && this.timerQuery ? this.gl.createQuery() : null;
         if (timer) this.gl.beginQuery(this.timerQuery!.TIME_ELAPSED_EXT, timer);
         let data = packUniform(internalResolution, this.simTime, this.options.seed, p, 0, this.frame),
             current = 0,
@@ -576,9 +579,14 @@ export class WebGL2Renderer implements RenderBackend {
         this.invalidate();
     }
     setPaused(v: boolean) {
+        if (v === this.paused) return;
         this.paused = v;
         this.lastTick = performance.now();
         this.telemetry.reset();
+        this.adaptive.reset(this.lastTick);
+        this.adaptiveGeneration += 1;
+        // One full-resolution frozen redraw on pause; restore the unchanged adaptive scale on resume.
+        this.recreateTargets(v);
         this.invalidate();
     }
     invalidate() {
