@@ -51,7 +51,7 @@ export const defaultShaderSettings = () => {
             value.post.push({ id: stablePipelineId('post', type), type, enabled: false });
     return value;
 };
-export const SETTINGS_STORAGE_KEY = 'shaderdemo:settings:v4';
+export const SETTINGS_STORAGE_KEY = 'shaderdemo:settings:v5';
 export const LEGACY_STORAGE_KEYS = [
     'shaderdemo:settings:v3',
     'shaderdemo:settings:v2',
@@ -135,7 +135,7 @@ export function normalizeSavedSettings(saved: LegacySettings | undefined): Saved
         post,
     };
 }
-/** Read v4 first, then migrate browser v3/v2/v1 without discarding existing edits. */
+/** Read v5 first, then migrate older compatible browser generations without discarding edits. */
 export function loadPersistedSettings(storage: Pick<Storage, 'getItem'>): SavedShaderSettings {
     for (const key of [SETTINGS_STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
         const raw = storage.getItem(key);

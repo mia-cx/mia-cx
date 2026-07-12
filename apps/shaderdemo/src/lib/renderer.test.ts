@@ -285,12 +285,10 @@ describe('field configuration', () => {
         for (const key of ['billowAmount', 'ridgeAmount', 'secondaryCloudAmount', 'secondaryRibbonAmount'] as const) {
             expect(FIELD_PARAMETER_SCHEMA.find((parameter) => parameter.key === key)?.min).toBe(-2);
         }
-        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual([0.005, 0.01, 0.015, 0.015, 0.015]);
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[0].default)).toEqual([0, 0.005, 0.01, 0.01, 0.005]);
         expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[1].default)).toEqual(Array(5).fill(0));
-        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[2].default)).toEqual([0.85, 1, 0.5, 1, 1]);
-        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual(
-            OCTAVE_PARAMETER_SCHEMA.map((group) => defaultSettingsFixture.settings.parameters[group[3].key]),
-        );
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[2].default)).toEqual([0.85, 1, 1, 0.67, 0]);
+        expect(OCTAVE_PARAMETER_SCHEMA.map((group) => group[3].default)).toEqual([0, 0, 0.3, 0.5, 1.8]);
         expect(OCTAVE_PIXELATE_SCHEMA.map(({ default: value }) => value)).toEqual(Array(5).fill(0));
         expect(OCTAVE_BLUR_SCHEMA.map(({ default: value }) => value)).toEqual(
             OCTAVE_BLUR_SCHEMA.map(({ key }) => defaultSettingsFixture.settings.parameters[key]),
@@ -323,9 +321,9 @@ describe('field configuration', () => {
     });
     it('uses current defaults for missing saved settings and normalizes categorical modes', () => {
         const old = normalizeSavedSettings({ seed: 7, parameters: {} as ReturnType<typeof defaultParameters> });
-        expect(old.parameters.baseBlendMode).toBe(2);
-        expect(old.parameters.secondaryBlendMode).toBe(2);
-        expect(old.parameters.secondaryRibbonBlendMode).toBe(2);
+        expect(old.parameters.baseBlendMode).toBe(3);
+        expect(old.parameters.secondaryBlendMode).toBe(0);
+        expect(old.parameters.secondaryRibbonBlendMode).toBe(1);
         expect(old.parameters.temperature).toBe(defaultSettingsFixture.settings.parameters.temperature);
 
         const migratedNeutral = normalizeSavedSettings({
@@ -362,7 +360,7 @@ describe('field configuration', () => {
         const data = packUniform([320, 180], 2, 9, parameters, 4, 73);
         expect(data).toHaveLength(UNIFORM_FLOATS);
         expect(data.byteLength).toBe(UNIFORM_FLOATS * 4);
-        expect(Array.from(data.slice(12, 18))).toEqual(Array.from(new Float32Array([1, 0.45, -0.25, -1, 4, 2])));
+        expect(Array.from(data.slice(12, 18))).toEqual(Array.from(new Float32Array([1, 0.45, 0.15, 1, 4, 0])));
         expect(data[29]).toBe(4);
         expect(data[30]).toBe(5);
         expect(data[31]).toBe(73);

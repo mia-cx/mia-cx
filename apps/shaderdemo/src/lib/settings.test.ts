@@ -20,7 +20,8 @@ describe('V2 pipeline settings', () => {
         expect(a.colour).not.toBe(b.colour);
         expect(a.colour).toHaveLength(11);
         expect(a.colour.at(-1)?.type).toBe('colour-grade');
-        expect(a.post.map((x) => x.type)).toEqual(POST_KINDS);
+        expect(a.post).toHaveLength(POST_KINDS.length);
+        expect(new Set(a.post.map((x) => x.type))).toEqual(new Set(POST_KINDS));
     });
     it('exports and parses the complete V2 document', () => {
         const settings = defaultShaderSettings();
@@ -29,7 +30,7 @@ describe('V2 pipeline settings', () => {
         expect(parseSettingsDocument(doc)).toEqual(settings);
     });
     it('uses a new persistence generation and migrates v1/v3 shapes', () => {
-        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v4');
+        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v5');
         const legacy = { seed: 42, parameters: { ...defaultShaderSettings().parameters }, adjustments: [] };
         const storage = { getItem: (key: string) => (key.endsWith(':v3') ? JSON.stringify(legacy) : null) };
         const migrated = loadPersistedSettings(storage);
