@@ -161,6 +161,7 @@ export class WebGL2Renderer implements RenderBackend {
     private cachedLeading: ReturnType<typeof leadingAdjustmentRegion> = [];
     private webglProfile =
         typeof location !== 'undefined' && new URLSearchParams(location.search).get('webglProfile') === '1';
+    private webglProfileDeadline = performance.now() + 5000;
     private webglProfileFrame = 0;
     private webglProfileCurrent: Map<string, number> | null = null;
     private webglProfileTotals = new Map<string, number>();
@@ -385,7 +386,10 @@ export class WebGL2Renderer implements RenderBackend {
         const targets = this.colourTargets;
         if (!targets.length) return;
         const p = this.options.parameters;
-        const profilingFrame = this.webglProfile && this.webglProfileFrame < 2 + 5;
+        // Let normal asynchronous adaptation settle first. Slow Safari devices reach the floor quickly;
+        // fast devices profile their stable scale after a bounded five-second wait.
+        const profileReady = this.adaptive.effectiveScale <= 0.126 || performance.now() >= this.webglProfileDeadline;
+        const profilingFrame = this.webglProfile && profileReady && this.webglProfileFrame < 2 + 5;
         this.webglProfileCurrent = profilingFrame ? new Map() : null;
         if (!this.paused) this.simTime += Math.min((now - this.lastTick) / 1000, 0.1) * p.animationSpeed;
         this.lastTick = now;
