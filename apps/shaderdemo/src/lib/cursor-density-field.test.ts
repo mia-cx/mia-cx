@@ -73,4 +73,45 @@ describe('CursorDensityField', () => {
         expect(field.snapshot().data.every((value) => value === 0)).toBe(true);
         expect(field.version).toBe(version + 1);
     });
+
+    it('rasterizes sparse samples continuously along a smooth bend', () => {
+        const field = new CursorDensityField();
+        field.resize(256, 256);
+        field.addStrokePoint(-0.8, 0.5, 0.06, 1);
+        field.addStrokePoint(0, -0.6, 0.06, 1);
+        field.addStrokePoint(0.8, 0.5, 0.06, 1);
+        field.endStroke(true, 0.06, 1);
+        const { data, width, height } = field.snapshot();
+        const atQ = (x: number, y: number) =>
+            data[Math.floor(((y + 1) / 2) * height) * width + Math.floor(((x + 1) / 2) * width)];
+        expect(atQ(0, -0.325)).toBeGreaterThan(0);
+        expect(atQ(0, 0.5)).toBe(0);
+        expect(atQ(-0.4, -0.05)).toBeGreaterThan(0);
+    });
+
+    it('uses MAX for retracing and separates ended strokes', () => {
+        const field = new CursorDensityField();
+        field.resize(256, 256);
+        for (let pass = 0; pass < 3; pass++) {
+            field.addStrokePoint(-0.7, -0.5, 0.1, 1);
+            field.addStrokePoint(0.7, -0.5, 0.1, 1);
+            field.endStroke(true, 0.1, 1);
+        }
+        expect(maximum(field)).toBeLessThanOrEqual(255);
+        field.addStrokePoint(-0.7, 0.5, 0.1, 1);
+        field.endStroke(false);
+        const { data, width, height } = field.snapshot();
+        expect(data[Math.floor(height / 2) * width + Math.floor(width / 2)]).toBe(0);
+    });
+
+    it('discards spline control history on resize', () => {
+        const field = new CursorDensityField();
+        field.resize(200, 200);
+        field.addStrokePoint(-0.8, 0, 0.08, 1);
+        field.resize(400, 200);
+        field.addStrokePoint(0.8, 0, 0.08, 1);
+        field.endStroke(true, 0.08, 1);
+        const { data, width, height } = field.snapshot();
+        expect(data[Math.floor(height / 2) * width + Math.floor(width / 2)]).toBe(0);
+    });
 });

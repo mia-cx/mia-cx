@@ -10,6 +10,11 @@ export interface CursorDensityFieldSnapshot {
 const TARGET_ROWS = 128;
 const MAX_COLUMNS = 384;
 
+interface StrokePoint {
+    x: number;
+    y: number;
+}
+
 /** Persistent, aspect-correct CPU mask used by the cursor density effect. */
 export class CursorDensityField {
     width = 1;
@@ -17,6 +22,7 @@ export class CursorDensityField {
     version = 0;
     private data = new Uint8Array(this.width * this.height);
     private active = false;
+    private stroke: StrokePoint[] = [];
 
     resize(cssWidth: number, cssHeight: number): boolean {
         const aspect = cssWidth > 0 && cssHeight > 0 ? cssWidth / cssHeight : 1;
@@ -26,6 +32,7 @@ export class CursorDensityField {
         this.height = TARGET_ROWS;
         this.data = new Uint8Array(width * TARGET_ROWS);
         this.active = false;
+        this.stroke = [];
         this.version++;
         return true;
     }
@@ -57,6 +64,78 @@ export class CursorDensityField {
         if (changed) {
             this.active = true;
             this.version++;
+        }
+        return changed;
+    }
+
+    /** Add a pointer position to a smooth midpoint-quadratic stroke. */
+    addStrokePoint(x: number, y: number, radius: number, falloff: number): boolean {
+        if (![x, y, radius, falloff].every(Number.isFinite) || radius <= 0) return false;
+        const point = { x, y };
+        const last = this.stroke[this.stroke.length - 1];
+        if (last && last.x === x && last.y === y) return this.deposit(x, y, radius, falloff);
+        let changed = false;
+        if (!last) changed = this.deposit(x, y, radius, falloff);
+        else if (this.stroke.length === 1)
+            changed = this.rasterCurve(
+                last,
+                this.midpoint(last, point),
+                this.midpoint(last, point),
+                radius,
+                falloff,
+                false,
+            );
+        else {
+            const prior = this.stroke[this.stroke.length - 2];
+            changed = this.rasterCurve(
+                this.midpoint(prior, last),
+                last,
+                this.midpoint(last, point),
+                radius,
+                falloff,
+                true,
+            );
+        }
+        this.stroke.push(point);
+        if (this.stroke.length > 2) this.stroke.shift();
+        return changed;
+    }
+
+    /** Finish the pending half-segment, or discard history when rasterize is false. */
+    endStroke(rasterize = true, radius?: number, falloff?: number): boolean {
+        let changed = false;
+        if (rasterize && this.stroke.length > 1 && radius !== undefined && falloff !== undefined) {
+            const last = this.stroke[this.stroke.length - 1];
+            const prior = this.stroke[this.stroke.length - 2];
+            changed = this.rasterCurve(this.midpoint(prior, last), last, last, radius, falloff, true);
+        }
+        this.stroke = [];
+        return changed;
+    }
+
+    private midpoint(a: StrokePoint, b: StrokePoint): StrokePoint {
+        return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+
+    private rasterCurve(
+        a: StrokePoint,
+        control: StrokePoint,
+        b: StrokePoint,
+        radius: number,
+        falloff: number,
+        quadratic: boolean,
+    ): boolean {
+        const distance = (p: StrokePoint, q: StrokePoint) => Math.hypot(q.x - p.x, q.y - p.y);
+        const length = quadratic ? distance(a, control) + distance(control, b) : distance(a, b);
+        const spacing = Math.max(1 / this.height, radius * 0.25);
+        const steps = Math.max(1, Math.ceil(length / spacing));
+        let changed = false;
+        for (let index = 1; index <= steps; index++) {
+            const t = index / steps;
+            const u = 1 - t;
+            const x = quadratic ? u * u * a.x + 2 * u * t * control.x + t * t * b.x : a.x + (b.x - a.x) * t;
+            const y = quadratic ? u * u * a.y + 2 * u * t * control.y + t * t * b.y : a.y + (b.y - a.y) * t;
+            changed = this.deposit(x, y, radius, falloff) || changed;
         }
         return changed;
     }

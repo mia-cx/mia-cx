@@ -194,13 +194,14 @@
                 depositDensity &&
                 options.parameters.cursorEnabled !== 0 &&
                 options.parameters.cursorDensityPressureEnabled !== 0
-            )
-                cursorDensityField.deposit(
+            ) {
+                cursorDensityField.addStrokePoint(
                     cursorState.x,
                     cursorState.y,
                     options.parameters.cursorRadius,
                     options.parameters.cursorFalloff,
                 );
+            } else if (depositDensity) cursorDensityField.endStroke(false);
         }
         sendCursor();
         renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
@@ -217,6 +218,8 @@
         sendCursor();
     }
     function pointerLeave() {
+        cursorDensityField.endStroke(true, options.parameters.cursorRadius, options.parameters.cursorFalloff);
+        renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
         cursorState.leave();
         sendCursor();
     }
@@ -399,6 +402,7 @@
         const visibility = () => {
             renderer?.setPaused(document.hidden || paused);
             if (document.hidden) {
+                cursorDensityField.endStroke(false);
                 cursorState.leave();
                 sendCursor();
             }
@@ -407,6 +411,7 @@
         document.addEventListener('visibilitychange', visibility);
         return () => {
             disposed = true;
+            cursorDensityField.endStroke(false);
             document.removeEventListener('visibilitychange', visibility);
             cancelAnimationFrame(cursorFrame);
             renderer?.destroy();
