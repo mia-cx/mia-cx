@@ -2,6 +2,9 @@ import { FrameTelemetry, type FrameRollingSummary } from './telemetry';
 import { AdaptiveResolutionController } from './adaptive-resolution';
 import { ADJUSTMENT_LUT_SIZE, composeAdjustmentLut, isNeutralAdjustment } from './adjustments';
 import defaultSettingsFixture from './default-settings.json';
+import { CURSOR_PARAMETER_SCHEMA } from './cursor-schema';
+import type { CursorSnapshot } from './cursor';
+import { CURSOR_UNIFORM_BYTES, packCursorUniform } from './cursor-uniform';
 import {
     leadingAdjustmentRegion,
     rendererStagePlan,
@@ -316,6 +319,7 @@ export const POST_BLEND_MODES = [
 ] as const;
 export const PARAMETER_SCHEMA = [
     ...FIELD_PARAMETER_SCHEMA,
+    ...CURSOR_PARAMETER_SCHEMA,
     ...OCTAVE_PARAMETER_SCHEMA.flat(),
     ...OCTAVE_PIXELATE_SCHEMA,
     ...OCTAVE_BLUR_SCHEMA,
@@ -530,9 +534,43 @@ fn smoothAbsFold(value: f32) -> f32 {
 export const BASE_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
+struct CursorUniform { state0:vec4f, state1:vec4f, click:vec4f, parameters:array<vec4f,13>, trail:array<vec4f,16> }
+@group(0) @binding(1) var<uniform> cursor:CursorUniform;
+fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
+fn cursorWeight(delta:vec2f,radius:f32,falloff:f32)->f32 { return exp(-pow(length(delta)/max(radius,.0001),max(falloff,.1))); }
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
+    var cursorDensity=0.; var cursorDepth=0.;
+    // Exact master bypass preserves the historical field bit-for-bit and avoids every cursor loop.
+    if(cp(0u)!=0.) {
+        let center=cursor.state0.xy; let velocity=cursor.state0.zw;
+        let speedScale=min(cursor.state1.x/max(cp(3u),.0001),1.);
+        let direction=select(vec2f(0.),normalize(velocity),length(velocity)>.00001);
+        let delta=q-center; let radius=cp(1u); let weight=cursorWeight(delta,radius,cp(2u));
+        if(cp(7u)!=0.) { q-=direction*(cp(8u)*speedScale*weight); }
+        if(cp(9u)!=0.) { q+=vec2f(-delta.y,delta.x)*cp(10u)*weight; }
+        if(cp(11u)!=0.) { q-=delta*cp(12u)*weight; }
+        if(cp(13u)!=0.) { q+=delta*cp(14u)*weight; }
+        if(cp(15u)!=0.) { cursorDepth+=cp(16u)*weight*noise3(vec3f(delta*5.,t*.2),719.); }
+        if(cp(17u)!=0.) { q=center+delta*(1.-cp(18u)*weight); }
+        if(cp(19u)!=0.) { q+=(noise3v(vec2f(delta*cp(21u))+t*.07,733.)-.5)*cp(20u)*weight; }
+        if(cp(22u)!=0.) { q-=direction*dot(delta,direction)*cp(23u)*weight; }
+        if(cp(24u)!=0.) { cursorDensity+=cp(25u)*weight; }
+        if(cp(30u)!=0.) { q=center+delta/(1.+cp(31u)*weight); }
+        if(cp(32u)!=0.) { q+=direction*cp(33u)*weight; }
+        if(cp(34u)!=0.) { cursorDensity+=cp(35u)*weight*dot(delta,direction)/max(radius,.0001); }
+        let trailLimit=min(u32(cp(4u)),min(u32(cp(51u)),16u));
+        if(cp(26u)!=0. || cp(44u)!=0.) {
+            for(var i=0u;i<16u;i++) { if(i<trailLimit) {
+                let sample=cursor.trail[i]; let td=q-sample.xy;
+                if(cp(26u)!=0.) { let wake=cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(29u))*sin(length(td)*cp(28u)-sample.z*cp(28u)); q-=direction*cp(27u)*wake; }
+                if(cp(44u)!=0.) { let light=exp(-pow(length(td)/max(cp(46u)+cp(47u),.0001),2.))*exp(-sample.z*cp(48u)); cursorDensity+=cp(45u)*light*min(sample.w/max(cp(3u),.0001),1.); }
+            } }
+        }
+        if(cp(36u)!=0.) { let rd=q-cursor.click.xy; let age=cursor.click.z; let ring=length(rd)-age*cp(41u); let envelope=exp(-age*cp(42u))*exp(-pow(ring/max(cp(39u),.0001),2.)); let wave=sin(ring*cp(40u))*envelope*cp(43u)*cursor.click.w; q+=normalize(rd+vec2f(.000001))*cp(37u)*wave; cursorDensity+=cp(38u)*wave; }
+        if(cp(44u)!=0.) { let head=cursorWeight(q-center,cp(46u)+cp(47u),2.)*cursor.state1.w; cursorDensity+=cp(45u)*cp(50u)*head; }
+    }
     // Interpret field size against a 1080px reference height, not the render target's physical pixels.
     // The composition therefore stays stable across resolutions while higher-resolution targets add detail.
     let fieldPixel=q*(540./u.fieldScale);
@@ -544,7 +582,7 @@ export const BASE_SHADER_SOURCE =
         warpOffset=(noise3v(flow*u.warpScale,t*.11)-.5)*u.warpStrength;
     }
     let p=flow+warpOffset;
-    let primaryPosition=vec3f(p,t*.075);
+    let primaryPosition=vec3f(p,t*.075+cursorDepth);
     var shaped=0.;
     if(u.billowAmount!=0.) {
         let cloud=smoothAbsFold(noise3(primaryPosition,307.)*2.-1.);
@@ -557,7 +595,7 @@ export const BASE_SHADER_SOURCE =
     }
     var natural=shaped;
     if(u.secondaryEnabled>=.5 && (u.secondaryCloudAmount!=0. || u.secondaryRibbonAmount!=0.)) {
-        let secondaryPosition=vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-warpOffset*.41,t*.12+7.1);
+        let secondaryPosition=vec3f(p*u.secondaryScale+vec2f(13.7,-8.4)-warpOffset*.41,t*.12+7.1+cursorDepth);
         if(u.secondaryCloudAmount!=0.) {
             let secondaryCloud=smoothAbsFold(noise3(secondaryPosition,503.)*2.-1.);
             natural=blendSigned(natural,secondaryCloud*u.secondaryCloudAmount,u.secondaryBlendMode);
@@ -568,6 +606,7 @@ export const BASE_SHADER_SOURCE =
             natural=blendSigned(natural,secondaryRibbon*u.secondaryRibbonAmount,u.secondaryRibbonBlendMode);
         }
     }
+    natural+=cursorDensity;
     if(u.centerDarkness!=0.) {
         let centerPoint=abs(q/vec2f(u.centerWidth,u.centerHeight));
         let centerDistance=pow(pow(centerPoint.x,u.centerRoundness)+pow(centerPoint.y,u.centerRoundness),1./u.centerRoundness);
@@ -908,6 +947,7 @@ export class AtmosphereRenderer {
     private historyValid = false;
     private datamoshWasActive = false;
     private buffers: GPUBuffer[] = [];
+    private cursorBuffer?: GPUBuffer;
     private bindGroups = new Map<string, GPUBindGroup>();
     private observer: ResizeObserver;
     private rafId = 0;
@@ -1008,6 +1048,10 @@ export class AtmosphereRenderer {
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
             }),
         );
+        self.cursorBuffer = self.device.createBuffer({
+            size: CURSOR_UNIFORM_BYTES,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
         self.sampler = self.device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
         self.adjustmentTexture = self.device.createTexture({
             dimension: '3d',
@@ -1189,6 +1233,11 @@ export class AtmosphereRenderer {
         }
         this.bindGroups.clear();
     }
+    private cursorState?: CursorSnapshot;
+    setCursorState(state: CursorSnapshot) {
+        this.cursorState = state;
+        this.invalidate();
+    }
     setPaused(value: boolean) {
         if (value === this.paused) return;
         this.paused = value;
@@ -1306,6 +1355,7 @@ export class AtmosphereRenderer {
             0,
             this.frameIndex,
         );
+        d.queue.writeBuffer(this.cursorBuffer!, 0, packCursorUniform(this.options.parameters, this.cursorState));
         let passIndex = 0;
         const draw = (
             target: GPUTextureView,
@@ -1324,6 +1374,7 @@ export class AtmosphereRenderer {
             let bindGroup = this.bindGroups.get(cacheKey);
             if (!bindGroup) {
                 const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer } }];
+                if (pipelineIndex === 0) entries.push({ binding: 1, resource: { buffer: this.cursorBuffer! } });
                 if (sourceTextureIndex !== undefined) {
                     entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
                     if (usesSampler) entries.push({ binding: 2, resource: s });

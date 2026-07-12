@@ -20,6 +20,7 @@ import {
 } from './pipeline';
 import { isRgbColour } from './colour-effects';
 import defaultSettingsFixture from './default-settings.json';
+import { CURSOR_PARAMETER_SCHEMA } from './cursor-schema';
 
 export interface SavedShaderSettings {
     seed: number;
@@ -51,8 +52,9 @@ export const defaultShaderSettings = () => {
             value.post.push({ id: stablePipelineId('post', type), type, enabled: false });
     return value;
 };
-export const SETTINGS_STORAGE_KEY = 'shaderdemo:settings:v6';
+export const SETTINGS_STORAGE_KEY = 'shaderdemo:settings:v7';
 export const LEGACY_STORAGE_KEYS = [
+    'shaderdemo:settings:v6',
     'shaderdemo:settings:v3',
     'shaderdemo:settings:v2',
     'shaderdemo:settings:v1',
@@ -61,7 +63,7 @@ export const shaderSettings = persistentAtom<SavedShaderSettings>(SETTINGS_STORA
     encode: JSON.stringify,
     decode: JSON.parse,
 });
-export type SettingsTab = 'field' | 'octaves' | 'colour' | 'adjustments' | 'post';
+export type SettingsTab = 'field' | 'cursor' | 'octaves' | 'colour' | 'adjustments' | 'post';
 export function resetSettingsTab(settings: SavedShaderSettings, tab: SettingsTab): SavedShaderSettings {
     const defaults = defaultShaderSettings();
     if (tab === 'colour' || tab === 'adjustments') return { ...settings, colour: clone(defaults.colour) };
@@ -85,7 +87,9 @@ export function resetSettingsTab(settings: SavedShaderSettings, tab: SettingsTab
     const schema =
         tab === 'field'
             ? FIELD_PARAMETER_SCHEMA
-            : [...OCTAVE_PARAMETER_SCHEMA.flat(), ...OCTAVE_PIXELATE_SCHEMA, ...OCTAVE_BLUR_SCHEMA];
+            : tab === 'cursor'
+              ? CURSOR_PARAMETER_SCHEMA
+              : [...OCTAVE_PARAMETER_SCHEMA.flat(), ...OCTAVE_PIXELATE_SCHEMA, ...OCTAVE_BLUR_SCHEMA];
     const parameters = { ...settings.parameters };
     for (const p of schema) parameters[p.key] = p.default;
     return { ...settings, parameters };
@@ -135,7 +139,7 @@ export function normalizeSavedSettings(saved: LegacySettings | undefined): Saved
         post,
     };
 }
-/** Read v6 first, then migrate older compatible browser generations without discarding edits. */
+/** Read v7 first, then migrate older compatible browser generations without discarding edits. */
 export function loadPersistedSettings(storage: Pick<Storage, 'getItem'>): SavedShaderSettings {
     for (const key of [SETTINGS_STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
         const raw = storage.getItem(key);

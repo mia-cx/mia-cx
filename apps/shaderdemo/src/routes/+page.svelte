@@ -51,9 +51,12 @@
         type PostEffectKind,
     } from '$lib/pipeline';
     import { MAX_ADJUSTMENTS, newHslCurve, type Adjustment } from '$lib/adjustments';
+    import { CURSOR_COMMON_SCHEMA, CURSOR_EFFECT_GROUPS } from '$lib/cursor-schema';
+    import { CursorState } from '$lib/cursor';
 
     let canvas: HTMLCanvasElement;
     let renderer: RenderBackend | undefined;
+    const cursorState = new CursorState();
     const initialDefaults = defaultShaderSettings();
     let options: RenderOptions = $state({
         seed: initialDefaults.seed,
@@ -82,6 +85,7 @@
     const number = (value: number | undefined) => (value === undefined ? '…' : value.toFixed(1));
     const parameterTabs = [
         { id: 'field', label: 'Field' },
+        { id: 'cursor', label: 'Cursor' },
         { id: 'adjustments', label: 'Colour' },
         { id: 'post', label: 'Post' },
         { id: 'octaves', label: 'Octaves' },
@@ -170,6 +174,30 @@
     function togglePause() {
         paused = !paused;
         renderer?.setPaused(paused);
+    }
+    function sendCursor() {
+        renderer?.setCursorState(cursorState);
+    }
+    function pointerMove(event: PointerEvent) {
+        const samples = event.getCoalescedEvents?.() ?? [event],
+            rect = canvas.getBoundingClientRect();
+        for (const sample of samples) cursorState.update(sample.clientX, sample.clientY, rect, sample.timeStamp, true);
+        sendCursor();
+    }
+    function pointerDown(event: PointerEvent) {
+        canvas.setPointerCapture(event.pointerId);
+        pointerMove(event);
+        cursorState.pointerDown();
+        sendCursor();
+    }
+    function pointerUp(event: PointerEvent) {
+        cursorState.pointerUp();
+        if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+        sendCursor();
+    }
+    function pointerLeave() {
+        cursorState.leave();
+        sendCursor();
     }
     function randomize() {
         options.seed = Math.random() * 1000;
@@ -298,6 +326,7 @@
             .then(({ renderer: instance, warnings }) => {
                 if (disposed) return instance.destroy();
                 renderer = instance;
+                instance.setCursorState(cursorState);
                 backendWarnings = [
                     ...warnings,
                     ...(instance.unsupportedEffects?.length
@@ -325,11 +354,30 @@
             .catch((error) => {
                 if (!disposed) status = error instanceof Error ? error.message : String(error);
             });
-        const visibility = () => renderer?.setPaused(document.hidden || paused);
+        let cursorFrame = 0,
+            cursorTime = performance.now();
+        const animateCursor = (now: number) => {
+            if (!paused && !document.hidden) {
+                cursorState.tick((now - cursorTime) / 1000);
+                sendCursor();
+            }
+            cursorTime = now;
+            cursorFrame = requestAnimationFrame(animateCursor);
+        };
+        cursorFrame = requestAnimationFrame(animateCursor);
+        const visibility = () => {
+            renderer?.setPaused(document.hidden || paused);
+            if (document.hidden) {
+                cursorState.leave();
+                sendCursor();
+            }
+            cursorTime = performance.now();
+        };
         document.addEventListener('visibilitychange', visibility);
         return () => {
             disposed = true;
             document.removeEventListener('visibilitychange', visibility);
+            cancelAnimationFrame(cursorFrame);
             renderer?.destroy();
         };
     });
@@ -343,7 +391,16 @@
 >
 
 <main>
-    <canvas class:ready bind:this={canvas} aria-label="Animated monochrome noise field"></canvas>
+    <canvas
+        class:ready
+        bind:this={canvas}
+        aria-label="Animated monochrome noise field"
+        onpointermove={pointerMove}
+        onpointerdown={pointerDown}
+        onpointerup={pointerUp}
+        onpointercancel={pointerLeave}
+        onpointerleave={pointerLeave}
+    ></canvas>
     {#if ready}<div class="telemetry">
             <button
                 class="telemetry-toggle"
@@ -477,6 +534,87 @@
                                         {/if}
                                     {/each}
                                 </section>
+                            {/each}
+                        </div>
+                    {:else if selectedTabId === 'cursor'}
+                        <div
+                            class="sliders cursor-panel"
+                            id="panel-cursor"
+                            role="tabpanel"
+                            aria-labelledby="tab-cursor"
+                        >
+                            <section class="cursor-common">
+                                {#each CURSOR_COMMON_SCHEMA as parameter}
+                                    {#if parameter.step === 1 && parameter.max === 1}
+                                        <label class="enabled"
+                                            ><span>{parameter.label}</span><input
+                                                type="checkbox"
+                                                checked={options.parameters[parameter.key] >= 0.5}
+                                                onchange={(e) =>
+                                                    setParameter(parameter.key, e.currentTarget.checked ? 1 : 0)}
+                                            /></label
+                                        >
+                                    {:else}
+                                        <label class="parameter"
+                                            ><span>{parameter.label}</span><input
+                                                class="exact-value"
+                                                aria-label={`${parameter.label} exact value`}
+                                                type="number"
+                                                min={parameter.min}
+                                                max={parameter.max}
+                                                step={parameter.step}
+                                                value={options.parameters[parameter.key]}
+                                                onchange={(e) =>
+                                                    setParameter(parameter.key, e.currentTarget.valueAsNumber)}
+                                            /><input
+                                                type="range"
+                                                min={parameter.min}
+                                                max={parameter.max}
+                                                step={parameter.step}
+                                                value={options.parameters[parameter.key]}
+                                                oninput={(e) =>
+                                                    setParameter(parameter.key, e.currentTarget.valueAsNumber)}
+                                            /></label
+                                        >
+                                    {/if}
+                                {/each}
+                            </section>
+                            {#each CURSOR_EFFECT_GROUPS as [label, toggle, parameters]}
+                                <details class="cursor-effect">
+                                    <summary
+                                        ><label class="enabled"
+                                            ><input
+                                                type="checkbox"
+                                                onclick={(e) => e.stopPropagation()}
+                                                checked={options.parameters[toggle] >= 0.5}
+                                                onchange={(e) => setParameter(toggle, e.currentTarget.checked ? 1 : 0)}
+                                            /><span>{label}</span></label
+                                        ></summary
+                                    >
+                                    {#each parameters as parameter}
+                                        <label class="parameter"
+                                            ><span>{parameter.label}</span><input
+                                                class="exact-value"
+                                                aria-label={`${label} ${parameter.label} exact value`}
+                                                type="number"
+                                                min={parameter.min}
+                                                max={parameter.max}
+                                                step={parameter.step}
+                                                value={options.parameters[parameter.key]}
+                                                onchange={(e) =>
+                                                    setParameter(parameter.key, e.currentTarget.valueAsNumber)}
+                                            /><input
+                                                type="range"
+                                                min={parameter.min}
+                                                max={parameter.max}
+                                                step={parameter.step}
+                                                value={options.parameters[parameter.key]}
+                                                oninput={(e) =>
+                                                    setParameter(parameter.key, e.currentTarget.valueAsNumber)}
+                                            /></label
+                                        >
+                                    {/each}
+                                </details>
                             {/each}
                         </div>
                     {:else if selectedTabId === 'octaves'}
@@ -684,6 +822,7 @@
     }
     canvas {
         display: block;
+        touch-action: none;
         opacity: 0;
         background: #050505;
     }
@@ -808,7 +947,7 @@
     }
     .tabs {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(5, 1fr);
         gap: 2px;
         padding: 4px 0;
     }
@@ -842,6 +981,26 @@
     }
     .field-group + .field-group {
         border-top: 1px solid #ffffff20;
+    }
+    .cursor-common,
+    .cursor-effect {
+        padding: 7px 0;
+        border-bottom: 1px solid #ffffff20;
+    }
+    .cursor-common {
+        display: grid;
+        gap: 7px;
+    }
+    .cursor-effect summary {
+        color: #aaa;
+        cursor: pointer;
+    }
+    .cursor-effect summary::marker {
+        color: #666;
+    }
+    .cursor-effect[open] {
+        display: grid;
+        gap: 7px;
     }
     .group-heading {
         display: flex;

@@ -5,6 +5,7 @@ const backend = (name: 'webgpu' | 'webgl2') =>
     ({
         backend: name,
         setOptions: vi.fn(),
+        setCursorState: vi.fn(),
         setPaused: vi.fn(),
         invalidate: vi.fn(),
         destroy: vi.fn(),

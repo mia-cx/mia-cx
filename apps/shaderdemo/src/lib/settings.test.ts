@@ -30,7 +30,7 @@ describe('V2 pipeline settings', () => {
         expect(parseSettingsDocument(doc)).toEqual(settings);
     });
     it('uses a new persistence generation and migrates v1/v3 shapes', () => {
-        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v6');
+        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v7');
         const legacy = { seed: 42, parameters: { ...defaultShaderSettings().parameters }, adjustments: [] };
         const storage = { getItem: (key: string) => (key.endsWith(':v3') ? JSON.stringify(legacy) : null) };
         const migrated = loadPersistedSettings(storage);

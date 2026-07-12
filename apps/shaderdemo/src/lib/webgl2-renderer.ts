@@ -20,6 +20,8 @@ import { isNeutralRgb, isRgbColour } from './colour-effects';
 import { FrameTelemetry } from './telemetry';
 import * as shader from './webgl2-shaders';
 import * as compactShader from './webgl2-compact-shaders';
+import type { CursorSnapshot } from './cursor';
+import { CURSOR_UNIFORM_BYTES, packCursorUniform } from './cursor-uniform';
 
 export const WEBGL2_STARTUP_SCALE = 0.5;
 /** WebGL2 implements the complete canonical inventory. Kept as an export for capability UI/tests. */
@@ -141,6 +143,7 @@ export class WebGL2Renderer implements RenderBackend {
     private godRays?: Target;
     private history?: Target;
     private uniformBuffer: WebGLBuffer;
+    private cursorBuffer: WebGLBuffer;
     private vao: WebGLVertexArrayObject;
     private raf = 0;
     private pendingFence: PendingFence | null = null;
@@ -188,9 +191,11 @@ export class WebGL2Renderer implements RenderBackend {
         private options: RenderOptions,
     ) {
         const ubo = gl.createBuffer(),
+            cursorUbo = gl.createBuffer(),
             vao = gl.createVertexArray();
-        if (!ubo || !vao) throw new Error('WebGL2 resource allocation failed.');
+        if (!ubo || !cursorUbo || !vao) throw new Error('WebGL2 resource allocation failed.');
         this.uniformBuffer = ubo;
+        this.cursorBuffer = cursorUbo;
         this.vao = vao;
         this.adaptive = new AdaptiveResolutionController(options.renderScale, {
             initialScale: Math.min(WEBGL2_STARTUP_SCALE, options.renderScale),
@@ -219,6 +224,10 @@ export class WebGL2Renderer implements RenderBackend {
         gl.bindBuffer(gl.UNIFORM_BUFFER, self.uniformBuffer);
         gl.bufferData(gl.UNIFORM_BUFFER, 180 * 4, gl.DYNAMIC_DRAW);
         gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, self.uniformBuffer);
+        gl.bindBuffer(gl.UNIFORM_BUFFER, self.cursorBuffer);
+        gl.bufferData(gl.UNIFORM_BUFFER, CURSOR_UNIFORM_BYTES, gl.DYNAMIC_DRAW);
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, 1, self.cursorBuffer);
+        gl.bindBuffer(gl.UNIFORM_BUFFER, self.uniformBuffer);
 
         canvas.addEventListener('webglcontextlost', self.contextLost);
         canvas.addEventListener('webglcontextrestored', self.contextRestored);
@@ -235,6 +244,8 @@ export class WebGL2Renderer implements RenderBackend {
         this.programs.set(key, p);
         const i = gl.getUniformBlockIndex(p, 'U_block_0Fragment');
         if (i !== gl.INVALID_INDEX) gl.uniformBlockBinding(p, i, 0);
+        const ci = gl.getUniformBlockIndex(p, 'CursorUniform_block_1Fragment');
+        if (ci !== gl.INVALID_INDEX) gl.uniformBlockBinding(p, ci, 1);
         const locations = [
             gl.getUniformLocation(p, '_group_0_binding_1_fs'),
             gl.getUniformLocation(p, '_group_0_binding_3_fs'),
@@ -409,6 +420,9 @@ export class WebGL2Renderer implements RenderBackend {
             current = 0,
             next = 1;
         this.upload(data);
+        this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.cursorBuffer);
+        this.gl.bufferSubData(this.gl.UNIFORM_BUFFER, 0, packCursorUniform(p, this.cursorState));
+        this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.uniformBuffer);
         this.draw('BASE', this.baseTargets[0], undefined, undefined, undefined, 'base');
         this.draw('MATERIALIZE', targets[next], this.baseTargets[0].texture, undefined, undefined, 'field-materialize');
         [current, next] = [next, current];
@@ -812,6 +826,11 @@ export class WebGL2Renderer implements RenderBackend {
         else if (resetHistory) this.historyValid = false;
         this.invalidate();
     }
+    private cursorState?: CursorSnapshot;
+    setCursorState(state: CursorSnapshot) {
+        this.cursorState = state;
+        this.invalidate();
+    }
     setPaused(v: boolean) {
         if (v === this.paused) return;
         this.paused = v;
@@ -845,6 +864,7 @@ export class WebGL2Renderer implements RenderBackend {
         }
         for (const t of this.lutTextures.values()) this.gl.deleteTexture(t);
         this.gl.deleteBuffer(this.uniformBuffer);
+        this.gl.deleteBuffer(this.cursorBuffer);
         this.gl.deleteVertexArray(this.vao);
     }
 }

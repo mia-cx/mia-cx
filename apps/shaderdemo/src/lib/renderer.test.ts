@@ -282,7 +282,7 @@ describe('field configuration', () => {
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
         expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(163);
+        expect(PARAMETER_SCHEMA).toHaveLength(214);
         expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(PARAMETER_SCHEMA.length);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);

@@ -1,5 +1,6 @@
 import type { GpuTimingStats, RenderOptions } from './renderer';
 import type { FrameRollingSummary } from './telemetry';
+import type { CursorSnapshot } from './cursor';
 
 export type RendererBackendName = 'webgpu' | 'webgl2';
 
@@ -10,6 +11,7 @@ export interface RenderBackend {
     onGpuStats?: (stats: GpuTimingStats | null) => void;
     onLost?: (message: string) => void;
     setOptions(options: RenderOptions): void;
+    setCursorState(state: CursorSnapshot): void;
     setPaused(paused: boolean): void;
     invalidate(): void;
     destroy(): void;
