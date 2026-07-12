@@ -64,7 +64,11 @@ describe('WebGL2 parity backend', () => {
     it('samples the persistent density texture with generated GLSL parity', () => {
         expect(shaders.BASE).toContain('uniform highp sampler2D _group_0_binding_2_fs;');
         expect(shaders.BASE).toContain('texture(_group_0_binding_2_fs, vec2(uv))');
-        expect(shaders.BASE).toContain('densityPressureEnvelope = _e58.x;');
+        expect(shaders.BASE).toContain('float densityPressure = _e50.x;');
+        expect(shaders.BASE).toContain('cursorDensity = (_e53 * densityPressure);');
+        expect(shaders.BASE.match(/texture\(_group_0_binding_2_fs/g)).toHaveLength(1);
+        expect(shaders.BASE).not.toContain('vec2 gradient =');
+        expect(shaders.BASE).not.toContain('textureSize(_group_0_binding_2_fs');
         expect(shaders.BASE).not.toContain('headEnergy');
         expect(shaders.BASE).not.toContain('float trail =');
         expect(shaders.BASE).not.toContain('halogen');

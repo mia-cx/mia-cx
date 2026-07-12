@@ -1,10 +1,10 @@
 import { CURSOR_UNIFORM_PARAMETER_SCHEMA } from './cursor-schema';
 import type { CursorSnapshot } from './cursor';
 
-/** Compact vec4-only cursor block: five shader values plus padding. */
-export const CURSOR_UNIFORM_VEC4S = 2;
-export const CURSOR_UNIFORM_FLOATS = 8;
-export const CURSOR_UNIFORM_BYTES = 32;
+/** Compact vec4 cursor block: three shader values plus padding. */
+export const CURSOR_UNIFORM_VEC4S = 1;
+export const CURSOR_UNIFORM_FLOATS = 4;
+export const CURSOR_UNIFORM_BYTES = 16;
 export const CURSOR_PARAMETER_OFFSET = 0;
 
 export function packCursorUniform(parameters: Record<string, number>, _snapshot?: CursorSnapshot) {

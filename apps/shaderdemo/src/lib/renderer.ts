@@ -535,7 +535,7 @@ fn smoothAbsFold(value: f32) -> f32 {
 export const BASE_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
-struct CursorUniform { parameters:array<vec4f,2> }
+struct CursorUniform { parameters:array<vec4f,1> }
 @group(0) @binding(1) var<uniform> cursor:CursorUniform;
 @group(0) @binding(2) var densityField:texture_2d<f32>;
 @group(0) @binding(3) var densitySampler:sampler;
@@ -543,20 +543,11 @@ fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
-    var cursorDensity=0.; var cursorDepth=0.; var densityPressureEnvelope=0.;
+    var cursorDensity=0.; var cursorDepth=0.;
     if(cp(0u)!=0. && cp(1u)!=0.) {
         let uv=pos.xy/u.resolution;
-        let size=vec2f(textureDimensions(densityField));
-        let texel=1./size;
-        densityPressureEnvelope=textureSample(densityField,densitySampler,uv).r;
-        let gradient=vec2f(
-            textureSample(densityField,densitySampler,uv+vec2f(texel.x,0.)).r-textureSample(densityField,densitySampler,uv-vec2f(texel.x,0.)).r,
-            textureSample(densityField,densitySampler,uv+vec2f(0.,texel.y)).r-textureSample(densityField,densitySampler,uv-vec2f(0.,texel.y)).r
-        )*size*.5;
-        let local=pow(smoothstep(0.,1.,densityPressureEnvelope),cp(4u));
-        let displacement=clamp(gradient*local*cp(3u)*.002,vec2f(-.08),vec2f(.08));
-        q-=vec2f(displacement.x*(u.resolution.x/u.resolution.y),displacement.y);
-        cursorDensity=cp(2u)*densityPressureEnvelope;
+        let densityPressure=textureSample(densityField,densitySampler,uv).r;
+        cursorDensity=cp(2u)*densityPressure;
     }
     // Interpret field size against a 1080px reference height, not the render target's physical pixels.
     // The composition therefore stays stable across resolutions while higher-resolution targets add detail.

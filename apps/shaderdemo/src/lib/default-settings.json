@@ -173,9 +173,7 @@
             "cursorDensityPressureFalloff": 1,
             "cursorDensityStrength": 1,
             "cursorDensityBuildUp": 0.4,
-            "cursorDensityDecay": 0.7,
-            "cursorDensityBulgeStrength": 0.18,
-            "cursorDensityBulgeFalloff": 1.5
+            "cursorDensityDecay": 0.7
         },
         "colour": [
             {

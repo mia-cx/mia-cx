@@ -31,8 +31,6 @@ export const CURSOR_EFFECT_GROUPS = [
             p('cursorDensityStrength', 'Density strength', -3, 3, 0.01, 1),
             p('cursorDensityBuildUp', 'Build-up time', 0, 2, 0.01, 0.4, true),
             p('cursorDensityDecay', 'Decay', 0.01, 5, 0.01, 0.7, true),
-            p('cursorDensityBulgeStrength', 'Bulge strength', -1, 1, 0.01, 0.18),
-            p('cursorDensityBulgeFalloff', 'Bulge falloff', 0.25, 4, 0.05, 1.5),
         ],
     ],
 ] as const;
