@@ -166,17 +166,17 @@ describe('field configuration', () => {
         expect(DISPLAY_SHADER_SOURCE).toContain('if(u.blurRadii[1].w<=.5)');
         expect(DISPLAY_SHADER_SOURCE).not.toContain('textureSample(adjustmentLut');
     });
-    it('aggregates nanosecond GPU timestamp pairs by semantic stage', () => {
+    it('derives individual pass durations from sequential completion timestamps', () => {
         const stats = aggregateGpuTimestamps(
-            [0n, 2_000_000n, 3_000_000n, 8_000_000n, 9_000_000n, 21_000_000n, 22_000_000n, 22_400_000n],
+            [0n, 2_000_000n, 0n, 8_000_000n, 0n, 21_000_000n, 0n, 22_400_000n],
             ['base', 'blur2', 'octave2', 'display'],
         );
-        expect(stats).toMatchObject({ totalMs: 19.4, baseMs: 2, blurMs: 5, octaveMs: 12, displayMs: 0.4 });
+        expect(stats).toMatchObject({ totalMs: 22.4, baseMs: 2, blurMs: 6, octaveMs: 13, displayMs: 1.4 });
         expect(stats.passes).toEqual([
             { label: 'base', ms: 2 },
-            { label: 'blur2', ms: 5 },
-            { label: 'octave2', ms: 12 },
-            { label: 'display', ms: 0.4 },
+            { label: 'blur2', ms: 6 },
+            { label: 'octave2', ms: 13 },
+            { label: 'display', ms: 1.4 },
         ]);
         expect(GPU_TIMING_SAMPLE_INTERVAL).toBe(30);
     });

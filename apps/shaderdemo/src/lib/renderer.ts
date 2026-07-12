@@ -64,12 +64,23 @@ export interface GpuTimingStats {
     displayMs: number;
     passes: Array<{ label: string; ms: number }>;
 }
-/** Aggregate WebGPU's nanosecond timestamps, safely treating malformed pairs as zero. */
+/**
+ * Aggregate sequential WebGPU passes from completion timestamps.
+ *
+ * Chromium/Dawn may report `beginningOfPassWriteIndex` at the command-buffer origin for every pass, which makes
+ * each nominal begin/end pair cumulative. Consecutive pass-end deltas remain ordered and correctly isolate each
+ * pass (including the tiny command gap before it), so use those instead of trusting every repeated begin value.
+ */
 export function aggregateGpuTimestamps(timestamps: ArrayLike<bigint>, labels: readonly string[]): GpuTimingStats {
+    const firstBegin = timestamps[0];
+    let previousEnd = firstBegin;
     const passes = labels.map((label, i) => {
-        const begin = timestamps[i * 2],
-            end = timestamps[i * 2 + 1];
-        const ms = begin !== undefined && end !== undefined && end >= begin ? Number(end - begin) / 1_000_000 : 0;
+        const end = timestamps[i * 2 + 1];
+        const ms =
+            previousEnd !== undefined && end !== undefined && end >= previousEnd
+                ? Number(end - previousEnd) / 1_000_000
+                : 0;
+        if (end !== undefined) previousEnd = end;
         return { label, ms: Number.isFinite(ms) ? ms : 0 };
     });
     const sum = (...prefixes: string[]) =>
