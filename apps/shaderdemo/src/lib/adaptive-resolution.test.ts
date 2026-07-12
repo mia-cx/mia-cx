@@ -10,6 +10,14 @@ const gpuWindow = (controller: AdaptiveResolutionController, ms: number) => {
 };
 
 describe('GPU-processing-only adaptive resolution', () => {
+    it('can start unknown hardware conservatively and emergency-downscales repeated severe work', () => {
+        const controller = new AdaptiveResolutionController(1, { initialScale: 0.5, severeMs: 40, severeSamples: 2 });
+        expect(controller.effectiveScale).toBe(0.5);
+        expect(controller.sampleGpu(60, 1, true, 0.5)).toBe(0.275);
+        expect(controller.sampleGpu(60, 2, true, 0.275)).toBe(0.125);
+        expect(controller.effectiveScale).toBe(0.125);
+    });
+
     it('advances after exactly 1, 2, 4, ... 512 GPU samples and continues at 512', () => {
         const controller = new AdaptiveResolutionController(1);
         for (const window of [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 512]) {

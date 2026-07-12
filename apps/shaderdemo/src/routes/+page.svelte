@@ -1,7 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import {
-        AtmosphereRenderer,
         FIELD_BLEND_MODES,
         FIELD_PARAMETER_SCHEMA,
         OCTAVE_BLUR_SCHEMA,
@@ -14,6 +13,7 @@
         type RenderOptions,
         type GpuTimingStats,
     } from '$lib/renderer';
+    import { selectRenderBackend, type RenderBackend } from '$lib/render-backend';
     import { GpuTelemetry, type FrameRollingSummary, type GpuRollingSummary } from '$lib/telemetry';
     import {
         defaultShaderSettings,
@@ -53,7 +53,7 @@
     import { MAX_ADJUSTMENTS, newHslCurve, type Adjustment } from '$lib/adjustments';
 
     let canvas: HTMLCanvasElement;
-    let renderer: AtmosphereRenderer | undefined;
+    let renderer: RenderBackend | undefined;
     const initialDefaults = defaultShaderSettings();
     let options: RenderOptions = $state({
         seed: initialDefaults.seed,
@@ -70,7 +70,9 @@
     let controlsOpen = $state(true);
     let telemetryOpen = $state(true);
     let ready = $state(false);
-    let status = $state('Starting WebGPU…');
+    let status = $state('Starting graphics…');
+    let activeBackend = $state('');
+    let backendWarnings: string[] = $state([]);
     let lutGeneration = 0;
     let frameStats: FrameRollingSummary | undefined = $state();
     let gpuStats: GpuTimingStats | null | undefined = $state();
@@ -292,10 +294,16 @@
         };
         void resolveLuts();
         if (matchMedia('(prefers-reduced-motion: reduce)').matches) paused = true;
-        AtmosphereRenderer.create(canvas, options)
-            .then((instance) => {
+        selectRenderBackend(canvas, options)
+            .then(({ renderer: instance, warnings }) => {
                 if (disposed) return instance.destroy();
                 renderer = instance;
+                backendWarnings = [
+                    ...warnings,
+                    ...(instance.unsupportedEffects?.length
+                        ? [`Unavailable in WebGL2: ${instance.unsupportedEffects.join(', ')}`]
+                        : []),
+                ];
                 instance.onStats = (_value, _width, _height, rolling, renderScale) => {
                     frameStats = rolling;
                     if (renderScale !== undefined) effectiveRenderScale = renderScale;
@@ -310,7 +318,8 @@
                 };
                 instance.setPaused(paused);
                 ready = true;
-                status = 'WebGPU';
+                activeBackend = instance.backend.toUpperCase();
+                status = activeBackend;
                 instance.onLost = (message) => (status = message);
             })
             .catch((error) => {
@@ -327,7 +336,7 @@
 </script>
 
 <svelte:head
-    ><title>Noise Field — WebGPU</title><meta
+    ><title>Noise Field — GPU</title><meta
         name="description"
         content="A monochrome domain-warped noise study."
     /></svelte:head
@@ -346,6 +355,7 @@
                 ></button
             >
             {#if telemetryOpen}<output class="fps" id="performance-telemetry">
+                    {activeBackend}<br />
                     {#if paused}
                         FPS paused/reset<br />frame RMS paused/reset
                     {:else}
@@ -379,6 +389,7 @@
                     {:else}
                         GPU timing…
                     {/if}
+                    {#if backendWarnings.length}<br />Fallback: {backendWarnings.join(' · ')}{/if}
                 </output>{/if}
         </div>{/if}
     <nav aria-label="Study controls" data-disabled={!ready} inert={!ready}>

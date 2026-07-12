@@ -1,4 +1,6 @@
 export interface AdaptiveResolutionOptions {
+    /** Initial scale used before the device has demonstrated headroom. */
+    initialScale?: number;
     minScale?: number;
     quantum?: number;
     maxWindowFrames?: number;
@@ -9,6 +11,8 @@ export interface AdaptiveResolutionOptions {
     assumedFixedMs?: number;
     maxDownRatio?: number;
     maxUpRatio?: number;
+    severeMs?: number;
+    severeSamples?: number;
 }
 
 type Observation = { scale: number; ms: number };
@@ -29,10 +33,12 @@ export class AdaptiveResolutionController {
     private windowFrames = 1;
     private gpuSamples: GpuSample[] = [];
     private observations: Observation[] = [];
+    private severeCount = 0;
 
     constructor(ceiling: number, options: AdaptiveResolutionOptions = {}) {
         this.config = {
             minScale: options.minScale ?? 0.125,
+            initialScale: options.initialScale ?? ceiling,
             quantum: options.quantum ?? 0.025,
             maxWindowFrames: options.maxWindowFrames ?? 512,
             targetMs: options.targetMs ?? 1000 / 90,
@@ -40,11 +46,13 @@ export class AdaptiveResolutionController {
             assumedFixedMs: options.assumedFixedMs ?? 1.5,
             maxDownRatio: options.maxDownRatio ?? 0.55,
             maxUpRatio: options.maxUpRatio ?? 1.3,
+            severeMs: options.severeMs ?? 50,
+            severeSamples: options.severeSamples ?? 2,
         };
         this.minScale = this.config.minScale;
         this.quantum = this.config.quantum;
         this.ceiling = Math.max(this.minScale, ceiling);
-        this.scale = this.ceiling;
+        this.scale = Math.min(this.ceiling, Math.max(this.minScale, this.config.initialScale));
     }
 
     get effectiveScale() {
@@ -67,6 +75,7 @@ export class AdaptiveResolutionController {
         this.windowFrames = 1;
         this.gpuSamples = [];
         this.observations = [];
+        this.severeCount = 0;
     }
 
     /**
@@ -85,6 +94,15 @@ export class AdaptiveResolutionController {
             return undefined;
         }
         if (!Number.isFinite(gpuMs) || gpuMs <= 0 || !Number.isFinite(sampledScale)) return undefined;
+
+        // Do not wait for an exponentially growing p99 window when a browser is already in distress.
+        // Two consecutive severe samples are enough to shed most of the pixel workload immediately.
+        this.severeCount = gpuMs >= this.config.severeMs ? this.severeCount + 1 : 0;
+        if (this.severeCount >= this.config.severeSamples && sampledScale === this.scale) {
+            this.severeCount = 0;
+            this.gpuSamples = [];
+            return this.move(Math.max(this.minScale, this.scale * 0.35));
+        }
 
         // Results already in flight when a scale changed remain useful as model observations, but must not
         // contaminate or advance the consecutive processing window for the new scale.

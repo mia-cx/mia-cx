@@ -891,6 +891,7 @@ export const POST_KIND_INDEX: Record<PostEffectKind, number> = {
 };
 
 export class AtmosphereRenderer {
+    readonly backend = 'webgpu' as const;
     private device?: GPUDevice;
     private context: GPUCanvasContext | null = null;
     private pipelines: GPURenderPipeline[] = [];
@@ -919,6 +920,7 @@ export class AtmosphereRenderer {
     private frameTelemetry = new FrameTelemetry();
     private adaptiveResolution: AdaptiveResolutionController;
     private destroyed = false;
+    private submissionPending = false;
     private invalid = true;
     readonly gpuTimingSupported = false;
     private querySet?: GPUQuerySet;
@@ -950,7 +952,10 @@ export class AtmosphereRenderer {
         private canvas: HTMLCanvasElement,
         public options: RenderOptions,
     ) {
-        this.adaptiveResolution = new AdaptiveResolutionController(options.renderScale);
+        this.adaptiveResolution = new AdaptiveResolutionController(options.renderScale, {
+            // Avoid making a native-resolution, many-pass frame the first workload on an unknown GPU.
+            initialScale: Math.min(0.5, options.renderScale),
+        });
         this.observer = new ResizeObserver(() => {
             this.resize();
             this.invalidate();
@@ -1043,7 +1048,12 @@ export class AtmosphereRenderer {
             }));
         }
         self.device.lost.then((info) => {
-            if (!self.destroyed) self.onLost?.(`GPU device lost: ${info.message || info.reason}`);
+            if (!self.destroyed) {
+                self.paused = true;
+                if (self.rafId) cancelAnimationFrame(self.rafId);
+                self.rafId = 0;
+                self.onLost?.(`WebGPU stopped after device loss: ${info.message || info.reason}. Reload to recover.`);
+            }
         });
         self.observer.observe(canvas);
         document.addEventListener('visibilitychange', self.visibilityHandler);
@@ -1215,7 +1225,7 @@ export class AtmosphereRenderer {
         const dt = Math.min(0.1, Math.max(0, (now - this.lastTime) / 1000));
         this.lastTime = now;
         if (animated) this.simTime = advanceSimulationTime(this.simTime, dt, this.options.parameters.animationSpeed);
-        if (this.invalid || animated) {
+        if ((this.invalid || animated) && !this.submissionPending) {
             this.render();
             this.invalid = false;
             if (animated) {
@@ -1499,6 +1509,20 @@ export class AtmosphereRenderer {
             this.queryReadbackBusy = true;
         }
         d.queue.submit([enc.finish()]);
+        this.submissionPending = true;
+        void d.queue.onSubmittedWorkDone().then(
+            () => {
+                this.submissionPending = false;
+                if (!this.destroyed && !this.paused) this.schedule();
+            },
+            () => {
+                this.submissionPending = false;
+                if (!this.destroyed) {
+                    this.paused = true;
+                    this.onLost?.('WebGPU stopped after a submission failure. Reload to recover.');
+                }
+            },
+        );
         if (frameTimingSlot) this.readFrameTiming(frameTimingSlot);
         if (sampleGpu)
             this.readGpuTimestamps(gpuLabels!, this.adaptiveResolution.effectiveScale, this.adaptiveGeneration);
