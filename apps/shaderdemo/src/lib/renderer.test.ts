@@ -9,6 +9,7 @@ import {
     BLUR_SHADER_SOURCE,
     COMMON_SHADER_SOURCE,
     CURSOR_DENSITY_UNIFORM_BYTES,
+    CURSOR_PAINT_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
     FIELD_BLEND_MODES,
     POST_BLEND_MODES,
@@ -209,6 +210,9 @@ describe('field configuration', () => {
         expect(CURSOR_DENSITY_UNIFORM_BYTES).toBe(32);
         const source = AtmosphereRenderer.toString();
         expect(source.match(/size: CURSOR_DENSITY_UNIFORM_BYTES/g)).toHaveLength(2);
+    });
+    it('converts top-left cursor coordinates to WebGPU clip-space Y', () => {
+        expect(CURSOR_PAINT_SHADER_SOURCE).toContain('vec4f(q.x/params.aspect,-q.y,0,1)');
     });
     it('renders one full-resolution frozen pause frame and restores adaptive rendering', () => {
         const source = AtmosphereRenderer.toString();
