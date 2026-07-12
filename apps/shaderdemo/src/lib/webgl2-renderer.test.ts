@@ -61,6 +61,15 @@ describe('WebGL2 parity backend', () => {
         }
     });
 
+    it('keeps generated WebGL2 density head and trail formulas in parity with canonical WGSL', () => {
+        expect(shaders.BASE).toContain('float headEnergy = pow(clamp(_e183, 0.0, 1.0), max(_e188, 0.1));');
+        expect(shaders.BASE).toContain(
+            'float trail = ((_e277 * exp((-(sample_.z) * _e281))) * min((sample_.w / max(_e287, 0.0001)), 1.0));',
+        );
+        expect(shaders.BASE).toContain('float _e277 = cursorWeight(td, _e64, _e276);');
+        expect(shaders.BASE).not.toContain('halogen');
+    });
+
     it('covers every schema post effect and reports none unsupported', () => {
         expect([...WEBGL2_SUPPORTED_POST]).toEqual(POST_KINDS);
         expect(WEBGL2_SUPPORTED_POST.size).toBe(25);

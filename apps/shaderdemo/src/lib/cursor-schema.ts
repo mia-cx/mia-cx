@@ -38,7 +38,12 @@ export const CURSOR_EFFECT_GROUPS = [
     [
         'Density pressure',
         'cursorDensityPressureEnabled',
-        [p('cursorDensityPressureStrength', 'Strength', -3, 3, 0.01, 1)],
+        [
+            p('cursorDensityPressureStrength', 'Strength', -3, 3, 0.01, 1),
+            p('cursorDensityPressureTrailAmount', 'Trail amount', 0, 3, 0.01, 1),
+            p('cursorDensityPressureTrailDecay', 'Trail decay', 0.01, 10, 0.01, 2),
+            p('cursorDensityPressureStillFade', 'Still fade / head decay', 0.1, 8, 0.1, 1),
+        ],
     ],
     [
         'Elastic wake',
@@ -71,18 +76,6 @@ export const CURSOR_EFFECT_GROUPS = [
             p('cursorClickSpeed', 'Speed', 0.01, 10, 0.01, 1),
             p('cursorClickDecay', 'Decay', 0.01, 10, 0.01, 2),
             p('cursorClickPolarity', 'Polarity', -1, 1, 1, 1),
-        ],
-    ],
-    [
-        'Moving halogen light trail',
-        'cursorHalogenEnabled',
-        [
-            p('cursorHalogenIntensity', 'Intensity', 0, 10, 0.01, 1),
-            p('cursorHalogenRadius', 'Radius', 0.01, 2, 0.01, 0.3),
-            p('cursorHalogenBlur', 'Blur', 0, 2, 0.01, 0.2),
-            p('cursorHalogenTrailDecay', 'Trail decay', 0.01, 10, 0.01, 2),
-            p('cursorHalogenStillFade', 'Still fade', 0.01, 10, 0.01, 1),
-            p('cursorHalogenHead', 'Head', 0, 3, 0.01, 1),
         ],
     ],
 ] as const;

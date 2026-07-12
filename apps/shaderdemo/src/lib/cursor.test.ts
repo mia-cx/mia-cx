@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { CursorState, CURSOR_TRAIL_SAMPLES } from './cursor';
+import { CURSOR_EFFECT_GROUPS, CURSOR_PARAMETER_KEYS } from './cursor-schema';
 
 const rect = { left: 10, top: 20, width: 400, height: 200 };
 describe('CursorState', () => {
+    it('exposes one density pressure group with a fading trail and no legacy halogen controls', () => {
+        const densityGroups = CURSOR_EFFECT_GROUPS.filter(([label]) => label === 'Density pressure');
+        expect(densityGroups).toHaveLength(1);
+        expect(densityGroups[0][2].map(({ label }) => label)).toEqual([
+            'Strength',
+            'Trail amount',
+            'Trail decay',
+            'Still fade / head decay',
+        ]);
+        expect(CURSOR_EFFECT_GROUPS.some(([label]) => label.toLowerCase().includes('halogen'))).toBe(false);
+        expect(CURSOR_PARAMETER_KEYS.some((key) => key.includes('Halogen'))).toBe(false);
+    });
     it('uses aspect-correct CSS coordinates independent of backing resolution', () => {
         const a = new CursorState().update(310, 120, rect, 10);
         const b = new CursorState().update(310, 120, { ...rect }, 10);

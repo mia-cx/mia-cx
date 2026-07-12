@@ -556,20 +556,22 @@ fn cursorWeight(delta:vec2f,radius:f32,falloff:f32)->f32 { return exp(-pow(lengt
         if(cp(17u)!=0.) { q=center+delta*(1.-cp(18u)*weight); }
         if(cp(19u)!=0.) { q+=(noise3v(vec2f(delta*cp(21u))+t*.07,733.)-.5)*cp(20u)*weight; }
         if(cp(22u)!=0.) { q-=direction*dot(delta,direction)*cp(23u)*weight; }
-        if(cp(24u)!=0.) { cursorDensity+=cp(25u)*weight; }
-        if(cp(30u)!=0.) { q=center+delta/(1.+cp(31u)*weight); }
-        if(cp(32u)!=0.) { q+=direction*cp(33u)*weight; }
-        if(cp(34u)!=0.) { cursorDensity+=cp(35u)*weight*dot(delta,direction)/max(radius,.0001); }
-        let trailLimit=min(u32(cp(4u)),min(u32(cp(51u)),16u));
-        if(cp(26u)!=0. || cp(44u)!=0.) {
+        if(cp(24u)!=0.) {
+            let headEnergy=pow(clamp(cursor.state1.w,0.,1.),max(cp(28u),.1));
+            cursorDensity+=cp(25u)*weight*headEnergy;
+        }
+        if(cp(33u)!=0.) { q=center+delta/(1.+cp(34u)*weight); }
+        if(cp(35u)!=0.) { q+=direction*cp(36u)*weight; }
+        if(cp(37u)!=0.) { cursorDensity+=cp(38u)*weight*dot(delta,direction)/max(radius,.0001); }
+        let trailLimit=min(u32(cp(4u)),min(u32(cp(47u)),16u));
+        if(cp(24u)!=0. || cp(29u)!=0.) {
             for(var i=0u;i<16u;i++) { if(i<trailLimit) {
                 let sample=cursor.trail[i]; let td=q-sample.xy;
-                if(cp(26u)!=0.) { let wake=cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(29u))*sin(length(td)*cp(28u)-sample.z*cp(28u)); q-=direction*cp(27u)*wake; }
-                if(cp(44u)!=0.) { let light=exp(-pow(length(td)/max(cp(46u)+cp(47u),.0001),2.))*exp(-sample.z*cp(48u)); cursorDensity+=cp(45u)*light*min(sample.w/max(cp(3u),.0001),1.); }
+                if(cp(24u)!=0.) { let trail=cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(27u))*min(sample.w/max(cp(3u),.0001),1.); cursorDensity+=cp(25u)*cp(26u)*trail; }
+                if(cp(29u)!=0.) { let wake=cursorWeight(td,radius,cp(2u))*exp(-sample.z*cp(32u))*sin(length(td)*cp(31u)-sample.z*cp(31u)); q-=direction*cp(30u)*wake; }
             } }
         }
-        if(cp(36u)!=0.) { let rd=q-cursor.click.xy; let age=cursor.click.z; let ring=length(rd)-age*cp(41u); let envelope=exp(-age*cp(42u))*exp(-pow(ring/max(cp(39u),.0001),2.)); let wave=sin(ring*cp(40u))*envelope*cp(43u)*cursor.click.w; q+=normalize(rd+vec2f(.000001))*cp(37u)*wave; cursorDensity+=cp(38u)*wave; }
-        if(cp(44u)!=0.) { let head=cursorWeight(q-center,cp(46u)+cp(47u),2.)*cursor.state1.w; cursorDensity+=cp(45u)*cp(50u)*head; }
+        if(cp(39u)!=0.) { let rd=q-cursor.click.xy; let age=cursor.click.z; let ring=length(rd)-age*cp(44u); let envelope=exp(-age*cp(45u))*exp(-pow(ring/max(cp(42u),.0001),2.)); let wave=sin(ring*cp(43u))*envelope*cp(46u)*cursor.click.w; q+=normalize(rd+vec2f(.000001))*cp(40u)*wave; cursorDensity+=cp(41u)*wave; }
     }
     // Interpret field size against a 1080px reference height, not the render target's physical pixels.
     // The composition therefore stays stable across resolutions while higher-resolution targets add detail.

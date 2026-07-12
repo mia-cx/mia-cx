@@ -39,7 +39,7 @@ export function packCursorUniform(parameters: Record<string, number>, snapshot: 
             offset = CURSOR_TRAIL_OFFSET + i * 4;
         out.set([sample.x, sample.y, sample.age, sample.speed], offset);
     }
-    // The unused lane after the 51 parameters carries the bounded trail count.
-    out[CURSOR_PARAMETER_OFFSET + 51] = count;
+    // The unused lane after the 47 parameters carries the bounded trail count.
+    out[CURSOR_PARAMETER_OFFSET + 47] = count;
     return out;
 }
