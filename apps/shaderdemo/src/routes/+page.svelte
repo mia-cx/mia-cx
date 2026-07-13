@@ -339,6 +339,10 @@
     }
     onMount(() => {
         let disposed = false;
+        const isIos =
+            /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (isIos) canvas.classList.add('ios-overscan');
         // Mounting the persistent atom synchronously hydrates it from localStorage.
         let persisted = shaderSettings.get();
         const stopHydration = shaderSettings.subscribe((value) => (persisted = value));
@@ -1043,6 +1047,12 @@
     canvas.ready {
         opacity: 1;
         transition: opacity 0.35s ease;
+    }
+    :global(canvas.ios-overscan) {
+        top: -25lvh;
+        left: -25lvw;
+        width: 150lvw;
+        height: 150lvh;
     }
 
     article {
