@@ -62,7 +62,6 @@
     import { CursorDensityField } from '$lib/cursor-density-field';
 
     let canvas: HTMLCanvasElement;
-    let mirrorVideo: HTMLVideoElement;
     let renderer: RenderBackend | undefined;
     const cursorState = new CursorState();
     const cursorDensityField = new CursorDensityField();
@@ -340,22 +339,6 @@
     }
     onMount(() => {
         let disposed = false;
-        const isIos =
-            /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        const isIosSafari =
-            isIos &&
-            /WebKit/.test(navigator.userAgent) &&
-            !/CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo/.test(navigator.userAgent);
-        let mirrorStream: MediaStream | undefined;
-        if (isIosSafari) {
-            document.documentElement.classList.add('ios-safari-canvas-mirror');
-            mirrorStream = canvas.captureStream?.(30);
-            if (mirrorStream) {
-                mirrorVideo.srcObject = mirrorStream;
-                void mirrorVideo.play().catch(() => undefined);
-            }
-        }
         // Mounting the persistent atom synchronously hydrates it from localStorage.
         let persisted = shaderSettings.get();
         const stopHydration = shaderSettings.subscribe((value) => (persisted = value));
@@ -507,9 +490,6 @@
             window.removeEventListener('pointercancel', pointerLeave);
             window.removeEventListener('blur', pointerLeave);
             cancelAnimationFrame(cursorFrame);
-            document.documentElement.classList.remove('ios-safari-canvas-mirror');
-            mirrorStream?.getTracks().forEach((track) => track.stop());
-            if (mirrorVideo) mirrorVideo.srcObject = null;
             renderer?.destroy();
         };
     });
@@ -522,7 +502,6 @@
     /></svelte:head
 >
 
-<video bind:this={mirrorVideo} class="canvas-mirror" muted autoplay playsinline aria-hidden="true"></video>
 <canvas class:ready bind:this={canvas} aria-label="Animated coloured noise field layered transparently over the article"
 ></canvas>
 <main>
@@ -1032,8 +1011,9 @@
     :global(html, body) {
         margin: 0;
         min-height: 100%;
-        background: transparent;
+        background: #070809;
         color: #e9e7e1;
+        color-scheme: dark;
     }
     :global(body) {
         font-family: Georgia, 'Times New Roman', serif;
@@ -1060,27 +1040,6 @@
     canvas.ready {
         opacity: 1;
         transition: opacity 0.35s ease;
-    }
-    .canvas-mirror {
-        display: none;
-    }
-    @supports (-webkit-touch-callout: none) {
-        :global(html.ios-safari-canvas-mirror) canvas {
-            opacity: 0;
-        }
-        :global(html.ios-safari-canvas-mirror) .canvas-mirror {
-            position: sticky;
-            top: -25lvh;
-            left: -25lvw;
-            z-index: 1;
-            display: block;
-            width: 150lvw;
-            height: 150lvh;
-            margin-bottom: -150lvh;
-            object-fit: fill;
-            mix-blend-mode: screen;
-            pointer-events: none;
-        }
     }
 
     article {
