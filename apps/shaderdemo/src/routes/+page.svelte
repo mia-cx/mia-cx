@@ -339,6 +339,17 @@
     }
     onMount(() => {
         let disposed = false;
+        const isIos =
+            /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const syncCanvasCoverage = () => {
+            if (!isIos) return;
+            canvas.style.setProperty('--canvas-screen-width', `${screen.width}px`);
+            canvas.style.setProperty('--canvas-screen-height', `${screen.height}px`);
+        };
+        syncCanvasCoverage();
+        window.addEventListener('resize', syncCanvasCoverage);
+        window.addEventListener('orientationchange', syncCanvasCoverage);
         // Mounting the persistent atom synchronously hydrates it from localStorage.
         let persisted = shaderSettings.get();
         const stopHydration = shaderSettings.subscribe((value) => (persisted = value));
@@ -489,6 +500,8 @@
             window.removeEventListener('pointerup', pointerUp);
             window.removeEventListener('pointercancel', pointerLeave);
             window.removeEventListener('blur', pointerLeave);
+            window.removeEventListener('resize', syncCanvasCoverage);
+            window.removeEventListener('orientationchange', syncCanvasCoverage);
             cancelAnimationFrame(cursorFrame);
             renderer?.destroy();
         };
@@ -1027,14 +1040,14 @@
     }
     canvas {
         position: fixed;
-        top: 0;
-        left: 0;
+        top: calc(-1 * env(safe-area-inset-top, 0px));
+        left: calc(-1 * env(safe-area-inset-left, 0px));
         z-index: 1;
         display: block;
         width: 100%;
         height: 100%;
-        width: 100lvw;
-        height: 100lvh;
+        width: var(--canvas-screen-width, 100lvw);
+        height: var(--canvas-screen-height, 100lvh);
         pointer-events: none;
         opacity: 0;
         background: transparent;

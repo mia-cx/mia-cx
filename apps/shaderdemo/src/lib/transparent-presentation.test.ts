@@ -43,7 +43,9 @@ describe('transparent shader presentation', () => {
 
     it('extends the canvas into Safari browser chrome and display cutout areas', () => {
         expect(app).toContain('viewport-fit=cover');
-        expect(page).toContain('width: 100lvw');
-        expect(page).toContain('height: 100lvh');
+        expect(page).toContain("canvas.style.setProperty('--canvas-screen-height', `${screen.height}px`)");
+        expect(page).toContain('top: calc(-1 * env(safe-area-inset-top, 0px))');
+        expect(page).toContain('width: var(--canvas-screen-width, 100lvw)');
+        expect(page).toContain('height: var(--canvas-screen-height, 100lvh)');
     });
 });
