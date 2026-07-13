@@ -5,6 +5,7 @@ import {
     OCTAVE_PARAMETER_SCHEMA,
     OCTAVE_PIXELATE_SCHEMA,
     PARAMETER_SCHEMA,
+    POST_PARAMETER_SCHEMA,
     type ShaderParameters,
 } from './renderer';
 import {
@@ -73,15 +74,7 @@ export function resetSettingsTab(settings: SavedShaderSettings, tab: SettingsTab
             post: clone(defaults.post),
             parameters: {
                 ...settings.parameters,
-                ...Object.fromEntries(
-                    PARAMETER_SCHEMA.filter(
-                        (x) =>
-                            !FIELD_PARAMETER_SCHEMA.includes(x as never) &&
-                            !OCTAVE_PARAMETER_SCHEMA.flat().includes(x as never) &&
-                            !OCTAVE_PIXELATE_SCHEMA.includes(x as never) &&
-                            !OCTAVE_BLUR_SCHEMA.includes(x as never),
-                    ).map((x) => [x.key, x.default]),
-                ),
+                ...Object.fromEntries(POST_PARAMETER_SCHEMA.map((x) => [x.key, x.default])),
             } as ShaderParameters,
         };
     const schema =

@@ -63,6 +63,9 @@ describe('V2 pipeline settings', () => {
     });
     it('resets Colour and Post independently with fresh arrays', () => {
         const value = defaultShaderSettings();
+        value.parameters.cursorEnabled = 1;
+        value.parameters.cursorDensityRadius = 1.73;
+        value.parameters.cursorDensityDarkBias = 2.4;
         const colour = resetSettingsTab(value, 'colour');
         const post = resetSettingsTab(value, 'post');
         expect(colour.colour).toEqual(defaultShaderSettings().colour);
@@ -70,5 +73,8 @@ describe('V2 pipeline settings', () => {
         expect(post.post).toEqual(defaultShaderSettings().post);
         expect(post.post).not.toBe(value.post);
         expect(post.colour).toBe(value.colour);
+        expect(post.parameters.cursorEnabled).toBe(1);
+        expect(post.parameters.cursorDensityRadius).toBe(1.73);
+        expect(post.parameters.cursorDensityDarkBias).toBe(2.4);
     });
 });
