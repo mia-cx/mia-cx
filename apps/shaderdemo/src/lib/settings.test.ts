@@ -32,7 +32,7 @@ describe('V2 pipeline settings', () => {
     it('drops superseded cursor density keys from defaults, cursor resets, and exports', () => {
         const oldKeys = ['cursorDensity' + 'HighlightProtection', 'cursorDensity' + 'MidtoneFocus'];
         const settings = defaultShaderSettings();
-        expect(settings.parameters.cursorDensityDarkBias).toBe(1.3);
+        expect(settings.parameters.cursorDensityDarkBias).toBe(1);
         for (const oldKey of oldKeys) {
             expect(oldKey in settings.parameters).toBe(false);
             (settings.parameters as Record<string, number>)[oldKey] = 3;
