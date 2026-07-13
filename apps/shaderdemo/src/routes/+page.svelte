@@ -505,57 +505,67 @@
 <canvas class:ready bind:this={canvas} aria-label="Animated coloured noise field layered transparently over the article"
 ></canvas>
 <main>
-    <article>
-        <header>
-            <h1>The quiet architecture of a city after rain</h1>
-            <p class="dek">What puddles, late buses and lit windows reveal when the streets briefly slow down.</p>
-            <p class="byline">By Mara Vale · <time datetime="2026-07-13">13 July 2026</time></p>
-        </header>
-        <p>
-            Rain changes a city twice. First it alters the surface: stone darkens, traffic softens and every lamp
-            acquires a wavering reflection. Then it changes the pace. People wait beneath awnings, choose longer routes
-            with better shelter and notice buildings they ordinarily pass without looking.
-        </p>
-        <p>
-            On a wet evening, the familiar grid becomes less certain. A shallow gutter can hold a second skyline; a bus
-            shelter can feel like a public room. These small inversions make the street legible again—not as
-            infrastructure, but as a collection of choices made over decades.
-        </p>
-        <h2>Reading the reflected street</h2>
-        <p>
-            The most vivid details are temporary. Painted signs sharpen against damp brick, leaves stick to the pavement
-            in bright constellations, and old repairs appear as darker seams. The effect rewards walking slowly and
-            looking down as often as up.
-        </p>
-        <blockquote>
-            “A reflection does not copy the street. It edits the street, keeping the light and letting the rest fall
-            away.”
-        </blockquote>
-        <p>Three habits make these evenings especially revealing:</p>
-        <ul>
-            <li>Follow a familiar route at half your usual speed.</li>
-            <li>Notice where strangers naturally gather under cover.</li>
-            <li>Compare the colour of reflected light with its source.</li>
-        </ul>
-        <p>
-            The walk need not become a project. A short detour and a few attentive minutes are enough. The
-            <a href="https://en.wikipedia.org/wiki/Fl%C3%A2neur">tradition of urban wandering</a> can sound grand; in practice,
-            it begins by leaving a little time unplanned.
-        </p>
-        <h2>A temporary common room</h2>
-        <p>
-            Weather also exposes the social shape of a place. The generous arcade, the deep doorway and the tree dense
-            enough to stop a shower all become shared assets. Their value is felt directly, without a map or sign
-            explaining it.
-        </p>
-        <p>
-            By morning, most evidence has evaporated. What remains is a better memory of the street: where it welcomes a
-            pause, where it pushes people onward, and where a patch of colour can make the ordinary briefly strange. For
-            more walks and field notes, visit the
-            <a href="https://www.openstreetmap.org/">open map</a> and choose somewhere nearby that you have never crossed
-            on foot.
-        </p>
-    </article>
+    <header class="headernav">
+        <a class="wordmark" href="#article">mia.cx</a>
+        <nav aria-label="Article sections">
+            <a href="#article">Article</a>
+            <a href="#reflected-street">Reflections</a>
+            <a href="#common-room">Common room</a>
+        </nav>
+    </header>
+    <div class="container">
+        <article id="article">
+            <header>
+                <h1>The quiet architecture of a city after rain</h1>
+                <p class="dek">What puddles, late buses and lit windows reveal when the streets briefly slow down.</p>
+                <p class="byline">By Mara Vale · <time datetime="2026-07-13">13 July 2026</time></p>
+            </header>
+            <p>
+                Rain changes a city twice. First it alters the surface: stone darkens, traffic softens and every lamp
+                acquires a wavering reflection. Then it changes the pace. People wait beneath awnings, choose longer
+                routes with better shelter and notice buildings they ordinarily pass without looking.
+            </p>
+            <p>
+                On a wet evening, the familiar grid becomes less certain. A shallow gutter can hold a second skyline; a
+                bus shelter can feel like a public room. These small inversions make the street legible again—not as
+                infrastructure, but as a collection of choices made over decades.
+            </p>
+            <h2 id="reflected-street">Reading the reflected street</h2>
+            <p>
+                The most vivid details are temporary. Painted signs sharpen against damp brick, leaves stick to the
+                pavement in bright constellations, and old repairs appear as darker seams. The effect rewards walking
+                slowly and looking down as often as up.
+            </p>
+            <blockquote>
+                “A reflection does not copy the street. It edits the street, keeping the light and letting the rest fall
+                away.”
+            </blockquote>
+            <p>Three habits make these evenings especially revealing:</p>
+            <ul>
+                <li>Follow a familiar route at half your usual speed.</li>
+                <li>Notice where strangers naturally gather under cover.</li>
+                <li>Compare the colour of reflected light with its source.</li>
+            </ul>
+            <p>
+                The walk need not become a project. A short detour and a few attentive minutes are enough. The
+                <a href="https://en.wikipedia.org/wiki/Fl%C3%A2neur">tradition of urban wandering</a> can sound grand; in
+                practice, it begins by leaving a little time unplanned.
+            </p>
+            <h2 id="common-room">A temporary common room</h2>
+            <p>
+                Weather also exposes the social shape of a place. The generous arcade, the deep doorway and the tree
+                dense enough to stop a shower all become shared assets. Their value is felt directly, without a map or
+                sign explaining it.
+            </p>
+            <p>
+                By morning, most evidence has evaporated. What remains is a better memory of the street: where it
+                welcomes a pause, where it pushes people onward, and where a patch of colour can make the ordinary
+                briefly strange. For more walks and field notes, visit the
+                <a href="https://www.openstreetmap.org/">open map</a> and choose somewhere nearby that you have never crossed
+                on foot.
+            </p>
+        </article>
+    </div>
     {#if ready}<div class="telemetry">
             <button
                 class="telemetry-toggle"
@@ -1056,14 +1066,70 @@
         }
     }
 
+    .headernav {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        width: 100%;
+        padding: 16px clamp(20px, 4vw, 56px);
+        background: #070809;
+        font:
+            11px ui-monospace,
+            SFMono-Regular,
+            Menlo,
+            monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .headernav a {
+        color: #d7d4cc;
+        text-decoration: none;
+    }
+    .headernav a:hover,
+    .headernav a:focus-visible {
+        color: #fff;
+    }
+    .headernav nav {
+        display: flex;
+        gap: clamp(12px, 3vw, 30px);
+    }
+    .headernav .wordmark {
+        color: #fff;
+    }
+    .container {
+        position: relative;
+        z-index: 0;
+        width: min(100% - 40px, 820px);
+        margin: clamp(28px, 6vw, 72px) auto 100px;
+        padding: 0 clamp(24px, 6vw, 60px);
+        background: #0d0f12;
+    }
     article {
         position: relative;
         z-index: 0;
-        width: min(100% - 40px, 700px);
-        margin: 0 auto;
-        padding: clamp(72px, 12vw, 150px) 0 140px;
+        width: 100%;
+        margin: 0;
+        padding: clamp(56px, 9vw, 110px) 0 100px;
         font-size: clamp(18px, 1.8vw, 21px);
         line-height: 1.68;
+    }
+    article h2 {
+        scroll-margin-top: 80px;
+    }
+    @media (max-width: 560px) {
+        .headernav nav a:first-child {
+            display: none;
+        }
+        .container {
+            width: calc(100% - 24px);
+            margin-top: 12px;
+            padding-right: 20px;
+            padding-left: 20px;
+        }
     }
     article header {
         margin-bottom: 3.5rem;
@@ -1396,8 +1462,8 @@
     }
     @media (max-width: 650px) {
         article {
-            width: min(100% - 32px, 700px);
-            padding-top: 92px;
+            width: 100%;
+            padding-top: 72px;
         }
         article header {
             margin-bottom: 2.5rem;
