@@ -43,13 +43,11 @@ describe('transparent shader presentation', () => {
 
     it('extends the canvas into Safari browser chrome and display cutout areas', () => {
         expect(app).toContain('viewport-fit=cover');
-        expect(page).toContain("canvas.style.setProperty('--canvas-screen-height', `${screen.height}px`)");
-        expect(page).toContain("canvas.classList.add('ios-screen-cover')");
-        expect(page).toContain("window.addEventListener('scroll', syncCanvasScroll, { passive: true })");
-        expect(page).toContain('canvas.ios-screen-cover');
-        expect(page).toContain('position: absolute');
-        expect(page).toContain('transform: translate3d(0, var(--canvas-scroll-y, 0px), 0)');
-        expect(page).toContain('width: var(--canvas-screen-width, 100lvw)');
-        expect(page).toContain('height: var(--canvas-screen-height, 100lvh)');
+        expect(page).toContain("canvas.classList.add('ios-overscan')");
+        expect(page).not.toContain("window.addEventListener('scroll', syncCanvasScroll");
+        expect(page).toContain('canvas.ios-overscan');
+        expect(page).toContain('transform: scale(1.35)');
+        expect(page).toContain('width: 100lvw');
+        expect(page).toContain('height: 100lvh');
     });
 });

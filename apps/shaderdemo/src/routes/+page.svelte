@@ -342,25 +342,7 @@
         const isIos =
             /iPhone|iPad|iPod/.test(navigator.userAgent) ||
             (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        let canvasScrollFrame = 0;
-        const syncCanvasScroll = () => {
-            if (!isIos || canvasScrollFrame) return;
-            canvasScrollFrame = requestAnimationFrame(() => {
-                canvasScrollFrame = 0;
-                canvas.style.setProperty('--canvas-scroll-y', `${window.scrollY}px`);
-            });
-        };
-        const syncCanvasCoverage = () => {
-            if (!isIos) return;
-            canvas.classList.add('ios-screen-cover');
-            canvas.style.setProperty('--canvas-screen-width', `${screen.width}px`);
-            canvas.style.setProperty('--canvas-screen-height', `${screen.height}px`);
-            syncCanvasScroll();
-        };
-        syncCanvasCoverage();
-        window.addEventListener('resize', syncCanvasCoverage);
-        window.addEventListener('orientationchange', syncCanvasCoverage);
-        window.addEventListener('scroll', syncCanvasScroll, { passive: true });
+        if (isIos) canvas.classList.add('ios-overscan');
         // Mounting the persistent atom synchronously hydrates it from localStorage.
         let persisted = shaderSettings.get();
         const stopHydration = shaderSettings.subscribe((value) => (persisted = value));
@@ -511,10 +493,6 @@
             window.removeEventListener('pointerup', pointerUp);
             window.removeEventListener('pointercancel', pointerLeave);
             window.removeEventListener('blur', pointerLeave);
-            window.removeEventListener('resize', syncCanvasCoverage);
-            window.removeEventListener('orientationchange', syncCanvasCoverage);
-            window.removeEventListener('scroll', syncCanvasScroll);
-            cancelAnimationFrame(canvasScrollFrame);
             cancelAnimationFrame(cursorFrame);
             renderer?.destroy();
         };
@@ -1053,14 +1031,14 @@
     }
     canvas {
         position: fixed;
-        top: calc(-1 * env(safe-area-inset-top, 0px));
-        left: calc(-1 * env(safe-area-inset-left, 0px));
+        top: 0;
+        left: 0;
         z-index: 1;
         display: block;
         width: 100%;
         height: 100%;
-        width: var(--canvas-screen-width, 100lvw);
-        height: var(--canvas-screen-height, 100lvh);
+        width: 100lvw;
+        height: 100lvh;
         pointer-events: none;
         opacity: 0;
         background: transparent;
@@ -1069,11 +1047,9 @@
         opacity: 1;
         transition: opacity 0.35s ease;
     }
-    :global(canvas.ios-screen-cover) {
-        position: absolute;
-        top: 0;
-        left: 0;
-        transform: translate3d(0, var(--canvas-scroll-y, 0px), 0);
+    :global(canvas.ios-overscan) {
+        transform: scale(1.35);
+        transform-origin: center;
     }
     article {
         position: relative;
