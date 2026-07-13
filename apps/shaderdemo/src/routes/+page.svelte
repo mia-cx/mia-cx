@@ -506,6 +506,8 @@
     /></svelte:head
 >
 
+<canvas class:ready bind:this={canvas} aria-label="Animated coloured noise field layered transparently over the article"
+></canvas>
 <main>
     <article>
         <header>
@@ -558,11 +560,6 @@
             on foot.
         </p>
     </article>
-    <canvas
-        class:ready
-        bind:this={canvas}
-        aria-label="Animated coloured noise field layered transparently over the article"
-    ></canvas>
     {#if ready}<div class="telemetry">
             <button
                 class="telemetry-toggle"
@@ -1028,7 +1025,6 @@
         position: relative;
         min-height: 100vh;
         background: #070809;
-        isolation: isolate;
     }
     canvas {
         position: fixed;

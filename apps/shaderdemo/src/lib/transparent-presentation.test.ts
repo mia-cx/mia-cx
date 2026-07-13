@@ -39,6 +39,8 @@ describe('transparent shader presentation', () => {
         expect(page).toContain("window.addEventListener('pointermove', move)");
         expect(page).toContain("event.target.closest('nav, .telemetry')");
         expect(page).not.toContain('onpointermove={pointerMove}');
+        expect(page.indexOf('<canvas')).toBeLessThan(page.indexOf('<main>'));
+        expect(page).not.toContain('isolation: isolate');
     });
 
     it('overscans the fixed iOS canvas without scroll-linked positioning', () => {
