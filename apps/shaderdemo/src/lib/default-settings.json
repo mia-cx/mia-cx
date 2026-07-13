@@ -167,14 +167,14 @@
             "scanlineFrequency": 93,
             "scanlineSpeed": 0,
             "godRaysFalloff": 2,
-            "cursorEnabled": 0,
+            "cursorEnabled": 1,
             "cursorDensityPressureEnabled": 1,
-            "cursorDensityRadius": 0.22,
+            "cursorDensityRadius": 2,
             "cursorDensityPressureFalloff": 1,
-            "cursorDensityStrength": 1,
-            "cursorDensityDarkBias": 1,
-            "cursorDensityBuildUp": 0.4,
-            "cursorDensityDecay": 0.7
+            "cursorDensityStrength": 0.4,
+            "cursorDensityDarkBias": 1.3,
+            "cursorDensityBuildUp": 1,
+            "cursorDensityDecay": 0.6
         },
         "colour": [
             {
