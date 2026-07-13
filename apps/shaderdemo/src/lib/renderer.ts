@@ -601,9 +601,11 @@ fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
             natural=blendSigned(natural,secondaryRibbon*u.secondaryRibbonAmount,u.secondaryRibbonBlendMode);
         }
     }
-    // Preserve exact uniform addition at zero; otherwise protect highlights according to the natural pre-threshold field.
-    let highlightProtection=cp(3u);
-    let densityResponse=select(pow(max(1.-clamp(natural,0.,1.),1e-6),highlightProtection),1.,highlightProtection==0.);
+    // Preserve exact uniform addition at zero; otherwise focus it around the natural pre-threshold midtones.
+    let midtoneFocus=cp(3u);
+    let fieldBrightness=clamp(natural,0.,1.);
+    let midtone=4.*fieldBrightness*(1.-fieldBrightness);
+    let densityResponse=select(pow(max(midtone,1e-6),midtoneFocus),1.,midtoneFocus==0.);
     natural+=cursorDensity*densityResponse;
     if(u.centerDarkness!=0.) {
         let centerPoint=abs(q/vec2f(u.centerWidth,u.centerHeight));

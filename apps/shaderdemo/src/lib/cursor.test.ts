@@ -12,10 +12,11 @@ describe('CursorState', () => {
             'Radius',
             'Falloff',
             'Density strength',
-            'Highlight protection',
+            'Midtone focus',
             'Build-up time',
             'Decay',
         ]);
+        expect(densityGroups[0][2][0]).toMatchObject({ min: 0.02, max: 2, step: 0.01, default: 0.22 });
         expect(densityGroups[0][2][3]).toMatchObject({ min: 0, max: 4, step: 0.05, default: 1 });
         expect(densityGroups[0][2][4]).toMatchObject({ min: 0, max: 2, default: 0.4 });
         expect(CURSOR_EFFECT_GROUPS.some(([label]) => label.toLowerCase().includes('halogen'))).toBe(false);
@@ -28,12 +29,12 @@ describe('CursorState', () => {
             'cursorEnabled',
             'cursorDensityPressureEnabled',
             'cursorDensityStrength',
-            'cursorDensityHighlightProtection',
+            'cursorDensityMidtoneFocus',
         ]);
         const packed = packCursorUniform({ cursorDensityBuildUp: 0.777 }, undefined);
         expect(packed).toHaveLength(4);
         expect(packed[3]).toBe(1);
-        expect(packCursorUniform({ cursorDensityHighlightProtection: 2.5 })[3]).toBe(2.5);
+        expect(packCursorUniform({ cursorDensityMidtoneFocus: 2.5 })[3]).toBe(2.5);
     });
     it('uses aspect-correct CSS coordinates independent of backing resolution', () => {
         const a = new CursorState().update(310, 120, rect, 10);

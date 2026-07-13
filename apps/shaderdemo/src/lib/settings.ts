@@ -92,10 +92,11 @@ export function resetSettingsTab(settings: SavedShaderSettings, tab: SettingsTab
               : [...OCTAVE_PARAMETER_SCHEMA.flat(), ...OCTAVE_PIXELATE_SCHEMA, ...OCTAVE_BLUR_SCHEMA];
     const parameters = { ...settings.parameters };
     for (const p of schema) parameters[p.key] = p.default;
-    return { ...settings, parameters };
+    return normalizeSavedSettings({ ...settings, parameters });
 }
 export function serializeShaderSettings(settings: SavedShaderSettings): string {
-    const assets: ExternalAssetReference[] = settings.colour.flatMap((effect) =>
+    const canonical = normalizeSavedSettings(settings);
+    const assets: ExternalAssetReference[] = canonical.colour.flatMap((effect) =>
         isRgbColour(effect) && effect.type === 'lut' && effect.assetId
             ? [
                   {
@@ -107,7 +108,7 @@ export function serializeShaderSettings(settings: SavedShaderSettings): string {
               ]
             : [],
     );
-    return JSON.stringify({ format: 'mia-cx-shaderdemo-settings', version: 2, settings, assets }, null, 2);
+    return JSON.stringify({ format: 'mia-cx-shaderdemo-settings', version: 2, settings: canonical, assets }, null, 2);
 }
 export function parseSettingsDocument(value: unknown): SavedShaderSettings {
     const document = value as { format?: string; version?: number; settings?: LegacySettings };

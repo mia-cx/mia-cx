@@ -26,10 +26,10 @@ export const CURSOR_EFFECT_GROUPS = [
         'Density pressure',
         'cursorDensityPressureEnabled',
         [
-            p('cursorDensityRadius', 'Radius', 0.02, 1, 0.01, 0.22, true),
+            p('cursorDensityRadius', 'Radius', 0.02, 2, 0.01, 0.22, true),
             p('cursorDensityPressureFalloff', 'Falloff', 0, 8, 0.05, 1, true),
             p('cursorDensityStrength', 'Density strength', -3, 3, 0.01, 1),
-            p('cursorDensityHighlightProtection', 'Highlight protection', 0, 4, 0.05, 1),
+            p('cursorDensityMidtoneFocus', 'Midtone focus', 0, 4, 0.05, 1),
             p('cursorDensityBuildUp', 'Build-up time', 0, 2, 0.01, 0.4, true),
             p('cursorDensityDecay', 'Decay', 0.01, 5, 0.01, 0.7, true),
         ],
