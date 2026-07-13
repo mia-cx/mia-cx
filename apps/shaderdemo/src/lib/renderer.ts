@@ -851,7 +851,8 @@ export const PRESENT_SHADER_SOURCE =
     /* wgsl */ `@group(0) @binding(1) var src:texture_2d<f32>;@group(0) @binding(2) var samp:sampler;
 fn luma(c:vec3f)->f32{return dot(c,vec3f(.299,.587,.114));}
 fn sampleAt(uv:vec2f)->vec3f{return textureSampleLevel(src,samp,uv,0.).rgb;}
-@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f{let uv=pos.xy/u.resolution;let texel=1./vec2f(textureDimensions(src));let rgbM=sampleAt(uv);let lM=luma(rgbM);let lNW=luma(sampleAt(uv+vec2f(-1.,-1.)*texel));let lNE=luma(sampleAt(uv+vec2f(1.,-1.)*texel));let lSW=luma(sampleAt(uv+vec2f(-1.,1.)*texel));let lSE=luma(sampleAt(uv+vec2f(1.,1.)*texel));let range=max(max(max(lNW,lNE),max(lSW,lSE)),lM)-min(min(min(lNW,lNE),min(lSW,lSE)),lM);if(range<max(.0312,lM*.125)){return vec4f(rgbM,1.);}var dir=vec2f(-((lNW+lNE)-(lSW+lSE)),(lNW+lSW)-(lNE+lSE));let reduce=max((lNW+lNE+lSW+lSE)*.03125,.0078125);dir=clamp(dir/(min(abs(dir.x),abs(dir.y))+reduce),vec2f(-8.),vec2f(8.))*texel;let a=.5*(sampleAt(uv+dir*(1./3.-.5))+sampleAt(uv+dir*(2./3.-.5)));let b=a*.5+.25*(sampleAt(uv+dir*-.5)+sampleAt(uv+dir*.5));let lb=luma(b);return vec4f(select(b,a,lb<lM-range*.5||lb>lM+range*.5),1.);}`;
+fn present(c:vec3f)->vec4f{let rgb=clamp(c,vec3f(0),vec3f(1));let alpha=clamp(max(max(rgb.r,rgb.g),rgb.b),0.,1.);return vec4f(rgb,alpha);}
+@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f{let uv=pos.xy/u.resolution;let texel=1./vec2f(textureDimensions(src));let rgbM=sampleAt(uv);let lM=luma(rgbM);let lNW=luma(sampleAt(uv+vec2f(-1.,-1.)*texel));let lNE=luma(sampleAt(uv+vec2f(1.,-1.)*texel));let lSW=luma(sampleAt(uv+vec2f(-1.,1.)*texel));let lSE=luma(sampleAt(uv+vec2f(1.,1.)*texel));let range=max(max(max(lNW,lNE),max(lSW,lSE)),lM)-min(min(min(lNW,lNE),min(lSW,lSE)),lM);if(range<max(.0312,lM*.125)){return present(rgbM);}var dir=vec2f(-((lNW+lNE)-(lSW+lSE)),(lNW+lSW)-(lNE+lSE));let reduce=max((lNW+lNE+lSW+lSE)*.03125,.0078125);dir=clamp(dir/(min(abs(dir.x),abs(dir.y))+reduce),vec2f(-8.),vec2f(8.))*texel;let a=.5*(sampleAt(uv+dir*(1./3.-.5))+sampleAt(uv+dir*(2./3.-.5)));let b=a*.5+.25*(sampleAt(uv+dir*-.5)+sampleAt(uv+dir*.5));let lb=luma(b);return present(select(b,a,lb<lM-range*.5||lb>lM+range*.5));}`;
 const COPY_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `@group(0) @binding(1) var src:texture_2d<f32>;@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f{return vec4f(textureLoad(src,vec2i(pos.xy),0).rgb,1.);}`;
@@ -1045,7 +1046,7 @@ export class AtmosphereRenderer {
         self.context = canvas.getContext('webgpu');
         if (!self.context) throw new Error('Could not create a WebGPU canvas context.');
         const format = navigator.gpu.getPreferredCanvasFormat();
-        self.context.configure({ device: self.device, format, alphaMode: 'opaque' });
+        self.context.configure({ device: self.device, format, alphaMode: 'premultiplied' });
         const make = async (code: string, target: GPUTextureFormat) => {
             const module = self.device!.createShaderModule({ code });
             const info = await module.getCompilationInfo();

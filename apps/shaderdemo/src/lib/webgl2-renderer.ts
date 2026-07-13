@@ -223,7 +223,8 @@ export class WebGL2Renderer implements RenderBackend {
     }
     static async create(canvas: HTMLCanvasElement, options: RenderOptions) {
         const gl = canvas.getContext('webgl2', {
-            alpha: false,
+            alpha: true,
+            premultipliedAlpha: true,
             antialias: false,
             powerPreference: 'high-performance',
             preserveDrawingBuffer: false,

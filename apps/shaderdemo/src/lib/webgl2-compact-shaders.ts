@@ -14,6 +14,7 @@ uniform highp vec2 _present_resolution;
 layout(location=0) out vec4 _fs2p_location0;
 float luma(vec3 c){return dot(c,vec3(.299,.587,.114));}
 vec3 sampleAt(vec2 uv){return textureLod(_group_0_binding_1_fs,uv,0.).rgb;}
+vec4 present(vec3 c){vec3 rgb=clamp(c,vec3(0.),vec3(1.));float alpha=clamp(max(max(rgb.r,rgb.g),rgb.b),0.,1.);return vec4(rgb,alpha);}
 void main(){
  vec2 uv=vec2(gl_FragCoord.x,_present_resolution.y-gl_FragCoord.y)/_present_resolution;
  vec2 texel=1./vec2(textureSize(_group_0_binding_1_fs,0));
@@ -21,11 +22,11 @@ void main(){
  float lNW=luma(sampleAt(uv+vec2(-1.,-1.)*texel));float lNE=luma(sampleAt(uv+vec2(1.,-1.)*texel));
  float lSW=luma(sampleAt(uv+vec2(-1.,1.)*texel));float lSE=luma(sampleAt(uv+vec2(1.,1.)*texel));
  float range=max(max(max(lNW,lNE),max(lSW,lSE)),lM)-min(min(min(lNW,lNE),min(lSW,lSE)),lM);
- if(range<max(.0312,lM*.125)){_fs2p_location0=vec4(rgbM,1.);return;}
+ if(range<max(.0312,lM*.125)){_fs2p_location0=present(rgbM);return;}
  vec2 dir=vec2(-((lNW+lNE)-(lSW+lSE)),(lNW+lSW)-(lNE+lSE));
  float reduce=max((lNW+lNE+lSW+lSE)*.03125,.0078125);
  dir=clamp(dir/(min(abs(dir.x),abs(dir.y))+reduce),vec2(-8.),vec2(8.))*texel;
  vec3 a=.5*(sampleAt(uv+dir*(1./3.-.5))+sampleAt(uv+dir*(2./3.-.5)));
  vec3 b=a*.5+.25*(sampleAt(uv+dir*-.5)+sampleAt(uv+dir*.5));float lb=luma(b);
- _fs2p_location0=vec4((lb<lM-range*.5||lb>lM+range*.5)?a:b,1.);
+ _fs2p_location0=present((lb<lM-range*.5||lb>lM+range*.5)?a:b);
 }`;

@@ -79,8 +79,8 @@
     let post: PostEffect[] = $state(initialDefaults.post);
     let expanded = $state(new Set<string>());
     let paused = $state(false);
-    let controlsOpen = $state(true);
-    let telemetryOpen = $state(true);
+    let controlsOpen = $state(false);
+    let telemetryOpen = $state(false);
     let ready = $state(false);
     let status = $state('Starting graphics…');
     let activeBackend = $state('');
@@ -218,14 +218,12 @@
         sendCursor();
     }
     function pointerDown(event: PointerEvent) {
-        canvas.setPointerCapture(event.pointerId);
         pointerMove(event, false);
         cursorState.pointerDown();
         sendCursor();
     }
     function pointerUp(event: PointerEvent) {
         cursorState.pointerUp();
-        if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
         sendCursor();
     }
     function pointerLeave() {
@@ -469,10 +467,28 @@
             cursorTime = performance.now();
         };
         document.addEventListener('visibilitychange', visibility);
+        const isInterfaceEvent = (event: Event) =>
+            event.target instanceof Element && Boolean(event.target.closest('nav, .telemetry'));
+        const move = (event: PointerEvent) => {
+            if (!isInterfaceEvent(event)) pointerMove(event);
+        };
+        const down = (event: PointerEvent) => {
+            if (!isInterfaceEvent(event)) pointerDown(event);
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerdown', down);
+        window.addEventListener('pointerup', pointerUp);
+        window.addEventListener('pointercancel', pointerLeave);
+        window.addEventListener('blur', pointerLeave);
         return () => {
             disposed = true;
             resetDensityStroke();
             document.removeEventListener('visibilitychange', visibility);
+            window.removeEventListener('pointermove', move);
+            window.removeEventListener('pointerdown', down);
+            window.removeEventListener('pointerup', pointerUp);
+            window.removeEventListener('pointercancel', pointerLeave);
+            window.removeEventListener('blur', pointerLeave);
             cancelAnimationFrame(cursorFrame);
             renderer?.destroy();
         };
@@ -482,20 +498,66 @@
 <svelte:head
     ><title>Noise Field — GPU</title><meta
         name="description"
-        content="A monochrome domain-warped noise study."
+        content="A coloured, animated noise field composited transparently over a readable article."
     /></svelte:head
 >
 
 <main>
+    <article>
+        <header>
+            <h1>The quiet architecture of a city after rain</h1>
+            <p class="dek">What puddles, late buses and lit windows reveal when the streets briefly slow down.</p>
+            <p class="byline">By Mara Vale · <time datetime="2026-07-13">13 July 2026</time></p>
+        </header>
+        <p>
+            Rain changes a city twice. First it alters the surface: stone darkens, traffic softens and every lamp
+            acquires a wavering reflection. Then it changes the pace. People wait beneath awnings, choose longer routes
+            with better shelter and notice buildings they ordinarily pass without looking.
+        </p>
+        <p>
+            On a wet evening, the familiar grid becomes less certain. A shallow gutter can hold a second skyline; a bus
+            shelter can feel like a public room. These small inversions make the street legible again—not as
+            infrastructure, but as a collection of choices made over decades.
+        </p>
+        <h2>Reading the reflected street</h2>
+        <p>
+            The most vivid details are temporary. Painted signs sharpen against damp brick, leaves stick to the pavement
+            in bright constellations, and old repairs appear as darker seams. The effect rewards walking slowly and
+            looking down as often as up.
+        </p>
+        <blockquote>
+            “A reflection does not copy the street. It edits the street, keeping the light and letting the rest fall
+            away.”
+        </blockquote>
+        <p>Three habits make these evenings especially revealing:</p>
+        <ul>
+            <li>Follow a familiar route at half your usual speed.</li>
+            <li>Notice where strangers naturally gather under cover.</li>
+            <li>Compare the colour of reflected light with its source.</li>
+        </ul>
+        <p>
+            The walk need not become a project. A short detour and a few attentive minutes are enough. The
+            <a href="https://en.wikipedia.org/wiki/Fl%C3%A2neur">tradition of urban wandering</a> can sound grand; in practice,
+            it begins by leaving a little time unplanned.
+        </p>
+        <h2>A temporary common room</h2>
+        <p>
+            Weather also exposes the social shape of a place. The generous arcade, the deep doorway and the tree dense
+            enough to stop a shower all become shared assets. Their value is felt directly, without a map or sign
+            explaining it.
+        </p>
+        <p>
+            By morning, most evidence has evaporated. What remains is a better memory of the street: where it welcomes a
+            pause, where it pushes people onward, and where a patch of colour can make the ordinary briefly strange. For
+            more walks and field notes, visit the
+            <a href="https://www.openstreetmap.org/">open map</a> and choose somewhere nearby that you have never crossed
+            on foot.
+        </p>
+    </article>
     <canvas
         class:ready
         bind:this={canvas}
-        aria-label="Animated monochrome noise field"
-        onpointermove={pointerMove}
-        onpointerdown={pointerDown}
-        onpointerup={pointerUp}
-        onpointercancel={pointerLeave}
-        onpointerleave={pointerLeave}
+        aria-label="Animated coloured noise field layered transparently over the article"
     ></canvas>
     {#if ready}<div class="telemetry">
             <button
@@ -951,34 +1013,112 @@
     }
     :global(html, body) {
         margin: 0;
-        height: 100%;
-        overflow: hidden;
-        background: #050505;
-        color: #eee;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        min-height: 100%;
+        background: #070809;
+        color: #e9e7e1;
     }
-    main,
+    :global(body) {
+        font-family: Georgia, 'Times New Roman', serif;
+    }
+    main {
+        position: relative;
+        min-height: 100vh;
+        isolation: isolate;
+    }
     canvas {
         position: fixed;
         inset: 0;
+        z-index: 1;
+        display: block;
         width: 100%;
         height: 100%;
-    }
-    canvas {
-        display: block;
-        touch-action: none;
+        pointer-events: none;
         opacity: 0;
-        background: #050505;
+        background: transparent;
     }
     canvas.ready {
         opacity: 1;
         transition: opacity 0.35s ease;
     }
+    article {
+        position: relative;
+        z-index: 0;
+        width: min(100% - 40px, 700px);
+        margin: 0 auto;
+        padding: clamp(72px, 12vw, 150px) 0 140px;
+        font-size: clamp(18px, 1.8vw, 21px);
+        line-height: 1.68;
+    }
+    article header {
+        margin-bottom: 3.5rem;
+    }
+    article h1,
+    article h2 {
+        color: #f5f2ea;
+        font-weight: 500;
+        line-height: 1.06;
+        text-wrap: balance;
+    }
+    article h1 {
+        max-width: 13ch;
+        margin: 0 0 1.4rem;
+        font-size: clamp(46px, 8vw, 88px);
+        letter-spacing: -0.045em;
+    }
+    article h2 {
+        margin: 3.5rem 0 1rem;
+        font-size: clamp(30px, 4vw, 42px);
+        letter-spacing: -0.025em;
+    }
+    article p {
+        margin: 0 0 1.45em;
+    }
+    article .dek {
+        max-width: 35em;
+        margin-bottom: 1rem;
+        color: #c9c6bf;
+        font-size: 1.25em;
+        line-height: 1.4;
+    }
+    article .byline {
+        color: #9b9993;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.65em;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    article blockquote {
+        margin: 2.5rem 0;
+        padding-left: 1.3em;
+        border-left: 1px solid #a8a49a;
+        color: #f4f0e7;
+        font-size: 1.35em;
+        font-style: italic;
+        line-height: 1.45;
+    }
+    article ul {
+        margin: 0 0 1.8em;
+        padding-left: 1.3em;
+    }
+    article li {
+        margin: 0.35em 0;
+        padding-left: 0.3em;
+    }
+    article a {
+        color: #f3eee1;
+        text-decoration-color: #aaa69b;
+        text-underline-offset: 0.18em;
+    }
+    article a:hover,
+    article a:focus-visible {
+        color: #fff;
+        text-decoration-thickness: 2px;
+    }
     .telemetry {
         position: fixed;
         left: 14px;
         bottom: 12px;
-        z-index: 1;
+        z-index: 3;
         display: flex;
         align-items: flex-start;
         gap: 8px;
@@ -1022,6 +1162,7 @@
         position: fixed;
         top: 14px;
         right: 14px;
+        z-index: 3;
         display: flex;
         align-items: flex-start;
         gap: 7px;
@@ -1220,6 +1361,7 @@
         position: fixed;
         left: 14px;
         bottom: 10px;
+        z-index: 3;
         max-width: calc(100vw - 28px);
         margin: 0;
         color: #888;
@@ -1237,6 +1379,13 @@
         border: 0;
     }
     @media (max-width: 650px) {
+        article {
+            width: min(100% - 32px, 700px);
+            padding-top: 92px;
+        }
+        article header {
+            margin-bottom: 2.5rem;
+        }
         .controls {
             max-width: calc(100vw - 58px);
             flex-wrap: wrap;
