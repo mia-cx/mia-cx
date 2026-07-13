@@ -31,15 +31,12 @@ describe('transparent shader presentation', () => {
         expect(COMPACT_PRESENT.match(/present\(/g)).toHaveLength(3);
     });
 
-    it('layers a semantic, interactive article beneath a pointer-transparent fixed canvas', () => {
-        for (const element of ['<article', '<h1>', '<h2', '<blockquote>', '<ul>', '<a href=', '<time '])
-            expect(page).toContain(element);
+    it('uses a pointer-transparent fixed canvas without presentation DOM', () => {
         expect(page).toContain('pointer-events: none');
         expect(page).toContain('background: transparent');
-        expect(page).toContain("window.addEventListener('pointermove', move)");
-        expect(page).toContain("event.target.closest('nav, .telemetry')");
+        expect(page).toContain("window.addEventListener('pointermove', pointerMove)");
         expect(page).not.toContain('onpointermove={pointerMove}');
-        expect(page.indexOf('<canvas')).toBeLessThan(page.indexOf('<main>'));
+        expect(page).not.toMatch(/<main|<article|<header|<nav/);
         expect(page).not.toContain('isolation: isolate');
     });
 
@@ -51,20 +48,14 @@ describe('transparent shader presentation', () => {
         expect(page).toContain('position: fixed');
     });
 
-    it('gives Safari chrome an opaque fallback that prevents content sampling', () => {
+    it('keeps the bare canvas clipped to the iOS dynamic viewport', () => {
         expect(app).toContain('<meta name="theme-color" content="#070809" />');
         expect(page).toContain(':global(html, body)');
         expect(page).toContain('background: #070809');
-        expect(page).toContain('color-scheme: dark');
         expect(page).not.toContain('safari-chrome-guard');
-        expect(page).toContain('<header class="headernav">');
-        expect(page).toContain('<div class="container">');
-        expect(page).toContain('<article id="article">');
-        expect(page).toContain('<h1>');
         expect(page).toContain('@supports (-webkit-touch-callout: none)');
         expect(page).toContain('height: 100dvh');
-        expect(page).toContain('overflow-y: auto');
-        expect(page).toContain('-webkit-overflow-scrolling: touch');
+        expect(page).toContain('overflow: hidden');
         expect(page).not.toContain('overscroll-behavior-y: none');
     });
 });

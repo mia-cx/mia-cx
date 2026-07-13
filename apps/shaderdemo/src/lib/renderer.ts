@@ -356,6 +356,10 @@ export interface RenderOptions {
     colour: ColourEffect[];
     post: PostEffect[];
     lutAssets?: Record<string, CubeLut>;
+    bakedAdjustmentLut?: Uint16Array;
+    bakedPostPlan?: ReturnType<typeof rendererStagePlan>;
+    bakedPostParameters?: Float32Array;
+    bakedLeadingAdjustments?: ReturnType<typeof leadingAdjustmentRegion>;
 }
 
 export function renderSize(width: number, height: number, dpr: number, cap: number) {
@@ -1270,13 +1274,13 @@ export class AtmosphereRenderer {
     }
     private updateAdjustmentLut() {
         if (!this.device || !this.adjustmentTexture) return;
-        const adjustments = leadingAdjustmentRegion(this.options.colour);
-        const key = JSON.stringify(adjustments);
+        const adjustments = this.options.bakedLeadingAdjustments ?? leadingAdjustmentRegion(this.options.colour);
+        const key = this.options.bakedLeadingAdjustments ? 'baked' : JSON.stringify(adjustments);
         if (key === this.adjustmentsKey) return;
         this.adjustmentsKey = key;
         this.adjustmentLutActive = adjustments.some((adjustment) => !isNeutralAdjustment(adjustment));
         if (!this.adjustmentLutActive) return;
-        const lut = composeAdjustmentLut(adjustments);
+        const lut = this.options.bakedAdjustmentLut ?? composeAdjustmentLut(adjustments);
         // Copy into an ArrayBuffer-backed view (WebGPU deliberately rejects SharedArrayBuffer views).
         const upload = new Uint16Array(new ArrayBuffer(lut.byteLength));
         upload.set(lut);
@@ -1673,10 +1677,10 @@ export class AtmosphereRenderer {
         draw(this.textureViews[2], 7, 0, true, 'field-materialize');
         let rgbaCurrent = 2;
         data.set(
-            POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
+            this.options.bakedPostParameters ?? POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
         );
-        const postStages = rendererStagePlan(this.options.post, this.options.parameters);
+        const postStages = this.options.bakedPostPlan ?? rendererStagePlan(this.options.post, this.options.parameters);
         if (this.adjustmentLutActive) {
             data.fill(0, 60, UNIFORM_FLOATS);
             data.set([0, 0, 0, 1, 1, 1, 1], 60);

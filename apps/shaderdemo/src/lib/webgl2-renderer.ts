@@ -444,12 +444,14 @@ export class WebGL2Renderer implements RenderBackend {
         this.draw('BASE', this.baseTargets[0], undefined, undefined, undefined, 'base');
         this.draw('MATERIALIZE', targets[next], this.baseTargets[0].texture, undefined, undefined, 'field-materialize');
         [current, next] = [next, current];
-        const nextLeadingKey = JSON.stringify(
-            this.options.colour.filter((x) => x.type === 'curve' || x.type === 'levels' || x.type === 'hsl'),
-        );
+        const nextLeadingKey = this.options.bakedLeadingAdjustments
+            ? 'baked'
+            : JSON.stringify(
+                  this.options.colour.filter((x) => x.type === 'curve' || x.type === 'levels' || x.type === 'hsl'),
+              );
         if (nextLeadingKey !== this.leadingKey) {
             this.leadingKey = nextLeadingKey;
-            this.cachedLeading = leadingAdjustmentRegion(this.options.colour);
+            this.cachedLeading = this.options.bakedLeadingAdjustments ?? leadingAdjustmentRegion(this.options.colour);
             if (this.adjustmentTexture) this.gl.deleteTexture(this.adjustmentTexture);
             this.adjustmentTexture = undefined;
             this.boundTextures.clear();
@@ -458,7 +460,10 @@ export class WebGL2Renderer implements RenderBackend {
         if (ablation?.kind !== 'colour' && adjustments.some((x) => !isNeutralAdjustment(x))) {
             const tex =
                 this.adjustmentTexture ??
-                (this.adjustmentTexture = this.uploadCube(composeAdjustmentLut(adjustments), ADJUSTMENT_LUT_SIZE));
+                (this.adjustmentTexture = this.uploadCube(
+                    this.options.bakedAdjustmentLut ?? composeAdjustmentLut(adjustments),
+                    ADJUSTMENT_LUT_SIZE,
+                ));
             data.fill(0, 60);
             data.set([0, 0, 0, 1, 1, 1, 1], 60);
             this.upload(data);
@@ -534,17 +539,19 @@ export class WebGL2Renderer implements RenderBackend {
             [current, next] = [next, current];
         }
         data = packUniform(internalResolution, this.simTime, this.options.seed, p, 0, this.frame);
-        const postValues = POST_PARAMETER_SCHEMA.map((x) => p[x.key]);
-        const nextParameterKey = JSON.stringify(postValues);
+        const postValues = this.options.bakedPostParameters ?? POST_PARAMETER_SCHEMA.map((x) => p[x.key]);
+        const nextParameterKey = this.options.bakedPostParameters ? 'baked' : JSON.stringify(postValues);
         if (nextParameterKey !== this.postParameterKey) {
             this.postParameterKey = nextParameterKey;
             this.cachedPostParameters = Float32Array.from(postValues);
         }
         data.set(this.cachedPostParameters, 60);
-        const nextPostKey = JSON.stringify([this.options.post, POST_PARAMETER_SCHEMA.map((x) => p[x.key])]);
+        const nextPostKey = this.options.bakedPostPlan
+            ? 'baked'
+            : JSON.stringify([this.options.post, POST_PARAMETER_SCHEMA.map((x) => p[x.key])]);
         if (nextPostKey !== this.postPlanKey) {
             this.postPlanKey = nextPostKey;
-            this.cachedPostPlan = rendererStagePlan(this.options.post, p);
+            this.cachedPostPlan = this.options.bakedPostPlan ?? rendererStagePlan(this.options.post, p);
         }
         const postStages = this.cachedPostPlan;
         let source: Target = this.colourTargets[current];
