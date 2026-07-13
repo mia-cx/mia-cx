@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite dev",
     "dev:host": "vite dev --host",
-    "build": "vite build",
+    "generate:baked": "tsx scripts/generate-baked-artifacts.ts",
+    "build": "pnpm generate:baked && vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "format": "prettier --write .",
@@ -23,6 +24,7 @@
     "prettier-plugin-svelte": "^3.2.5",
     "svelte": "5.0.0-next.166",
     "svelte-check": "^3.8.1",
+    "tsx": "^4.20.6",
     "typescript": "^5.5.2",
     "vite": "^5.3.1",
     "vitest": "^1.6.0"

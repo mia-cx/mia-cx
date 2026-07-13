@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GpuTimingStats } from './renderer';
-import { FrameTelemetry, GpuTelemetry } from './telemetry';
+import { CursorInteractionTelemetry, FrameTelemetry, GpuTelemetry } from './telemetry';
 
 const gpu = (totalMs: number, baseMs = totalMs / 4): GpuTimingStats => ({
     totalMs,
@@ -100,5 +100,28 @@ describe('rolling GPU telemetry', () => {
             { label: 'post:god-rays', ms: 6 },
             { label: 'display', ms: 2 },
         ]);
+    });
+});
+
+describe('rolling cursor interaction CPU telemetry', () => {
+    it('includes zero-work frames in means and reports RMS and latest context', () => {
+        const telemetry = new CursorInteractionTelemetry();
+        const sample = (totalMs: number, pointCount: number) => ({
+            inputMs: totalMs / 10,
+            rasterMs: totalMs / 2,
+            decayMs: totalMs / 5,
+            uploadSubmitMs: totalMs / 10,
+            totalMs,
+            pointCount,
+            width: 1024,
+            height: 512,
+        });
+        telemetry.record(0, sample(0, 0));
+        telemetry.record(1_000, sample(10, 4));
+        const summary = telemetry.summary(1_000);
+        expect(summary.windows[5000]?.totalMs).toBe(5);
+        expect(summary.windows[5000]?.rasterMs).toBe(2.5);
+        expect(summary.rms5sMs).toBeCloseTo(Math.sqrt(50));
+        expect(summary.latest).toEqual({ pointCount: 4, width: 1024, height: 512 });
     });
 });

@@ -8,6 +8,8 @@ import {
     BLOOM_TEXTURE_FORMAT,
     BLUR_SHADER_SOURCE,
     COMMON_SHADER_SOURCE,
+    CURSOR_DENSITY_UNIFORM_BYTES,
+    CURSOR_PAINT_SHADER_SOURCE,
     FIELD_PARAMETER_SCHEMA,
     FIELD_BLEND_MODES,
     POST_BLEND_MODES,
@@ -45,6 +47,24 @@ import { defaultShaderSettings, normalizeSavedSettings } from './settings';
 import defaultSettingsFixture from './default-settings.json';
 
 describe('field configuration', () => {
+    it('samples persistent density in top-left screen UV without point-list density', () => {
+        expect(BASE_SHADER_SOURCE).toContain('@group(0) @binding(2) var densityField:texture_2d<f32>');
+        expect(BASE_SHADER_SOURCE).toContain('densityPressure=textureSample(densityField,densitySampler,uv).r');
+        expect(BASE_SHADER_SOURCE).toContain('cursorDensity=cp(2u)*densityPressure');
+        expect(BASE_SHADER_SOURCE.match(/textureSample\(densityField/g)).toHaveLength(1);
+        expect(BASE_SHADER_SOURCE).not.toContain('headEnergy');
+        expect(BASE_SHADER_SOURCE).not.toContain('let gradient=');
+        expect(BASE_SHADER_SOURCE).not.toContain('let displacement=');
+        expect(BASE_SHADER_SOURCE).not.toContain('textureDimensions(densityField)');
+        expect(BASE_SHADER_SOURCE.indexOf('natural+=cursorDensity')).toBeLessThan(
+            BASE_SHADER_SOURCE.indexOf('if(u.thresholdEnabled<.5)'),
+        );
+        expect(BASE_SHADER_SOURCE.indexOf('natural+=cursorDensity')).toBeGreaterThan(
+            BASE_SHADER_SOURCE.indexOf('natural*=exp2(-center*u.centerDarkness*4.)'),
+        );
+        expect(BASE_SHADER_SOURCE).toContain('1.-clamp(natural,0.,1.)');
+        expect(BASE_SHADER_SOURCE).not.toContain('halogen');
+    });
     it('uses dedicated rgba8 Post targets and ordered fused shader kinds', () => {
         expect(POST_TEXTURE_FORMAT).toBe('rgba8unorm');
         expect(POST_EFFECT_SHADER_SOURCE).toContain('else if(kind==25)');
@@ -185,10 +205,29 @@ describe('field configuration', () => {
         expect(source).toContain('sampleGpu(stats.totalMs');
         expect(source).toContain('lastFrameTimingAt');
         expect(source).not.toContain('adaptiveResolution.sample(dt');
-        expect(source).toContain('frameInterval = 1e3 / 60');
+        expect(source).toContain('frameInterval = 1e3 / 30');
         expect(source).toContain('now + 0.5 < this.nextRenderAt');
         expect(source).toContain('slot.resolve.destroy()');
         expect(source).toContain('slot.readback.destroy()');
+    });
+    it('allocates cursor uniform bindings with WGSL vec3 alignment', () => {
+        expect(CURSOR_DENSITY_UNIFORM_BYTES).toBe(32);
+        const source = AtmosphereRenderer.toString();
+        expect(source.match(/size: CURSOR_DENSITY_UNIFORM_BYTES/g)).toHaveLength(2);
+    });
+    it('converts top-left cursor coordinates to WebGPU clip-space Y', () => {
+        expect(CURSOR_PAINT_SHADER_SOURCE).toContain('vec4f(q.x/params.aspect,-q.y,0,1)');
+    });
+    it('renders one full-resolution frozen pause frame and restores adaptive rendering', () => {
+        const source = AtmosphereRenderer.toString();
+        expect(source).toContain('this.paused ? this.options.renderScale : this.adaptiveResolution.effectiveScale');
+        expect(source).toContain('if (value === this.paused) return');
+        expect(source).toContain('this.recreateTargets(value)');
+        expect(source).toContain('if (!preserveHistory) this.historyTexture?.destroy()');
+        expect(source).toContain('if (postRan && !this.paused && this.historyTexture)');
+        expect(source).toContain('this.renderedFrames += 1');
+        expect(source).toContain('const frameTimingSlot = this.paused ?');
+        expect(source).toContain('!this.paused && this.querySet');
     });
     it('derives individual pass durations from sequential completion timestamps', () => {
         const stats = aggregateGpuTimestamps(
@@ -271,7 +310,7 @@ describe('field configuration', () => {
         OCTAVE_PARAMETER_SCHEMA.forEach((group) => expect(group).toHaveLength(4));
         expect(OCTAVE_PIXELATE_SCHEMA).toHaveLength(5);
         expect(OCTAVE_BLUR_SCHEMA).toHaveLength(5);
-        expect(PARAMETER_SCHEMA).toHaveLength(163);
+        expect(PARAMETER_SCHEMA).toHaveLength(171);
         expect(new Set(PARAMETER_SCHEMA.map(({ key }) => key)).size).toBe(PARAMETER_SCHEMA.length);
         for (const parameter of PARAMETER_SCHEMA) {
             expect(parameter.min).toBeLessThan(parameter.max);

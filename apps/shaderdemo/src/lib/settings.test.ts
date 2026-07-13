@@ -29,8 +29,23 @@ describe('V2 pipeline settings', () => {
         expect(doc).toEqual({ format: 'mia-cx-shaderdemo-settings', version: 2, settings, assets: [] });
         expect(parseSettingsDocument(doc)).toEqual(settings);
     });
+    it('drops superseded cursor density keys from defaults, cursor resets, and exports', () => {
+        const oldKeys = ['cursorDensity' + 'HighlightProtection', 'cursorDensity' + 'MidtoneFocus'];
+        const settings = defaultShaderSettings();
+        expect(settings.parameters.cursorDensityDarkBias).toBe(1.3);
+        for (const oldKey of oldKeys) {
+            expect(oldKey in settings.parameters).toBe(false);
+            (settings.parameters as Record<string, number>)[oldKey] = 3;
+        }
+        const reset = resetSettingsTab(settings, 'cursor').parameters;
+        const exported = JSON.parse(serializeShaderSettings(settings)).settings.parameters;
+        for (const oldKey of oldKeys) {
+            expect(oldKey in reset).toBe(false);
+            expect(oldKey in exported).toBe(false);
+        }
+    });
     it('uses a new persistence generation and migrates v1/v3 shapes', () => {
-        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v6');
+        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v8');
         const legacy = { seed: 42, parameters: { ...defaultShaderSettings().parameters }, adjustments: [] };
         const storage = { getItem: (key: string) => (key.endsWith(':v3') ? JSON.stringify(legacy) : null) };
         const migrated = loadPersistedSettings(storage);
@@ -48,6 +63,9 @@ describe('V2 pipeline settings', () => {
     });
     it('resets Colour and Post independently with fresh arrays', () => {
         const value = defaultShaderSettings();
+        value.parameters.cursorEnabled = 1;
+        value.parameters.cursorDensityRadius = 1.73;
+        value.parameters.cursorDensityDarkBias = 2.4;
         const colour = resetSettingsTab(value, 'colour');
         const post = resetSettingsTab(value, 'post');
         expect(colour.colour).toEqual(defaultShaderSettings().colour);
@@ -55,5 +73,8 @@ describe('V2 pipeline settings', () => {
         expect(post.post).toEqual(defaultShaderSettings().post);
         expect(post.post).not.toBe(value.post);
         expect(post.colour).toBe(value.colour);
+        expect(post.parameters.cursorEnabled).toBe(1);
+        expect(post.parameters.cursorDensityRadius).toBe(1.73);
+        expect(post.parameters.cursorDensityDarkBias).toBe(2.4);
     });
 });

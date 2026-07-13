@@ -6,7 +6,7 @@ describe('native-resolution present anti-aliasing', () => {
         expect(PRESENT_SHADER_SOURCE).toContain('textureDimensions(src)');
         expect(PRESENT_SHADER_SOURCE).toContain('fn luma');
         expect(PRESENT_SHADER_SOURCE).toContain('if(range<');
-        expect(PRESENT_SHADER_SOURCE).toContain('return vec4f(rgbM,1.)');
+        expect(PRESENT_SHADER_SOURCE).toContain('return present(rgbM)');
         expect(PRESENT_SHADER_SOURCE).toContain('fn sampleAt');
         expect(PRESENT_SHADER_SOURCE).toContain('textureSampleLevel(src,samp,uv,0.)');
         expect(PRESENT_SHADER_SOURCE).not.toContain('textureSample(src,samp');

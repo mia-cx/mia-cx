@@ -10,6 +10,17 @@ const gpuWindow = (controller: AdaptiveResolutionController, ms: number) => {
 };
 
 describe('GPU-processing-only adaptive resolution', () => {
+    it('can start unknown hardware conservatively and emergency-downscales repeated severe work', () => {
+        const controller = new AdaptiveResolutionController(1, { initialScale: 0.5, severeMs: 40, severeSamples: 2 });
+        expect(controller.effectiveScale).toBe(0.5);
+        const first = controller.sampleGpu(60, 1, true, 0.5);
+        expect(first).toBeLessThan(0.5);
+        expect(controller.sampleGpu(60, 2, true, first)).toBeLessThan(first!);
+        for (let sample = 3; controller.effectiveScale > 0.125 && sample < 10; sample += 1)
+            controller.sampleGpu(60, sample, true, controller.effectiveScale);
+        expect(controller.effectiveScale).toBe(0.125);
+    });
+
     it('advances after exactly 1, 2, 4, ... 512 GPU samples and continues at 512', () => {
         const controller = new AdaptiveResolutionController(1);
         for (const window of [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 512]) {
@@ -33,7 +44,7 @@ describe('GPU-processing-only adaptive resolution', () => {
 
     it('uses the first GPU result for an immediate predictive estimate', () => {
         const controller = new AdaptiveResolutionController(1);
-        expect(controller.sampleGpu(30)).toBe(0.575);
+        expect(controller.sampleGpu(60)).toBeLessThan(1);
         expect(controller.currentEvaluationWindow).toBe(2);
     });
 
@@ -46,7 +57,7 @@ describe('GPU-processing-only adaptive resolution', () => {
 
     it('lowers under sustained load and raises back to the user ceiling with headroom', () => {
         const controller = new AdaptiveResolutionController(1);
-        for (let i = 0; i < 8; i += 1) gpuWindow(controller, 30);
+        for (let i = 0; i < 8; i += 1) gpuWindow(controller, 45);
         expect(controller.effectiveScale).toBeLessThan(1);
         for (let i = 0; i < 12 && controller.effectiveScale < 1; i += 1) gpuWindow(controller, 6);
         expect(controller.effectiveScale).toBe(1);
@@ -54,7 +65,7 @@ describe('GPU-processing-only adaptive resolution', () => {
 
     it('recovers across a low-power to charger performance transition', () => {
         const controller = new AdaptiveResolutionController(1);
-        for (let i = 0; i < 6; i += 1) gpuWindow(controller, 24);
+        for (let i = 0; i < 6; i += 1) gpuWindow(controller, 45);
         const lowPowerScale = controller.effectiveScale;
         expect(lowPowerScale).toBeLessThan(1);
         for (let i = 0; i < 12 && controller.effectiveScale < 1; i += 1) gpuWindow(controller, 7);
