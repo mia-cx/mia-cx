@@ -6,6 +6,7 @@ import { PRESENT as COMPACT_PRESENT } from './webgl2-compact-shaders';
 import { PRESENT as GENERATED_PRESENT } from './webgl2-shaders';
 
 const page = readFileSync(new URL('../routes/+page.svelte', import.meta.url), 'utf8');
+const app = readFileSync(new URL('../app.html', import.meta.url), 'utf8');
 
 describe('transparent shader presentation', () => {
     it('extracts alpha from clamped final RGB and keeps valid premultiplied colour', () => {
@@ -38,5 +39,11 @@ describe('transparent shader presentation', () => {
         expect(page).toContain("window.addEventListener('pointermove', move)");
         expect(page).toContain("event.target.closest('nav, .telemetry')");
         expect(page).not.toContain('onpointermove={pointerMove}');
+    });
+
+    it('extends the canvas into Safari browser chrome and display cutout areas', () => {
+        expect(app).toContain('viewport-fit=cover');
+        expect(page).toContain('width: 100lvw');
+        expect(page).toContain('height: 100lvh');
     });
 });
