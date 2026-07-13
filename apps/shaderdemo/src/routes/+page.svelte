@@ -1069,7 +1069,7 @@
         opacity: 1;
         transition: opacity 0.35s ease;
     }
-    canvas.ios-screen-cover {
+    :global(canvas.ios-screen-cover) {
         position: absolute;
         top: 0;
         left: 0;
