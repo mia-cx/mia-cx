@@ -60,6 +60,7 @@ describe('transparent shader presentation', () => {
         expect(page).toContain('@supports (-webkit-touch-callout: none)');
         expect(page).toContain('height: 100dvh');
         expect(page).toContain('overflow-y: auto');
-        expect(page).toContain('overscroll-behavior-y: none');
+        expect(page).toContain('-webkit-overflow-scrolling: touch');
+        expect(page).not.toContain('overscroll-behavior-y: none');
     });
 });

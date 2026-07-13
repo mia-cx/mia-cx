@@ -1052,7 +1052,6 @@
             height: 100dvh;
             overflow-x: hidden;
             overflow-y: auto;
-            overscroll-behavior-y: none;
             -webkit-overflow-scrolling: touch;
         }
     }
