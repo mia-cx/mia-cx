@@ -939,7 +939,7 @@ struct PaintParams { aspect:f32,pad:vec3f }; @group(0) @binding(0) var<uniform> 
 @group(0) @binding(1) var<storage,read> segments:array<Segment>;
 struct Out { @builtin(position) position:vec4f,@location(0) q:vec2f,@location(1) @interpolate(flat) a:vec2f,@location(2) @interpolate(flat) b:vec2f,@location(3) @interpolate(flat) values:vec3f };
 @vertex fn vs(@builtin(vertex_index)i:u32,@builtin(instance_index)n:u32)->Out { let s=segments[n];let corners=array(vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(-1,1),vec2f(1,-1),vec2f(1,1));let lo=min(s.a,s.b)-s.radius;let hi=max(s.a,s.b)+s.radius;let q=mix(lo,hi,(corners[i]+1.)*.5);var o:Out;o.position=vec4f(q.x/params.aspect,-q.y,0,1);o.q=q;o.a=s.a;o.b=s.b;o.values=vec3f(s.radius,s.strength,s.falloff);return o; }
-@fragment fn fs(i:Out)->@location(0) f32 { let d=i.b-i.a;let t=select(0.,clamp(dot(i.q-i.a,d)/dot(d,d),0.,1.),dot(d,d)>0.);let distance=length(i.q-(i.a+t*d))/i.values.x;if(distance>=1.){discard;}let inverseSquare=1./(1.+12.*max(i.values.z,0.)*distance*distance);let edgeT=clamp((distance-.92)/.08,0.,1.);let edge=1.-edgeT*edgeT*(3.-2.*edgeT);return i.values.y*inverseSquare*edge; }`;
+@fragment fn fs(i:Out)->@location(0) f32 { let d=i.b-i.a;let t=select(0.,clamp(dot(i.q-i.a,d)/dot(d,d),0.,1.),dot(d,d)>0.);let distance=length(i.q-(i.a+t*d))/i.values.x;if(distance>=1.){discard;}let perceptualDistance=log(1.+9.*distance)/log(10.);let inverseSquare=1./(1.+12.*max(i.values.z,0.)*perceptualDistance*perceptualDistance);let edgeT=clamp((distance-.92)/.08,0.,1.);let edge=1.-edgeT*edgeT*(3.-2.*edgeT);return i.values.y*inverseSquare*edge; }`;
 
 export class AtmosphereRenderer {
     readonly backend = 'webgpu' as const;

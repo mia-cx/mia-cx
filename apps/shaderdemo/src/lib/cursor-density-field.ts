@@ -29,7 +29,10 @@ export function cursorBuildUpCurve(t: number): number {
 export function densityPressureCoverage(normalizedDistance: number, falloff: number): number {
     if (!Number.isFinite(normalizedDistance) || !Number.isFinite(falloff) || normalizedDistance >= 1) return 0;
     const distance = Math.max(0, normalizedDistance);
-    const inverseSquare = 1 / (1 + 12 * Math.max(0, falloff) * distance * distance);
+    // Allocate more of the radius to visually significant darker values. This is kept
+    // algebraically identical to CURSOR_PAINT_SHADER_SOURCE for CPU/WebGPU parity.
+    const perceptualDistance = Math.log(1 + 9 * distance) / Math.log(10);
+    const inverseSquare = 1 / (1 + 12 * Math.max(0, falloff) * perceptualDistance * perceptualDistance);
     const edgeT = Math.max(0, Math.min(1, (distance - 0.92) / 0.08));
     const edgeCutoff = 1 - edgeT * edgeT * (3 - 2 * edgeT);
     return inverseSquare * edgeCutoff;

@@ -9,7 +9,7 @@ import {
 const maximum = (field: CursorDensityField) => field.snapshot().data.reduce((a, b) => Math.max(a, b), 0);
 
 describe('CursorDensityField', () => {
-    it('uses a finite, strongly monotonic inverse-square radial profile', () => {
+    it('uses a finite, strongly monotonic perceptual inverse-square radial profile', () => {
         const [center, quarter, half, nearEdge] = [0, 0.25, 0.5, 0.9].map((distance) =>
             densityPressureCoverage(distance, 1),
         );
@@ -18,7 +18,23 @@ describe('CursorDensityField', () => {
         expect(center).toBeGreaterThan(quarter);
         expect(quarter).toBeGreaterThan(half);
         expect(half).toBeGreaterThan(nearEdge);
-        expect(half).toBeCloseTo(0.25, 8);
+        expect(half).toBeCloseTo(1 / (1 + 12 * (Math.log(5.5) / Math.log(10)) ** 2), 8);
+    });
+
+    it('remaps radial distance logarithmically so less of the profile stays near white', () => {
+        const formerLiteralProfile = (distance: number) => 1 / (1 + 12 * distance * distance);
+        const quarter = densityPressureCoverage(0.25, 1);
+        const half = densityPressureCoverage(0.5, 1);
+        expect(quarter).toBeLessThan(formerLiteralProfile(0.25));
+        expect(half).toBeLessThan(formerLiteralProfile(0.5));
+        expect(quarter).toBeCloseTo(1 / (1 + 12 * (Math.log(3.25) / Math.log(10)) ** 2), 10);
+    });
+
+    it('preserves radial endpoints and monotonicity across the complete brush', () => {
+        expect(densityPressureCoverage(0, 1)).toBe(1);
+        expect(densityPressureCoverage(1, 1)).toBe(0);
+        const samples = Array.from({ length: 101 }, (_, index) => densityPressureCoverage(index / 100, 1));
+        expect(samples.every((value, index) => index === 0 || value <= samples[index - 1])).toBe(true);
     });
 
     it('makes falloff affect the outside much more than the center', () => {
@@ -28,7 +44,8 @@ describe('CursorDensityField', () => {
     });
 
     it('uses only a narrow continuous outer cutoff and is zero at and beyond radius', () => {
-        expect(densityPressureCoverage(0.91, 1)).toBeCloseTo(1 / (1 + 12 * 0.91 ** 2), 10);
+        const perceptualDistance = Math.log(1 + 9 * 0.91) / Math.log(10);
+        expect(densityPressureCoverage(0.91, 1)).toBeCloseTo(1 / (1 + 12 * perceptualDistance ** 2), 10);
         expect(densityPressureCoverage(0.999, 1)).toBeGreaterThan(0);
         expect(densityPressureCoverage(0.9999, 1)).toBeLessThan(densityPressureCoverage(0.999, 1));
         expect(densityPressureCoverage(1, 1)).toBe(0);
@@ -138,9 +155,9 @@ describe('CursorDensityField', () => {
         const { data, width, height } = field.snapshot();
         const row = Math.floor(height / 2);
         const profile = Array.from(data.slice(row * width + 20, row * width + width - 20));
-        // Pixel-center sampling and the capsule's rounded ends lower the extremes,
-        // but sparse movement must leave no holes or periodic stamp dips.
-        expect(Math.min(...profile)).toBeGreaterThan(0.8);
+        // Pixel-center sampling, rounded ends, and perceptual radial falloff lower the
+        // extremes, but sparse movement must leave no holes or periodic stamp dips.
+        expect(Math.min(...profile)).toBeGreaterThan(0.3);
         expect(profile.every((value) => value > 0)).toBe(true);
     });
 
