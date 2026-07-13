@@ -391,6 +391,9 @@ importers:
       svelte-check:
         specifier: ^3.8.1
         version: 3.8.1(@babel/core@7.24.7)(postcss-load-config@4.0.2(postcss@8.4.38))(postcss@8.4.38)(sass@1.93.2)(svelte@5.0.0-next.166)
+      tsx:
+        specifier: ^4.20.6
+        version: 4.20.6
       typescript:
         specifier: ^5.5.2
         version: 5.9.3
