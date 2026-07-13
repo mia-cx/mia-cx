@@ -1014,7 +1014,7 @@
     :global(html, body) {
         margin: 0;
         min-height: 100%;
-        background: #070809;
+        background: transparent;
         color: #e9e7e1;
     }
     :global(body) {
@@ -1023,6 +1023,7 @@
     main {
         position: relative;
         min-height: 100vh;
+        background: #070809;
         isolation: isolate;
     }
     canvas {

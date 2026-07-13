@@ -48,4 +48,12 @@ describe('transparent shader presentation', () => {
         expect(page).toContain('width: 100lvw');
         expect(page).toContain('height: 100lvh');
     });
+
+    it('leaves the document root transparent for Safari browser chrome compositing', () => {
+        expect(app).not.toContain('name="theme-color"');
+        expect(page).toContain(':global(html, body)');
+        expect(page).toContain('background: transparent');
+        expect(page).toContain('main {');
+        expect(page).toContain('background: #070809');
+    });
 });
