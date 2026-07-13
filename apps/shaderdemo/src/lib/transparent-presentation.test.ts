@@ -56,5 +56,9 @@ describe('transparent shader presentation', () => {
         expect(page).toContain(':global(html, body)');
         expect(page).toContain('background: #070809');
         expect(page).toContain('color-scheme: dark');
+        expect(page).toContain('safari-chrome-guard-top');
+        expect(page).toContain('safari-chrome-guard-bottom');
+        expect(page).toContain('@supports (-webkit-touch-callout: none)');
+        expect(page).toContain('height: max(env(safe-area-inset-bottom, 0px), calc(100lvh - 100dvh))');
     });
 });

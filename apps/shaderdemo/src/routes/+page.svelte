@@ -504,6 +504,8 @@
 
 <canvas class:ready bind:this={canvas} aria-label="Animated coloured noise field layered transparently over the article"
 ></canvas>
+<div class="safari-chrome-guard safari-chrome-guard-top" aria-hidden="true"></div>
+<div class="safari-chrome-guard safari-chrome-guard-bottom" aria-hidden="true"></div>
 <main>
     <article>
         <header>
@@ -1040,6 +1042,28 @@
     canvas.ready {
         opacity: 1;
         transition: opacity 0.35s ease;
+    }
+    .safari-chrome-guard {
+        display: none;
+    }
+    @supports (-webkit-touch-callout: none) {
+        .safari-chrome-guard {
+            position: fixed;
+            z-index: 10;
+            right: 0;
+            left: 0;
+            display: block;
+            background: #070809;
+            pointer-events: none;
+        }
+        .safari-chrome-guard-top {
+            top: 0;
+            height: max(env(safe-area-inset-top, 0px), calc((100lvh - 100dvh) / 2));
+        }
+        .safari-chrome-guard-bottom {
+            bottom: 0;
+            height: max(env(safe-area-inset-bottom, 0px), calc(100lvh - 100dvh));
+        }
     }
 
     article {
