@@ -1048,8 +1048,10 @@
         transition: opacity 0.35s ease;
     }
     :global(canvas.ios-overscan) {
-        transform: scale(1.35);
-        transform-origin: center;
+        top: -25lvh;
+        left: -25lvw;
+        width: 150lvw;
+        height: 150lvh;
     }
     article {
         position: relative;
