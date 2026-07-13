@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CursorDensityField, MovementEnvelope, densityPressureCoverage } from './cursor-density-field';
+import {
+    CursorDensityField,
+    MovementEnvelope,
+    cursorBuildUpCurve,
+    densityPressureCoverage,
+} from './cursor-density-field';
 
 const maximum = (field: CursorDensityField) => field.snapshot().data.reduce((a, b) => Math.max(a, b), 0);
 
@@ -211,6 +216,18 @@ describe('CursorDensityField', () => {
         expect(envelope.strength(400, 0.4)).toBe(1);
         expect(envelope.strength(600, 0.4)).toBeCloseTo(0.05);
         expect(envelope.strength(601, 0)).toBe(1);
+    });
+
+    it('uses a logarithmic build-up that responds early and eases toward full strength', () => {
+        const quarter = cursorBuildUpCurve(0.25);
+        const half = cursorBuildUpCurve(0.5);
+        const threeQuarters = cursorBuildUpCurve(0.75);
+        expect(cursorBuildUpCurve(0)).toBe(0);
+        expect(cursorBuildUpCurve(1)).toBe(1);
+        expect(quarter).toBeGreaterThan(0.35);
+        expect(half - quarter).toBeGreaterThan(0);
+        expect(threeQuarters - half).toBeLessThan(half - quarter);
+        expect(1 - threeQuarters).toBeLessThan(threeQuarters - half);
     });
 
     it('rasterizes and commits one coalesced large-radius batch once', () => {

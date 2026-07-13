@@ -1,4 +1,4 @@
-import { MOVEMENT_CONTINUITY_MS, type DensityStrokePoint } from './cursor-density-field';
+import { cursorBuildUpCurve, MOVEMENT_CONTINUITY_MS, type DensityStrokePoint } from './cursor-density-field';
 
 export const DENSITY_MAP_ROWS = 512;
 export const DENSITY_MAP_MAX_COLUMNS = 1024;
@@ -73,7 +73,7 @@ export class GpuDensityGeometry {
         this.lastMovement = time;
         if (!(buildUp > 0)) return 1;
         const t = Math.max(0, Math.min(1, (time - this.movementStart) / (buildUp * 1000)));
-        return INITIAL_HEAD_STRENGTH + (1 - INITIAL_HEAD_STRENGTH) * t * t * (3 - 2 * t);
+        return INITIAL_HEAD_STRENGTH + (1 - INITIAL_HEAD_STRENGTH) * cursorBuildUpCurve(t);
     }
 
     add(points: readonly DensityStrokePoint[], radius: number, falloff: number, buildUp: number): GpuDensitySegment[] {

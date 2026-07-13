@@ -18,6 +18,13 @@ const TARGET_ROWS = 512;
 const MAX_COLUMNS = 1024;
 export const MOVEMENT_CONTINUITY_MS = 120;
 const INITIAL_HEAD_STRENGTH = 0.05;
+const BUILD_UP_LOG_CURVE = 3;
+
+/** Logarithmic ease-out: responds early, then approaches full strength progressively. */
+export function cursorBuildUpCurve(t: number): number {
+    const clamped = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0));
+    return Math.log1p(BUILD_UP_LOG_CURVE * clamped) / Math.log1p(BUILD_UP_LOG_CURVE);
+}
 
 export function densityPressureCoverage(normalizedDistance: number, falloff: number): number {
     if (!Number.isFinite(normalizedDistance) || !Number.isFinite(falloff) || normalizedDistance >= 1) return 0;
@@ -45,8 +52,7 @@ export class MovementEnvelope {
         this.lastMovement = timeStamp;
         if (!(buildUpSeconds > 0)) return 1;
         const t = Math.max(0, Math.min(1, (timeStamp - this.movementStart) / (buildUpSeconds * 1000)));
-        const smooth = t * t * (3 - 2 * t);
-        return INITIAL_HEAD_STRENGTH + (1 - INITIAL_HEAD_STRENGTH) * smooth;
+        return INITIAL_HEAD_STRENGTH + (1 - INITIAL_HEAD_STRENGTH) * cursorBuildUpCurve(t);
     }
 
     reset(): void {
