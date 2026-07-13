@@ -53,8 +53,9 @@ export const defaultShaderSettings = () => {
             value.post.push({ id: stablePipelineId('post', type), type, enabled: false });
     return value;
 };
-export const SETTINGS_STORAGE_KEY = 'shaderdemo:settings:v7';
+export const SETTINGS_STORAGE_KEY = 'shaderdemo:settings:v8';
 export const LEGACY_STORAGE_KEYS = [
+    'shaderdemo:settings:v7',
     'shaderdemo:settings:v6',
     'shaderdemo:settings:v3',
     'shaderdemo:settings:v2',

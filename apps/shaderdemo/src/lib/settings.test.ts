@@ -32,7 +32,7 @@ describe('V2 pipeline settings', () => {
     it('drops superseded cursor density keys from defaults, cursor resets, and exports', () => {
         const oldKeys = ['cursorDensity' + 'HighlightProtection', 'cursorDensity' + 'MidtoneFocus'];
         const settings = defaultShaderSettings();
-        expect(settings.parameters.cursorDensityDarkBias).toBe(1);
+        expect(settings.parameters.cursorDensityDarkBias).toBe(1.3);
         for (const oldKey of oldKeys) {
             expect(oldKey in settings.parameters).toBe(false);
             (settings.parameters as Record<string, number>)[oldKey] = 3;
@@ -45,7 +45,7 @@ describe('V2 pipeline settings', () => {
         }
     });
     it('uses a new persistence generation and migrates v1/v3 shapes', () => {
-        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v7');
+        expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v8');
         const legacy = { seed: 42, parameters: { ...defaultShaderSettings().parameters }, adjustments: [] };
         const storage = { getItem: (key: string) => (key.endsWith(':v3') ? JSON.stringify(legacy) : null) };
         const migrated = loadPersistedSettings(storage);
