@@ -1240,7 +1240,7 @@
         justify-content: space-between;
         gap: 16px;
     }
-    nav {
+    nav[aria-label='Study controls'] {
         position: fixed;
         top: 14px;
         right: 14px;
@@ -1252,7 +1252,7 @@
         letter-spacing: 0.08em;
         text-transform: uppercase;
     }
-    nav[data-disabled='true'] {
+    nav[aria-label='Study controls'][data-disabled='true'] {
         opacity: 0.35;
     }
     button,
