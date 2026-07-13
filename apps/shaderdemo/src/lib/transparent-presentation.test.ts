@@ -43,17 +43,19 @@ describe('transparent shader presentation', () => {
         expect(page).not.toContain('isolation: isolate');
     });
 
-    it('overscans the fixed iOS canvas without scroll-linked positioning', () => {
+    it('mirrors the canvas through non-fixed video only in iOS Safari', () => {
         expect(app).toContain('viewport-fit=cover');
         expect(page).not.toContain("window.addEventListener('scroll', syncCanvasScroll");
-        expect(page).toContain("canvas.classList.add('ios-overscan')");
-        expect(page).toContain('canvas.ios-overscan');
+        expect(page).toContain('isIosSafari');
+        expect(page).toContain('canvas.captureStream?.(30)');
+        expect(page).toContain('ios-safari-canvas-mirror');
+        expect(page).toContain('@supports (-webkit-touch-callout: none)');
+        expect(page).toContain('position: sticky');
         expect(page).toContain('top: -25lvh');
         expect(page).toContain('left: -25lvw');
         expect(page).toContain('width: 150lvw');
         expect(page).toContain('height: 150lvh');
-        expect(page).toContain('width: 100lvw');
-        expect(page).toContain('height: 100lvh');
+        expect(page).toContain('mix-blend-mode: screen');
     });
 
     it('leaves the document root transparent for Safari browser chrome compositing', () => {
