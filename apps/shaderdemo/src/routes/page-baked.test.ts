@@ -16,6 +16,11 @@ describe('baked shader-only page', () => {
             expect(source).not.toContain(ui);
     });
 
+    it('chooses a fresh field seed for every browser page load', () => {
+        expect(source).toContain('const pageSeed = Math.random() * 1000');
+        expect(source).toContain('{ ...loadedOptions, seed: pageSeed }');
+    });
+
     it('uses canonical JSON defaults directly and generated immutable products', async () => {
         expect(BAKED_RENDER_OPTIONS.seed).toBe(defaultSettings.settings.seed);
         expect(BAKED_RENDER_OPTIONS.parameters).toBe(defaultSettings.settings.parameters);

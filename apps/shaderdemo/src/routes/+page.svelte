@@ -9,7 +9,7 @@
     let renderer: RenderBackend | undefined;
     let ready = $state(false);
     let status = $state('Starting graphics…');
-    const options = BAKED_RENDER_OPTIONS;
+    let options = BAKED_RENDER_OPTIONS;
     const cursorState = new CursorState();
     const cursorDensityField = new CursorDensityField();
     let densityPoints: { x: number; y: number; timeStamp: number }[] = [];
@@ -61,9 +61,11 @@
 
     onMount(() => {
         let disposed = false;
+        const pageSeed = Math.random() * 1000;
+        options = { ...BAKED_RENDER_OPTIONS, seed: pageSeed };
         paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
         loadBakedRenderOptions()
-            .then((loadedOptions) => selectRenderBackend(canvas, loadedOptions))
+            .then((loadedOptions) => selectRenderBackend(canvas, { ...loadedOptions, seed: pageSeed }))
             .then(({ renderer: instance }) => {
                 if (disposed) return instance.destroy();
                 renderer = instance;
