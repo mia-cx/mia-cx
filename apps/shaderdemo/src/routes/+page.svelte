@@ -1057,11 +1057,11 @@
             pointer-events: none;
         }
         .safari-chrome-guard-top {
-            top: 0;
+            bottom: 100%;
             height: max(env(safe-area-inset-top, 0px), calc((100lvh - 100dvh) / 2));
         }
         .safari-chrome-guard-bottom {
-            bottom: 0;
+            top: 100%;
             height: max(env(safe-area-inset-bottom, 0px), calc(100lvh - 100dvh));
         }
     }

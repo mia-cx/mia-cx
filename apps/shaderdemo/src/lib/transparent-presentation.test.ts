@@ -59,6 +59,8 @@ describe('transparent shader presentation', () => {
         expect(page).toContain('safari-chrome-guard-top');
         expect(page).toContain('safari-chrome-guard-bottom');
         expect(page).toContain('@supports (-webkit-touch-callout: none)');
+        expect(page).toContain('bottom: 100%');
+        expect(page).toContain('top: 100%');
         expect(page).toContain('height: max(env(safe-area-inset-bottom, 0px), calc(100lvh - 100dvh))');
     });
 });
