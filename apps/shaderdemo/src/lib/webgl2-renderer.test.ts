@@ -67,14 +67,15 @@ describe('WebGL2 parity backend', () => {
         expect(shaders.BASE).toMatch(/float densityPressure = _e\d+\.x;/);
         expect(shaders.BASE).toMatch(/cursorDensity = \(_e\d+ \* densityPressure\);/);
         expect(shaders.BASE).toMatch(/float _e\d+ = cp\(3u\);/);
-        expect(shaders.BASE).toMatch(/float fieldBrightness = clamp\(_e\d+, 0\.0, 1\.0\);/);
-        expect(shaders.BASE).toContain('float midtone = ((4.0 * fieldBrightness) * (1.0 - fieldBrightness));');
         expect(shaders.BASE).toMatch(
-            /float densityResponse = \(\(_e\d+ == 0\.0\) \? 1\.0 : pow\(max\(midtone, 1e-6\), _e\d+\)\);/,
+            /float densityResponse = \(\(_e\d+ == 0\.0\) \? 1\.0 : pow\(max\(\(1\.0 - clamp\(_e\d+, 0\.0, 1\.0\)\), 1e-6\), _e\d+\)\);/,
         );
         expect(shaders.BASE).toMatch(/natural = \(_e\d+ \+ \(_e\d+ \* densityResponse\)\);/);
-        expect(BASE_SHADER_SOURCE).toContain('let midtoneFocus=cp(3u);');
-        expect(BASE_SHADER_SOURCE).toContain('select(pow(max(midtone,1e-6),midtoneFocus),1.,midtoneFocus==0.)');
+        expect(shaders.BASE.indexOf('float densityResponse =')).toBeGreaterThan(
+            shaders.BASE.indexOf('natural = (_e342 * exp2'),
+        );
+        expect(BASE_SHADER_SOURCE).toContain('let darkBias=cp(3u);');
+        expect(BASE_SHADER_SOURCE).toContain('select(pow(max(1.-clamp(natural,0.,1.),1e-6),darkBias),1.,darkBias==0.)');
         expect(shaders.BASE.match(/texture\(_group_0_binding_2_fs/g)).toHaveLength(1);
         expect(shaders.BASE).not.toContain('vec2 gradient =');
         expect(shaders.BASE).not.toContain('textureSize(_group_0_binding_2_fs');

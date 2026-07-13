@@ -601,12 +601,6 @@ fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
             natural=blendSigned(natural,secondaryRibbon*u.secondaryRibbonAmount,u.secondaryRibbonBlendMode);
         }
     }
-    // Preserve exact uniform addition at zero; otherwise focus it around the natural pre-threshold midtones.
-    let midtoneFocus=cp(3u);
-    let fieldBrightness=clamp(natural,0.,1.);
-    let midtone=4.*fieldBrightness*(1.-fieldBrightness);
-    let densityResponse=select(pow(max(midtone,1e-6),midtoneFocus),1.,midtoneFocus==0.);
-    natural+=cursorDensity*densityResponse;
     if(u.centerDarkness!=0.) {
         let centerPoint=abs(q/vec2f(u.centerWidth,u.centerHeight));
         let centerDistance=pow(pow(centerPoint.x,u.centerRoundness)+pow(centerPoint.y,u.centerRoundness),1./u.centerRoundness);
@@ -614,6 +608,10 @@ fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
         let center=1.-smoothstep(1.-centerFeather,1.+centerFeather,centerDistance);
         natural*=exp2(-center*u.centerDarkness*4.);
     }
+    // Bias against the complete pre-threshold field. At zero this is the legacy uniform contribution.
+    let darkBias=cp(3u);
+    let densityResponse=select(pow(max(1.-clamp(natural,0.,1.),1e-6),darkBias),1.,darkBias==0.);
+    natural+=cursorDensity*densityResponse;
     // Field shaping finishes here; recursive scatter/noise is the next destructive stage on top.
     if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }
     let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);

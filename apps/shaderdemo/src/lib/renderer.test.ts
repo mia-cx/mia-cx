@@ -59,6 +59,10 @@ describe('field configuration', () => {
         expect(BASE_SHADER_SOURCE.indexOf('natural+=cursorDensity')).toBeLessThan(
             BASE_SHADER_SOURCE.indexOf('if(u.thresholdEnabled<.5)'),
         );
+        expect(BASE_SHADER_SOURCE.indexOf('natural+=cursorDensity')).toBeGreaterThan(
+            BASE_SHADER_SOURCE.indexOf('natural*=exp2(-center*u.centerDarkness*4.)'),
+        );
+        expect(BASE_SHADER_SOURCE).toContain('1.-clamp(natural,0.,1.)');
         expect(BASE_SHADER_SOURCE).not.toContain('halogen');
     });
     it('uses dedicated rgba8 Post targets and ordered fused shader kinds', () => {

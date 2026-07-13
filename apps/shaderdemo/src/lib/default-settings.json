@@ -172,7 +172,7 @@
             "cursorDensityRadius": 0.22,
             "cursorDensityPressureFalloff": 1,
             "cursorDensityStrength": 1,
-            "cursorDensityMidtoneFocus": 1,
+            "cursorDensityDarkBias": 1,
             "cursorDensityBuildUp": 0.4,
             "cursorDensityDecay": 0.7
         },

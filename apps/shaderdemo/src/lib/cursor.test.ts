@@ -12,7 +12,7 @@ describe('CursorState', () => {
             'Radius',
             'Falloff',
             'Density strength',
-            'Midtone focus',
+            'Dark bias',
             'Build-up time',
             'Decay',
         ]);
@@ -29,12 +29,12 @@ describe('CursorState', () => {
             'cursorEnabled',
             'cursorDensityPressureEnabled',
             'cursorDensityStrength',
-            'cursorDensityMidtoneFocus',
+            'cursorDensityDarkBias',
         ]);
         const packed = packCursorUniform({ cursorDensityBuildUp: 0.777 }, undefined);
         expect(packed).toHaveLength(4);
         expect(packed[3]).toBe(1);
-        expect(packCursorUniform({ cursorDensityMidtoneFocus: 2.5 })[3]).toBe(2.5);
+        expect(packCursorUniform({ cursorDensityDarkBias: 2.5 })[3]).toBe(2.5);
     });
     it('uses aspect-correct CSS coordinates independent of backing resolution', () => {
         const a = new CursorState().update(310, 120, rect, 10);

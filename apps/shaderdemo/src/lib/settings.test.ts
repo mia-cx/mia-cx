@@ -29,14 +29,20 @@ describe('V2 pipeline settings', () => {
         expect(doc).toEqual({ format: 'mia-cx-shaderdemo-settings', version: 2, settings, assets: [] });
         expect(parseSettingsDocument(doc)).toEqual(settings);
     });
-    it('drops the superseded cursor density key from defaults, cursor resets, and exports', () => {
-        const oldKey = 'cursorDensity' + 'HighlightProtection';
+    it('drops superseded cursor density keys from defaults, cursor resets, and exports', () => {
+        const oldKeys = ['cursorDensity' + 'HighlightProtection', 'cursorDensity' + 'MidtoneFocus'];
         const settings = defaultShaderSettings();
-        expect(settings.parameters.cursorDensityMidtoneFocus).toBe(1);
-        expect(oldKey in settings.parameters).toBe(false);
-        (settings.parameters as Record<string, number>)[oldKey] = 3;
-        expect(oldKey in resetSettingsTab(settings, 'cursor').parameters).toBe(false);
-        expect(oldKey in JSON.parse(serializeShaderSettings(settings)).settings.parameters).toBe(false);
+        expect(settings.parameters.cursorDensityDarkBias).toBe(1);
+        for (const oldKey of oldKeys) {
+            expect(oldKey in settings.parameters).toBe(false);
+            (settings.parameters as Record<string, number>)[oldKey] = 3;
+        }
+        const reset = resetSettingsTab(settings, 'cursor').parameters;
+        const exported = JSON.parse(serializeShaderSettings(settings)).settings.parameters;
+        for (const oldKey of oldKeys) {
+            expect(oldKey in reset).toBe(false);
+            expect(oldKey in exported).toBe(false);
+        }
     });
     it('uses a new persistence generation and migrates v1/v3 shapes', () => {
         expect(SETTINGS_STORAGE_KEY).toBe('shaderdemo:settings:v7');
