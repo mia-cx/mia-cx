@@ -29,6 +29,14 @@ describe('WebGL2 parity backend', () => {
         }
     });
 
+    it('uses radial lens chromatic aberration with the centre unchanged', () => {
+        const source = specializeWebGL2Shader('POST_EFFECT', 3);
+        expect(source).toContain('vec2 radial = (uv - vec2(0.5))');
+        expect(source).toContain('uv + (radial * amount)');
+        expect(source).toContain('uv - (radial * amount)');
+        expect(source).not.toContain('vec2(d, 0.0)');
+    });
+
     it('lazily installs specialized programs and assigns samplers only at installation', () => {
         const implementation = WebGL2Renderer.toString();
         expect(implementation).toContain('this.programs.get(key) ?? this.installProgram');

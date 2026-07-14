@@ -70,6 +70,13 @@ describe('field configuration', () => {
         expect(POST_EFFECT_SHADER_SOURCE).toContain('else if(kind==25)');
         expect(POST_EFFECT_SHADER_SOURCE).toContain('else{let g=frameHash');
     });
+    it('uses radial lens chromatic aberration with an undistorted optical centre', () => {
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('let radial=uv-vec2f(.5)');
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('redUv=safe(uv+radial*amount)');
+        expect(POST_EFFECT_SHADER_SOURCE).toContain('blueUv=safe(uv-radial*amount)');
+        expect(POST_EFFECT_SHADER_SOURCE).not.toContain('uv+vec2f(d,0)');
+    });
+
     it('re-hashes film grain independently every rendered frame instead of translating a fixed field', () => {
         expect(POST_EFFECT_SHADER_SOURCE).toContain('frameHash(floor(pos.xy/p(31)),u32(u.frameIndex))');
         expect(POST_EFFECT_SHADER_SOURCE).toContain('frame*0xc2b2ae35u');
