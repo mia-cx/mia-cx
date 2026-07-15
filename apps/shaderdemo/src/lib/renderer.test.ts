@@ -219,7 +219,7 @@ describe('field configuration', () => {
     it('uses a nonblocking per-frame two-query timing ring separate from sparse pass telemetry', () => {
         const source = AtmosphereRenderer.toString();
         expect(GPU_FRAME_TIMING_RING_SIZE).toBeGreaterThanOrEqual(3);
-        expect(MAX_IN_FLIGHT_SUBMISSIONS).toBe(2);
+        expect(MAX_IN_FLIGHT_SUBMISSIONS).toBe(3);
         expect(GPU_TIMING_SAMPLE_INTERVAL).toBe(30);
         expect(source).toContain('acquireFrameTimingSlot');
         expect(source).toContain('beginComputePass');

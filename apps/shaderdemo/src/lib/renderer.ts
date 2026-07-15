@@ -70,7 +70,7 @@ const PIPELINE_COUNT = 15;
 const CURSOR_DECAY_PIPELINE = 13;
 const CURSOR_PAINT_PIPELINE = 14;
 export const GPU_FRAME_TIMING_RING_SIZE = 3;
-export const MAX_IN_FLIGHT_SUBMISSIONS = 2;
+export const MAX_IN_FLIGHT_SUBMISSIONS = 3;
 type FrameTimingSlot = {
     resolve: GPUBuffer;
     readback: GPUBuffer;
