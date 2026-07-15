@@ -14,6 +14,7 @@ import {
     FIELD_BLEND_MODES,
     POST_BLEND_MODES,
     POST_EFFECT_SHADER_SOURCE,
+    compactPostShaderSource,
     POST_TEXTURE_FORMAT,
     POST_PARAMETER_SCHEMA,
     DISPLAY_SHADER_SOURCE,
@@ -75,6 +76,19 @@ describe('field configuration', () => {
         expect(POST_EFFECT_SHADER_SOURCE).toContain('redUv=safe(uv+radial*amount)');
         expect(POST_EFFECT_SHADER_SOURCE).toContain('blueUv=safe(uv-radial*amount)');
         expect(POST_EFFECT_SHADER_SOURCE).not.toContain('uv+vec2f(d,0)');
+    });
+
+    it('builds standalone WebGPU shaders for every baked Post stage', () => {
+        for (const kind of [1, 2, 3, 27]) {
+            const source = compactPostShaderSource(kind);
+            expect(source.length).toBeLessThan(POST_EFFECT_SHADER_SOURCE.length * 0.7);
+            expect(source).not.toContain('let kind=');
+            expect(source).not.toContain('else if(kind');
+            expect(source.match(/@fragment fn fs/g)).toHaveLength(1);
+        }
+        const implementation = AtmosphereRenderer.toString();
+        expect(implementation).toContain('compactPostShaderSource(primaryPostKind)');
+        expect(implementation).toContain('this.compactPostPipelineIndices.get(postKind) ?? 8');
     });
 
     it('re-hashes film grain independently every rendered frame instead of translating a fixed field', () => {

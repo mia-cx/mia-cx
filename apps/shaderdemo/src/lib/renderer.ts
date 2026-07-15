@@ -850,6 +850,42 @@ else if(kind==24){let line=floor(pos.y);let tear=(hash(vec2f(line,floor(u.time*p
 else if(kind==25){let e=smoothstep(1.-p(27),1.,length(uv*2.-1.)*.707);rgb*=1.-e*p(26);let g=frameHash(floor(pos.xy/p(31)),u32(u.frameIndex))-.5;rgb+=g*p(30);}
 else if(kind==27){rgb=blend(rgb,textureSample(history,samp,uv).rgb,u.post[8].x);}
 else{let g=frameHash(floor(pos.xy/p(31)),u32(u.frameIndex))-.5;rgb+=g*p(30);let e=smoothstep(1.-p(27),1.,length(uv*2.-1.)*.707);rgb*=1.-e*p(26);}return vec4f(rgb,1.);}`;
+
+const COMPACT_POST_BINDINGS = /* wgsl */ `
+@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;`;
+const COMPACT_POST_BLEND = /* wgsl */ `
+fn overlayChannel(base:f32,blend:f32)->f32{return select(2.*base*blend,1.-2.*(1.-base)*(1.-blend),base>.5);}
+fn softLightChannel(base:f32,blend:f32)->f32{return select(base-(1.-2.*blend)*base*(1.-base),base+(2.*blend-1.)*(sqrt(base)-base),blend>.5);}
+fn extendedLightChannel(a:f32,b:f32,mode:f32)->f32{if(mode<4.5){return a*b;}if(mode<5.5){return abs(a-b);}if(mode<6.5){return 1.-abs(1.-a-b);}if(mode<7.5){return a+b-2.*a*b;}if(mode<8.5){return min(a,b);}if(mode<9.5){return max(a,b);}if(mode<10.5){return select(1.,min(1.,a/max(1.-b,.00001)),b<1.);}if(mode<11.5){return select(0.,1.-min(1.,(1.-a)/max(b,.00001)),b>0.);}if(mode<12.5){return overlayChannel(b,a);}if(mode<13.5){return a-b;}return select(1.,a/max(b,.00001),b>0.);}
+fn blendLight(base:vec3f,color:vec3f,amount:f32,mode:f32)->vec3f{if(amount==0.){return base;}if(mode<.5){return base+color*amount;}let bounded=clamp(base,vec3f(0),vec3f(1));let excess=max(base-vec3f(1),vec3f(0));if(mode<1.5){return 1.-(1.-bounded)*(1.-clamp(color*amount,vec3f(0),vec3f(1)))+excess;}let strength=clamp(amount,0.,1.);var blended:vec3f;if(mode<2.5){blended=vec3f(overlayChannel(bounded.r,color.r),overlayChannel(bounded.g,color.g),overlayChannel(bounded.b,color.b));}else if(mode<3.5){blended=vec3f(softLightChannel(bounded.r,color.r),softLightChannel(bounded.g,color.g),softLightChannel(bounded.b,color.b));}else{let c=clamp(color,vec3f(0),vec3f(1));blended=vec3f(extendedLightChannel(bounded.r,c.r,mode),extendedLightChannel(bounded.g,c.g,mode),extendedLightChannel(bounded.b,c.b,mode));}return mix(bounded,blended,strength)+excess;}
+fn blend(base:vec3f,layer:vec3f,mode:f32)->vec3f{if(mode<.5){return base+layer;}let strength=select(max(abs(layer.r),max(abs(layer.g),abs(layer.b))),max(layer.r,max(layer.g,layer.b)),mode<3.5);if(strength<=0.){return base;}return blendLight(base,layer/strength,strength,mode);}`;
+export function compactPostShaderSource(kind: number): string {
+    if (kind === 1 || kind === 2)
+        return (
+            COMMON_SHADER_SOURCE +
+            COMPACT_POST_BINDINGS +
+            COMPACT_POST_BLEND +
+            (kind === 2
+                ? 'fn hue(c:vec3f,h:f32)->vec3f{let a=h*6.2831853;let y=dot(c,vec3f(.299,.587,.114));let i=dot(c,vec3f(.596,-.274,-.322));let q=dot(c,vec3f(.211,-.523,.312));let z=vec2f(i*cos(a)-q*sin(a),i*sin(a)+q*cos(a));return vec3f(y+.956*z.x+.621*z.y,y-.272*z.x-.647*z.y,y-1.106*z.x+1.703*z.y);}'
+                : '') +
+            `@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f{let uv=pos.xy/u.resolution;let px=1./u.resolution;var rgb=textureSample(src,samp,uv).rgb;var b=vec3f(0);let radius=(1.+u.post[5].y*3.)*px;for(var x=-2;x<=2;x++){for(var y=-2;y<=2;y++){let c=textureSample(src,samp,uv+vec2f(f32(x),f32(y))*radius).rgb;let l=dot(max(c,vec3f(0)),vec3f(.2126,.7152,.0722));b+=c*smoothstep(u.post[4].z-u.post[4].w,u.post[4].z+u.post[4].w,l);}}b/=25.;${kind === 1 ? 'rgb=blend(rgb,b*u.post[5].x,u.post[8].y);' : 'rgb=blend(rgb,hue(b,u.post[6].x)*u.post[5].w,u.post[8].z);'}return vec4f(rgb,1.);}`
+        );
+    if (kind === 3)
+        return (
+            COMMON_SHADER_SOURCE +
+            COMPACT_POST_BINDINGS +
+            `@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f{let uv=pos.xy/u.resolution;let amount=u.post[6].y*.002;let radial=uv-vec2f(.5);let redUv=clamp(uv+radial*amount,vec2f(0),vec2f(1));let blueUv=clamp(uv-radial*amount,vec2f(0),vec2f(1));let current=textureSample(src,samp,uv).rgb;return vec4f(textureSample(src,samp,redUv).r,current.g,textureSample(src,samp,blueUv).b,1.);}`
+        );
+    if (kind === 27)
+        return (
+            COMMON_SHADER_SOURCE +
+            COMPACT_POST_BINDINGS +
+            '@group(0) @binding(3) var history:texture_2d<f32>;' +
+            COMPACT_POST_BLEND +
+            `@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f{let uv=pos.xy/u.resolution;let rgb=textureSample(src,samp,uv).rgb;return vec4f(blend(rgb,textureSample(history,samp,uv).rgb,u.post[8].x),1.);}`
+        );
+    throw new Error(`No compact WebGPU Post shader exists for kind ${kind}.`);
+}
 export const PRESENT_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `@group(0) @binding(1) var src:texture_2d<f32>;@group(0) @binding(2) var samp:sampler;
@@ -951,6 +987,8 @@ export class AtmosphereRenderer {
     private device?: GPUDevice;
     private context: GPUCanvasContext | null = null;
     private pipelines: GPURenderPipeline[] = [];
+    private compactPostPipelineIndices = new Map<number, number>();
+    private compactPostHistoryPipelines = new Set<number>();
     private textures: GPUTexture[] = [];
     private textureViews: GPUTextureView[] = [];
     private sampler?: GPUSampler;
@@ -1062,6 +1100,24 @@ export class AtmosphereRenderer {
                 fragment: { module, entryPoint: 'fs', targets: [{ format: target }] },
             });
         };
+        const bakedPostKinds = options.bakedPostPlan
+            ? [
+                  ...new Set(
+                      options.bakedPostPlan.map((stage) =>
+                          stage.kind === 'god-rays'
+                              ? 27
+                              : stage.kind === 'fused-vignette-film-grain'
+                                ? 25
+                                : stage.kind === 'fused-film-grain-vignette'
+                                  ? 26
+                                  : POST_KIND_INDEX[stage.kind],
+                      ),
+                  ),
+              ]
+            : [];
+        const compactBakedPost =
+            bakedPostKinds.length > 0 && bakedPostKinds.every((kind) => [1, 2, 3, 27].includes(kind));
+        const primaryPostKind = compactBakedPost ? bakedPostKinds[0] : undefined;
         self.pipelines = await Promise.all([
             make(BASE_SHADER_SOURCE, 'r16float'),
             make(BLUR_SHADER_SOURCE, 'rgba16float'),
@@ -1071,7 +1127,10 @@ export class AtmosphereRenderer {
             make(BLOOM_BLUR_SHADER_SOURCE, BLOOM_TEXTURE_FORMAT),
             make(GOD_RAYS_SHADER_SOURCE, GOD_RAYS_TEXTURE_FORMAT),
             make(MATERIALIZE_SHADER_SOURCE, 'rgba16float'),
-            make(POST_EFFECT_SHADER_SOURCE, POST_TEXTURE_FORMAT),
+            make(
+                primaryPostKind === undefined ? POST_EFFECT_SHADER_SOURCE : compactPostShaderSource(primaryPostKind),
+                POST_TEXTURE_FORMAT,
+            ),
             make(PRESENT_SHADER_SOURCE, format),
             make(COLOUR_EFFECT_SHADER_SOURCE, 'rgba16float'),
             make(LUT_SHADER_SOURCE, 'rgba16float'),
@@ -1108,6 +1167,16 @@ export class AtmosphereRenderer {
                     },
                 }),
             );
+        }
+        if (primaryPostKind !== undefined) {
+            self.compactPostPipelineIndices.set(primaryPostKind, 8);
+            if (primaryPostKind === 27) self.compactPostHistoryPipelines.add(8);
+            for (const kind of bakedPostKinds.slice(1)) {
+                const pipelineIndex = self.pipelines.length;
+                self.pipelines.push(await make(compactPostShaderSource(kind), POST_TEXTURE_FORMAT));
+                self.compactPostPipelineIndices.set(kind, pipelineIndex);
+                if (kind === 27) self.compactPostHistoryPipelines.add(pipelineIndex);
+            }
         }
         self.buffers = Array.from({ length: MAX_RENDER_PASSES }, () =>
             self.device!.createBuffer({
@@ -1535,7 +1604,10 @@ export class AtmosphereRenderer {
                     } else if (pipelineIndex === 4) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
                         entries.push({ binding: 4, resource: this.textureViews[4] });
-                    } else if (pipelineIndex === 8) {
+                    } else if (
+                        (pipelineIndex === 8 && this.compactPostPipelineIndices.size === 0) ||
+                        this.compactPostHistoryPipelines.has(pipelineIndex)
+                    ) {
                         entries.push({
                             binding: 3,
                             resource:
@@ -1757,7 +1829,16 @@ export class AtmosphereRenderer {
                 data[0] = this.textures[4].width;
                 data[1] = this.textures[4].height;
                 data[58] = 27;
-                draw(this.textureViews[destination], 8, rgbaCurrent, true, `${effect.label}:composite`, undefined, 6);
+                const pipelineIndex = this.compactPostPipelineIndices.get(27) ?? 8;
+                draw(
+                    this.textureViews[destination],
+                    pipelineIndex,
+                    rgbaCurrent,
+                    true,
+                    `${effect.label}:composite`,
+                    undefined,
+                    6,
+                );
                 rgbaCurrent = destination;
                 postRan = true;
                 continue;
@@ -1768,7 +1849,9 @@ export class AtmosphereRenderer {
                     : effect.kind === 'fused-film-grain-vignette'
                       ? 26
                       : POST_KIND_INDEX[effect.kind];
-            draw(this.textureViews[destination], 8, rgbaCurrent, true, effect.label);
+            const postKind = data[58];
+            const pipelineIndex = this.compactPostPipelineIndices.get(postKind) ?? 8;
+            draw(this.textureViews[destination], pipelineIndex, rgbaCurrent, true, effect.label);
             rgbaCurrent = destination;
             postRan = true;
         }
