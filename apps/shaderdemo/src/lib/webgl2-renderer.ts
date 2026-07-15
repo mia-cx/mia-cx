@@ -46,7 +46,44 @@ const SELECTORS = {
     COLOUR_EFFECT: 'float _e15 = _group_0_binding_0_fs.blurRadii[1].z;\n    int k = int(_e15);',
     OCTAVE: 'float _e11 = _group_0_binding_0_fs.octaveIndex;\n    uint octave = uint(_e11);',
 } as const;
+const COMPACT_POST_KINDS = new Set([1, 2, 3, 27]);
+function compactSpecializedPost(index: number): string {
+    const source = shader.POST_EFFECT;
+    const mainStart = source.indexOf('void main() {');
+    if (mainStart < 0) throw new Error('WebGL2 Post shader main function is missing.');
+    const header = source.slice(0, mainStart);
+    const common = `
+void main() {
+    vec4 pos = gl_FragCoord;
+    vec2 uv = pos.xy / _group_0_binding_0_fs.resolution;
+    vec2 px = vec2(1.0) / _group_0_binding_0_fs.resolution;
+    vec3 rgb = texture(_group_0_binding_1_fs, uv).xyz;`;
+    let effect: string;
+    if (index === 1 || index === 2)
+        effect = `
+    vec3 bloom = vec3(0.0);
+    vec2 radius = (1.0 + _group_0_binding_0_fs.post[5].y * 3.0) * px;
+    for (int x = -2; x <= 2; x++) for (int y = -2; y <= 2; y++) {
+        vec3 color = texture(_group_0_binding_1_fs, safe(uv + vec2(float(x), float(y)) * radius)).xyz;
+        float luminance = dot(max(color, vec3(0.0)), vec3(0.2126, 0.7152, 0.0722));
+        bloom += color * smoothstep(_group_0_binding_0_fs.post[4].z - _group_0_binding_0_fs.post[4].w, _group_0_binding_0_fs.post[4].z + _group_0_binding_0_fs.post[4].w, luminance);
+    }
+    bloom /= 25.0;
+    rgb = ${index === 1 ? 'blend_2(rgb, bloom * _group_0_binding_0_fs.post[5].x, _group_0_binding_0_fs.post[8].y)' : 'blend_2(rgb, hue(bloom, _group_0_binding_0_fs.post[6].x) * _group_0_binding_0_fs.post[5].w, _group_0_binding_0_fs.post[8].z)'};`;
+    else if (index === 3)
+        effect = `
+    float amount = p_3(25u) * 0.002;
+    vec2 radial = uv - vec2(0.5);
+    vec2 redUv = safe(uv + radial * amount);
+    vec2 blueUv = safe(uv - radial * amount);
+    rgb = vec3(texture(_group_0_binding_1_fs, redUv).x, rgb.y, texture(_group_0_binding_1_fs, blueUv).z);`;
+    else
+        effect = `
+    rgb = blend_2(rgb, texture(_group_0_binding_3_fs, uv).xyz, _group_0_binding_0_fs.post[8].x);`;
+    return `${header}const int kind = ${index};\n${common}${effect}\n    _fs2p_location0 = vec4(rgb, 1.0);\n}`;
+}
 export function specializeWebGL2Shader(name: keyof typeof SELECTORS, index: number): string {
+    if (name === 'POST_EFFECT' && COMPACT_POST_KINDS.has(index)) return compactSpecializedPost(index);
     const source = shader[name],
         selector = SELECTORS[name];
     const matches = source.split(selector).length - 1;

@@ -29,11 +29,16 @@ describe('WebGL2 parity backend', () => {
         }
     });
 
-    it('uses radial lens chromatic aberration with the centre unchanged', () => {
+    it('uses compact shaders for every baked Post stage and radial aberration', () => {
+        for (const kind of [1, 2, 3, 27]) {
+            const specialized = specializeWebGL2Shader('POST_EFFECT', kind);
+            expect(specialized.length).toBeLessThan(shaders.POST_EFFECT.length / 2);
+            expect(specialized.match(/void main\(\)/g)).toHaveLength(1);
+        }
         const source = specializeWebGL2Shader('POST_EFFECT', 3);
-        expect(source).toContain('vec2 radial = (uv - vec2(0.5))');
-        expect(source).toContain('uv + (radial * amount)');
-        expect(source).toContain('uv - (radial * amount)');
+        expect(source).toContain('vec2 radial = uv - vec2(0.5)');
+        expect(source).toContain('uv + radial * amount');
+        expect(source).toContain('uv - radial * amount');
         expect(source).not.toContain('vec2(d, 0.0)');
     });
 
