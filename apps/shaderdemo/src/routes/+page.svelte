@@ -9,6 +9,7 @@
     let renderer: RenderBackend | undefined;
     let ready = $state(false);
     let status = $state('Starting graphics…');
+    let fps = $state(0);
     let options = BAKED_RENDER_OPTIONS;
     const cursorState = new CursorState();
     const cursorDensityField = new CursorDensityField();
@@ -69,6 +70,13 @@
             .then(({ renderer: instance }) => {
                 if (disposed) return instance.destroy();
                 renderer = instance;
+                let lastFpsUpdate = 0;
+                instance.onStats = (nextFps) => {
+                    const now = performance.now();
+                    if (now - lastFpsUpdate < 500) return;
+                    lastFpsUpdate = now;
+                    fps = nextFps;
+                };
                 instance.setCursorState(cursorState);
                 const rect = canvas.getBoundingClientRect();
                 if (!instance.gpuCursorDensity) {
@@ -160,6 +168,7 @@
 </svelte:head>
 
 <canvas class:ready bind:this={canvas} aria-label="Animated coloured noise field"></canvas>
+{#if ready}<output class="fps" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
 {#if !ready}<p class="status" role="status" aria-live="polite">{status}</p>{/if}
 
 <style>
@@ -188,6 +197,19 @@
     canvas.ready {
         opacity: 1;
         transition: opacity 0.35s ease;
+    }
+    .fps {
+        position: fixed;
+        top: max(0.5rem, env(safe-area-inset-top));
+        left: max(0.5rem, env(safe-area-inset-left));
+        z-index: 1;
+        padding: 0.25rem 0.4rem;
+        color: #fff;
+        background: rgb(0 0 0 / 70%);
+        font:
+            12px/1.2 ui-monospace,
+            monospace;
+        pointer-events: none;
     }
     .status {
         position: absolute;

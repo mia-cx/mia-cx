@@ -8,11 +8,13 @@ import { leadingAdjustmentRegion, rendererStagePlan } from '$lib/pipeline';
 const source = readFileSync(new URL('./+page.svelte', import.meta.url), 'utf8');
 
 describe('baked shader-only page', () => {
-    it('contains only the canvas and nonvisual status fallback', () => {
+    it('contains only the canvas, basic FPS counter, and nonvisual status fallback', () => {
         expect(source).toContain('<canvas');
+        expect(source).toContain('class="fps"');
+        expect(source).toContain('{fps.toFixed(1)} FPS');
         for (const markup of ['<main', '<article', '<header', '<nav', '<button', '<input', '<select'])
             expect(source).not.toContain(markup);
-        for (const ui of ['telemetry', 'FPS', 'Export settings', 'Reset defaults', 'ParameterEditor'])
+        for (const ui of ['telemetry', 'Export settings', 'Reset defaults', 'ParameterEditor'])
             expect(source).not.toContain(ui);
     });
 
