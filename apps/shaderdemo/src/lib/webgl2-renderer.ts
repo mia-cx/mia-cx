@@ -33,7 +33,7 @@ import {
     type GpuDensitySegment,
 } from './cursor-density-gpu';
 
-export const WEBGL2_STARTUP_SCALE = 0.5;
+export const WEBGL2_STARTUP_SCALE = 0.25;
 /** WebGL2 implements the complete canonical inventory. Kept as an export for capability UI/tests. */
 export const WEBGL2_SUPPORTED_POST = new Set(Object.keys(POST_KIND_INDEX));
 export const WEBGL2_SUPPORTED_COLOUR = new Set([
@@ -152,6 +152,7 @@ const ABLATION_WARMUPS = 3,
     ABLATION_SAMPLES = 8;
 const FENCE_POLL_MS = 4;
 const FENCE_EMERGENCY_MS = 750;
+const TIMER_QUERY_WATCHDOG_MS = 1_000;
 export type WebGL2TargetKind = 'base' | 'colour' | 'post' | 'god-rays';
 type Target = {
     texture: WebGLTexture;
@@ -265,6 +266,7 @@ export class WebGL2Renderer implements RenderBackend {
     private adaptive: AdaptiveResolutionController;
     private timerQuery?: TimerQueryExtension;
     private pendingTimerQueries: PendingTimerQuery[] = [];
+    private lastTimerQueryEvidence = performance.now();
     private adaptiveGeneration = 0;
     private telemetry = new FrameTelemetry();
     private observer: ResizeObserver;
@@ -653,7 +655,10 @@ export class WebGL2Renderer implements RenderBackend {
         if (!this.paused) this.simTime += Math.min((now - this.lastTick) / 1000, 0.1) * p.animationSpeed;
         this.lastTick = now;
         const internalResolution: [number, number] = [this.baseTargets[0].width, this.baseTargets[0].height];
-        const timer = !ablationReady && !this.paused && this.timerQuery ? this.gl.createQuery() : null;
+        const timer =
+            !ablationReady && !this.paused && this.timerQuery && this.pendingTimerQueries.length === 0
+                ? this.gl.createQuery()
+                : null;
         if (timer) this.gl.beginQuery(this.timerQuery!.TIME_ELAPSED_EXT, timer);
         let data = packUniform(internalResolution, this.simTime, this.options.seed, p, 0, this.frame),
             current = 0,
@@ -973,11 +978,10 @@ export class WebGL2Renderer implements RenderBackend {
         if (!this.destroyed && !this.raf) this.raf = requestAnimationFrame(this.tick);
     }
     private pollTimerQueries() {
-        if (!this.timerQuery || !this.pendingTimerQueries.length) return;
+        if (!this.timerQuery) return;
         const gl = this.gl;
         if (gl.getParameter(this.timerQuery.GPU_DISJOINT_EXT)) {
-            for (const pending of this.pendingTimerQueries) gl.deleteQuery(pending.query);
-            this.pendingTimerQueries = [];
+            this.disableTimerQueries();
             return;
         }
         while (this.pendingTimerQueries.length) {
@@ -986,6 +990,7 @@ export class WebGL2Renderer implements RenderBackend {
             this.pendingTimerQueries.shift();
             const elapsedNs = gl.getQueryParameter(pending.query, gl.QUERY_RESULT) as number;
             gl.deleteQuery(pending.query);
+            if (Number.isFinite(elapsedNs) && elapsedNs > 0) this.lastTimerQueryEvidence = performance.now();
             if (pending.generation !== this.adaptiveGeneration) continue;
             const nextScale = this.adaptive.sampleGpu(
                 elapsedNs / 1_000_000,
@@ -995,6 +1000,12 @@ export class WebGL2Renderer implements RenderBackend {
             );
             if (nextScale !== undefined) this.recreateTargets();
         }
+        if (performance.now() - this.lastTimerQueryEvidence >= TIMER_QUERY_WATCHDOG_MS) this.disableTimerQueries();
+    }
+    private disableTimerQueries() {
+        for (const pending of this.pendingTimerQueries) this.gl.deleteQuery(pending.query);
+        this.pendingTimerQueries = [];
+        this.timerQuery = undefined;
     }
     private scheduleFencePoll() {
         if (this.fencePollTimer === undefined)

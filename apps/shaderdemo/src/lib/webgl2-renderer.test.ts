@@ -55,7 +55,7 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).not.toContain('if (l) gl.uniform1i');
     });
     it('uses the canonical translated multipass shader inventory', () => {
-        expect(WEBGL2_STARTUP_SCALE).toBe(0.5);
+        expect(WEBGL2_STARTUP_SCALE).toBe(0.25);
         expect(WEBGL2_FRAGMENT_SOURCE).toBe(shaders.BASE);
         expect(Object.keys(shaders).sort()).toEqual(
             [
@@ -213,6 +213,9 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).toContain('pending.scale');
         expect(implementation).toContain('this.adaptive.sampleGpu');
         expect(implementation).toContain('if (nextScale !== void 0) this.recreateTargets()');
+        expect(implementation).toContain('this.pendingTimerQueries.length === 0');
+        expect(implementation).toContain('TIMER_QUERY_WATCHDOG_MS');
+        expect(implementation).toContain('this.disableTimerQueries()');
         expect(implementation).not.toContain('performance.now() - this.fenceStartedAt');
     });
 
