@@ -260,7 +260,6 @@ export class WebGL2Renderer implements RenderBackend {
     private frame = 0;
     private simTime = 0;
     private lastTick = performance.now();
-    private lastPresented = 0;
     private historyValid = false;
     private datamoshWasActive = false;
     private adaptive: AdaptiveResolutionController;
@@ -270,6 +269,15 @@ export class WebGL2Renderer implements RenderBackend {
     private adaptiveGeneration = 0;
     private telemetry = new FrameTelemetry();
     private observer: ResizeObserver;
+    private readonly visibilityHandler = () => {
+        this.lastTick = performance.now();
+        if (document.hidden) {
+            this.telemetry.reset();
+            this.adaptive.reset(this.lastTick);
+            this.adaptiveGeneration += 1;
+            this.resetCursorDensityStroke();
+        }
+    };
     private lutTextures = new Map<string, WebGLTexture>();
     private adjustmentTexture?: WebGLTexture;
     private samplerLocations = new Map<WebGLProgram, (WebGLUniformLocation | null)[]>();
@@ -367,6 +375,7 @@ export class WebGL2Renderer implements RenderBackend {
 
         canvas.addEventListener('webglcontextlost', self.contextLost);
         canvas.addEventListener('webglcontextrestored', self.contextRestored);
+        document.addEventListener('visibilitychange', self.visibilityHandler);
         self.observer.observe(canvas);
         self.resize();
         self.onGpuStats?.(null);
@@ -652,7 +661,7 @@ export class WebGL2Renderer implements RenderBackend {
             (this.adaptive.effectiveScale <= 0.126 || performance.now() >= this.webglAblateDeadline);
         if (ablationReady && !this.ablationVariants) this.beginAblation(rendererStagePlan(this.options.post, p));
         const ablation = this.ablationVariants?.[this.ablationVariant];
-        if (!this.paused) this.simTime += Math.min((now - this.lastTick) / 1000, 0.1) * p.animationSpeed;
+        if (!this.paused) this.simTime += Math.max(0, (now - this.lastTick) / 1000) * p.animationSpeed;
         this.lastTick = now;
         const internalResolution: [number, number] = [this.baseTargets[0].width, this.baseTargets[0].height];
         const timer =
@@ -888,7 +897,6 @@ export class WebGL2Renderer implements RenderBackend {
         }
         this.gl.flush();
         this.invalid = false;
-        this.lastPresented = now;
         this.telemetry.recordRenderedFrame(now);
         const s = this.telemetry.summary(now);
         this.onStats?.(
@@ -1050,7 +1058,7 @@ export class WebGL2Renderer implements RenderBackend {
         if (this.destroyed) return;
         this.pollTimerQueries();
         if (this.pendingFence) return;
-        if ((!this.paused && now - this.lastPresented + 0.5 >= 1000 / 30) || this.invalid) this.render(now);
+        if (!this.paused || this.invalid) this.render(now);
         if (!this.paused) this.schedule();
     };
     private contextLost = (e: Event) => {
@@ -1147,6 +1155,7 @@ export class WebGL2Renderer implements RenderBackend {
         this.observer.disconnect();
         this.canvas.removeEventListener('webglcontextlost', this.contextLost);
         this.canvas.removeEventListener('webglcontextrestored', this.contextRestored);
+        document.removeEventListener('visibilitychange', this.visibilityHandler);
         for (const p of this.programs.values()) this.gl.deleteProgram(p);
         for (const x of this.allTargets()) {
             this.gl.deleteTexture(x.texture);

@@ -91,7 +91,7 @@
         let cursorTime = performance.now();
         const animateCursor = (now: number) => {
             if (!document.hidden) {
-                const dt = (now - cursorTime) / 1000;
+                const dt = Math.max(0, (now - cursorTime) / 1000);
                 if (!paused) {
                     cursorState.tick(dt);
                     sendCursor();

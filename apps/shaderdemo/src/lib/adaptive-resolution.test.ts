@@ -63,6 +63,13 @@ describe('GPU-processing-only adaptive resolution', () => {
         expect(controller.effectiveScale).toBe(1);
     });
 
+    it('raises quality above 30 FPS and lowers it below 30 FPS', () => {
+        const recovering = new AdaptiveResolutionController(1, { initialScale: 0.5 });
+        expect(recovering.sampleGpu(31)).toBeGreaterThan(0.5);
+        const overloaded = new AdaptiveResolutionController(1);
+        expect(overloaded.sampleGpu(34)).toBeLessThan(1);
+    });
+
     it('recovers across a low-power to charger performance transition', () => {
         const controller = new AdaptiveResolutionController(1);
         for (let i = 0; i < 6; i += 1) gpuWindow(controller, 45);

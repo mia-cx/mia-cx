@@ -71,4 +71,12 @@ describe('CursorState', () => {
         state.tick(1);
         expect(state.movingEnergy).toBeLessThan(energy);
     });
+    it('ages and decays by elapsed time rather than frame count', () => {
+        const oneStep = new CursorState().update(10, 10, rect, 10).update(110, 10, rect, 30);
+        const manySteps = new CursorState().update(10, 10, rect, 10).update(110, 10, rect, 30);
+        oneStep.tick(1);
+        for (let frame = 0; frame < 120; frame += 1) manySteps.tick(1 / 120);
+        expect(manySteps.clickAge).toBeCloseTo(oneStep.clickAge, 12);
+        expect(manySteps.movingEnergy).toBeCloseTo(oneStep.movingEnergy, 12);
+    });
 });

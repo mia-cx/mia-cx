@@ -31,6 +31,7 @@ import {
     UNIFORM_FLOATS,
     GPU_TIMING_SAMPLE_INTERVAL,
     GPU_FRAME_TIMING_RING_SIZE,
+    GPU_TIMING_WATCHDOG_MS,
     MAX_IN_FLIGHT_SUBMISSIONS,
     aggregateGpuTimestamps,
     advanceSimulationTime,
@@ -220,6 +221,7 @@ describe('field configuration', () => {
         const source = AtmosphereRenderer.toString();
         expect(GPU_FRAME_TIMING_RING_SIZE).toBeGreaterThanOrEqual(3);
         expect(MAX_IN_FLIGHT_SUBMISSIONS).toBe(3);
+        expect(GPU_TIMING_WATCHDOG_MS).toBe(1_000);
         expect(GPU_TIMING_SAMPLE_INTERVAL).toBe(30);
         expect(source).toContain('acquireFrameTimingSlot');
         expect(source).toContain('beginComputePass');
@@ -233,10 +235,13 @@ describe('field configuration', () => {
         expect(source).toContain('this.submissionsInFlight < MAX_IN_FLIGHT_SUBMISSIONS');
         expect(source).toContain('const hadOlderSubmission = this.submissionsInFlight > 0');
         expect(source).toContain('!hadOlderSubmission');
+        expect(source).toContain('const drainingForTimingFallback');
+        expect(source).toContain('this.lastGpuTimingEvidenceAt = completedAt');
         expect(source).not.toContain('submissionPending');
         expect(source).not.toContain('adaptiveResolution.sample(dt');
-        expect(source).toContain('frameInterval = 1e3 / 30');
-        expect(source).toContain('now + 0.5 < this.nextRenderAt');
+        expect(source).not.toContain('frameInterval = 1e3 / 30');
+        expect(source).not.toContain('nextRenderAt');
+        expect(source).toContain('const dt = Math.max(0, (now - this.lastTime) / 1e3)');
         expect(source).toContain('slot.resolve.destroy()');
         expect(source).toContain('slot.readback.destroy()');
     });
@@ -333,6 +338,12 @@ describe('field configuration', () => {
         expect(advanceSimulationTime(12, 0, 3)).toBe(12);
         expect(advanceSimulationTime(12, 0.5, 1)).toBe(12.5);
         expect(advanceSimulationTime(12, 0.5, 3)).toBe(13.5);
+    });
+    it('advances evolution by elapsed time rather than rendered frame count', () => {
+        const oneStep = advanceSimulationTime(0, 1, 0.45);
+        let manySteps = 0;
+        for (let frame = 0; frame < 120; frame += 1) manySteps = advanceSimulationTime(manySteps, 1 / 120, 0.45);
+        expect(manySteps).toBeCloseTo(oneStep, 12);
     });
     it('defines five independent groups of four valid controls', () => {
         expect(FIELD_PARAMETER_SCHEMA).toHaveLength(25);

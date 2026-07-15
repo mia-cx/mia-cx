@@ -93,7 +93,7 @@ export class CursorState implements CursorSnapshot {
     }
     /** Advance transient ages. Do not call while paused: trails and click ripples then freeze exactly. */
     tick(dtSeconds: number) {
-        const dt = Math.max(0, Math.min(0.25, dtSeconds));
+        const dt = Math.max(0, dtSeconds);
         this.clickAge += dt;
         for (let i = 0; i < this.trailCount; i++) this.trail[i].age += dt;
         this.movingEnergy *= Math.exp(-dt * 5);

@@ -249,4 +249,11 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).toContain('this.frame = (this.frame + 1)');
         expect(implementation).toContain('const timer = !ablationReady && !this.paused && this.timerQuery');
     });
+
+    it('renders at browser cadence and advances evolution from elapsed time', () => {
+        const implementation = WebGL2Renderer.toString();
+        expect(implementation).not.toContain('1000 / 30');
+        expect(implementation).not.toContain('lastPresented');
+        expect(implementation).toContain('Math.max(0, (now - this.lastTick) / 1e3) * p.animationSpeed');
+    });
 });

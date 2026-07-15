@@ -42,7 +42,9 @@ export class AdaptiveResolutionController {
             quantum: options.quantum ?? 0.025,
             maxWindowFrames: options.maxWindowFrames ?? 512,
             targetMs: options.targetMs ?? 1000 / 30,
-            headroomMs: options.headroomMs ?? 28,
+            // Recover quality whenever processing remains safely above 30 FPS. The narrow gap to the
+            // 33.3 ms downscale threshold prevents one noisy sample from bouncing between scales.
+            headroomMs: options.headroomMs ?? 32,
             assumedFixedMs: options.assumedFixedMs ?? 1.5,
             maxDownRatio: options.maxDownRatio ?? 0.55,
             maxUpRatio: options.maxUpRatio ?? 1.3,
@@ -119,8 +121,10 @@ export class AdaptiveResolutionController {
         this.windowFrames = Math.min(this.config.maxWindowFrames, this.windowFrames * 2);
         this.record(this.scale, p99);
 
-        if (p99 > this.config.targetMs && this.scale > this.minScale) return this.move(this.predict(p99, false));
-        if (p99 < this.config.headroomMs && this.scale < this.ceiling) return this.move(this.predict(p99, true));
+        if (p99 > this.config.targetMs && this.scale > this.minScale)
+            return this.move(this.predict(p99, false)) ?? this.move(this.scale - this.quantum);
+        if (p99 < this.config.headroomMs && this.scale < this.ceiling)
+            return this.move(this.predict(p99, true)) ?? this.move(this.scale + this.quantum);
         return undefined;
     }
 

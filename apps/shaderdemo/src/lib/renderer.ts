@@ -71,6 +71,7 @@ const CURSOR_DECAY_PIPELINE = 13;
 const CURSOR_PAINT_PIPELINE = 14;
 export const GPU_FRAME_TIMING_RING_SIZE = 3;
 export const MAX_IN_FLIGHT_SUBMISSIONS = 3;
+export const GPU_TIMING_WATCHDOG_MS = 1_000;
 type FrameTimingSlot = {
     resolve: GPUBuffer;
     readback: GPUBuffer;
@@ -1026,7 +1027,6 @@ export class AtmosphereRenderer {
     private simTime = 0;
     private frameIndex = 0;
     private lastTime = performance.now();
-    private nextRenderAt = 0;
     private statsStartedAt = this.lastTime;
     private statsFrames = 0;
     private frameTelemetry = new FrameTelemetry();
@@ -1046,8 +1046,9 @@ export class AtmosphereRenderer {
     private lastGpuTimingEvidenceAt = performance.now();
     private adaptiveGeneration = 0;
     private readonly visibilityHandler = () => {
+        this.lastTime = performance.now();
         if (document.hidden) {
-            this.resetAdaptive(performance.now());
+            this.resetAdaptive(this.lastTime);
             this.resetCursorDensityStroke();
         }
     };
@@ -1459,7 +1460,6 @@ export class AtmosphereRenderer {
         if (value === this.paused) return;
         this.paused = value;
         this.lastTime = performance.now();
-        this.nextRenderAt = 0;
         this.statsStartedAt = this.lastTime;
         this.statsFrames = 0;
         this.frameTelemetry.reset();
@@ -1493,24 +1493,21 @@ export class AtmosphereRenderer {
         this.rafId = 0;
         if (this.destroyed) return;
         const animated = !this.paused;
-        const frameInterval = 1000 / 30;
-        if (animated && this.nextRenderAt > 0 && now + 0.5 < this.nextRenderAt) {
-            this.schedule();
-            return;
-        }
-        const dt = Math.min(0.1, Math.max(0, (now - this.lastTime) / 1000));
+        const dt = Math.max(0, (now - this.lastTime) / 1000);
         this.lastTime = now;
         if (animated) this.simTime = advanceSimulationTime(this.simTime, dt, this.options.parameters.animationSpeed);
-        if ((this.invalid || animated) && this.submissionsInFlight < MAX_IN_FLIGHT_SUBMISSIONS) {
+        // If every timestamp path has stalled, briefly drain the bounded queue so the next submission has
+        // no older work ahead of it and its completion latency is usable as processing evidence.
+        const drainingForTimingFallback =
+            animated && now - this.lastGpuTimingEvidenceAt > GPU_TIMING_WATCHDOG_MS && this.submissionsInFlight > 0;
+        if (
+            (this.invalid || animated) &&
+            !drainingForTimingFallback &&
+            this.submissionsInFlight < MAX_IN_FLIGHT_SUBMISSIONS
+        ) {
             this.render();
             this.invalid = false;
             if (animated) {
-                if (this.nextRenderAt === 0 || now - this.nextRenderAt > frameInterval * 2)
-                    this.nextRenderAt = now + frameInterval;
-                else {
-                    do this.nextRenderAt += frameInterval;
-                    while (this.nextRenderAt <= now);
-                }
                 this.frameTelemetry.recordRenderedFrame(now);
                 this.statsFrames += 1;
                 if (document.hidden) this.resetAdaptive(now);
@@ -1919,8 +1916,9 @@ export class AtmosphereRenderer {
                     submissionGeneration === this.adaptiveGeneration &&
                     !this.paused &&
                     !document.hidden &&
-                    completedAt - this.lastGpuTimingEvidenceAt > 1_000
+                    completedAt - this.lastGpuTimingEvidenceAt > GPU_TIMING_WATCHDOG_MS
                 ) {
+                    this.lastGpuTimingEvidenceAt = completedAt;
                     const nextScale = this.adaptiveResolution.sampleGpu(
                         completedAt - submissionStartedAt,
                         completedAt,
