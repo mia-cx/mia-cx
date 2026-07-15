@@ -24,7 +24,7 @@
         renderer?.resetCursorDensityStroke?.();
     }
     function resizeCursorDensity(rect: DOMRect) {
-        if (renderer?.backend === 'webgpu') return;
+        if (renderer?.gpuCursorDensity) return;
         if (cursorDensityField.resize(rect.width, rect.height))
             renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
     }
@@ -71,7 +71,7 @@
                 renderer = instance;
                 instance.setCursorState(cursorState);
                 const rect = canvas.getBoundingClientRect();
-                if (instance.backend === 'webgl2') {
+                if (!instance.gpuCursorDensity) {
                     cursorDensityField.resize(rect.width, rect.height);
                     instance.setCursorDensityField(cursorDensityField.snapshot());
                 }
@@ -100,7 +100,7 @@
                 resizeCursorDensity(rect);
                 const batch = densityPoints;
                 densityPoints = [];
-                const gpuPath = renderer?.backend === 'webgpu';
+                const gpuPath = renderer?.gpuCursorDensity === true;
                 const painted = gpuPath
                     ? false
                     : cursorDensityField.addStrokeBatch(

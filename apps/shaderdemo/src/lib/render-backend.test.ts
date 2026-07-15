@@ -4,6 +4,7 @@ import { selectRenderBackend, type RenderBackend } from './render-backend';
 const backend = (name: 'webgpu' | 'webgl2') =>
     ({
         backend: name,
+        gpuCursorDensity: true,
         setOptions: vi.fn(),
         setCursorState: vi.fn(),
         setCursorDensityField: vi.fn(),

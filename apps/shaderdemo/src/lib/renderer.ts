@@ -984,6 +984,7 @@ struct Out { @builtin(position) position:vec4f,@location(0) q:vec2f,@location(1)
 
 export class AtmosphereRenderer {
     readonly backend = 'webgpu' as const;
+    readonly gpuCursorDensity = true;
     private device?: GPUDevice;
     private context: GPUCanvasContext | null = null;
     private pipelines: GPURenderPipeline[] = [];

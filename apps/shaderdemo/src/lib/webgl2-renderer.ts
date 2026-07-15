@@ -23,6 +23,15 @@ import * as compactShader from './webgl2-compact-shaders';
 import type { CursorSnapshot } from './cursor';
 import type { CursorDensityFieldSnapshot } from './cursor-density-field';
 import { CURSOR_UNIFORM_BYTES, packCursorUniform } from './cursor-uniform';
+import {
+    DENSITY_EXTINCTION_THRESHOLD,
+    GpuDensityGeometry,
+    MAX_GPU_DENSITY_SEGMENTS,
+    appendBoundedDensitySegments,
+    densityMapSize,
+    type CursorDensityUpdate,
+    type GpuDensitySegment,
+} from './cursor-density-gpu';
 
 export const WEBGL2_STARTUP_SCALE = 0.5;
 /** WebGL2 implements the complete canonical inventory. Kept as an export for capability UI/tests. */
@@ -38,6 +47,32 @@ export const WEBGL2_FRAGMENT_SOURCE = shader.BASE;
 const VERTEX = `#version 300 es
 const vec2 P[3]=vec2[3](vec2(-1.,-1.),vec2(3.,-1.),vec2(-1.,3.));
 void main(){gl_Position=vec4(P[gl_VertexID],0.,1.);}`;
+export const WEBGL2_CURSOR_DECAY_SOURCE = `#version 300 es
+precision highp float;
+uniform sampler2D densitySource;
+uniform float decay;
+uniform vec2 densitySize;
+out float result;
+void main(){result=texture(densitySource,gl_FragCoord.xy/densitySize).r*decay;}`;
+export const WEBGL2_CURSOR_PAINT_VERTEX_SOURCE = `#version 300 es
+precision highp float;
+layout(location=0) in vec4 endpoints;
+layout(location=1) in vec3 values;
+uniform float aspect;
+out vec2 q;
+flat out vec2 a;
+flat out vec2 b;
+flat out vec3 paintValues;
+const vec2 corners[6]=vec2[6](vec2(-1.,-1.),vec2(1.,-1.),vec2(-1.,1.),vec2(-1.,1.),vec2(1.,-1.),vec2(1.,1.));
+void main(){a=endpoints.xy;b=endpoints.zw;paintValues=values;vec2 lo=min(a,b)-values.x;vec2 hi=max(a,b)+values.x;q=mix(lo,hi,(corners[gl_VertexID]+1.)*.5);gl_Position=vec4(q.x/aspect,q.y,0.,1.);}`;
+export const WEBGL2_CURSOR_PAINT_FRAGMENT_SOURCE = `#version 300 es
+precision highp float;
+in vec2 q;
+flat in vec2 a;
+flat in vec2 b;
+flat in vec3 paintValues;
+out float result;
+void main(){vec2 d=b-a;float dd=dot(d,d);float t=dd>0.?clamp(dot(q-a,d)/dd,0.,1.):0.;float distance=length(q-(a+t*d))/paintValues.x;if(distance>=1.)discard;float perceptualDistance=log(1.+9.*distance)/log(10.);float inverseSquare=1./(1.+12.*max(paintValues.z,0.)*perceptualDistance*perceptualDistance);float edgeT=clamp((distance-.92)/.08,0.,1.);float edge=1.-edgeT*edgeT*(3.-2.*edgeT);result=paintValues.y*inverseSquare*edge;}`;
 type ProgramName = keyof typeof shader;
 type SpecializedProgramName = `${'POST_EFFECT' | 'COLOUR_EFFECT' | 'OCTAVE'}:${number}`;
 type ProgramKey = ProgramName | SpecializedProgramName;
@@ -167,9 +202,26 @@ function program(gl: WebGL2RenderingContext, fragment: string) {
         throw new Error(`WebGL2 program link failed: ${gl.getProgramInfoLog(p)}`);
     return p;
 }
+function linkedProgram(gl: WebGL2RenderingContext, vertex: string, fragment: string) {
+    const vs = compile(gl, gl.VERTEX_SHADER, vertex),
+        fs = compile(gl, gl.FRAGMENT_SHADER, fragment),
+        p = gl.createProgram();
+    if (!p) throw new Error('Could not allocate a WebGL2 program.');
+    gl.attachShader(p, vs);
+    gl.attachShader(p, fs);
+    gl.linkProgram(p);
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS))
+        throw new Error(`WebGL2 program link failed: ${gl.getProgramInfoLog(p)}`);
+    return p;
+}
+
+type DensityTarget = { texture: WebGLTexture; framebuffer: WebGLFramebuffer };
 
 export class WebGL2Renderer implements RenderBackend {
     readonly backend = 'webgl2' as const;
+    readonly gpuCursorDensity = true;
     readonly unsupportedEffects: string[] = [];
     onStats: RenderBackend['onStats'];
     onGpuStats: RenderBackend['onGpuStats'];
@@ -182,11 +234,20 @@ export class WebGL2Renderer implements RenderBackend {
     private history?: Target;
     private uniformBuffer: WebGLBuffer;
     private cursorBuffer: WebGLBuffer;
-    private densityTexture: WebGLTexture;
+    private densityTargets: DensityTarget[] = [];
+    private densityActive = 0;
     private densityWidth = 1;
     private densityHeight = 1;
-    private densityVersion = -1;
-    private densityUpload = new Uint8Array(0);
+    private densityGeometry = new GpuDensityGeometry();
+    private densitySegments: GpuDensitySegment[] = [];
+    private densityDecay = 1;
+    private densityMayBeNonzero = false;
+    private densityMaxEstimate = 0;
+    private densityDroppedSegments = 0;
+    private densityDecayProgram: WebGLProgram;
+    private densityPaintProgram: WebGLProgram;
+    private densityVao: WebGLVertexArrayObject;
+    private densitySegmentBuffer: WebGLBuffer;
     private vao: WebGLVertexArrayObject;
     private raf = 0;
     private pendingFence: PendingFence | null = null;
@@ -236,18 +297,31 @@ export class WebGL2Renderer implements RenderBackend {
         const ubo = gl.createBuffer(),
             cursorUbo = gl.createBuffer(),
             vao = gl.createVertexArray(),
-            density = gl.createTexture();
-        if (!ubo || !cursorUbo || !vao || !density) throw new Error('WebGL2 resource allocation failed.');
+            densityVao = gl.createVertexArray(),
+            densityBuffer = gl.createBuffer();
+        if (!ubo || !cursorUbo || !vao || !densityVao || !densityBuffer)
+            throw new Error('WebGL2 resource allocation failed.');
         this.uniformBuffer = ubo;
         this.cursorBuffer = cursorUbo;
         this.vao = vao;
-        this.densityTexture = density;
-        gl.bindTexture(gl.TEXTURE_2D, density);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 1, 1, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array(1));
+        this.densityVao = densityVao;
+        this.densitySegmentBuffer = densityBuffer;
+        this.densityDecayProgram = program(gl, WEBGL2_CURSOR_DECAY_SOURCE);
+        this.densityPaintProgram = linkedProgram(
+            gl,
+            WEBGL2_CURSOR_PAINT_VERTEX_SOURCE,
+            WEBGL2_CURSOR_PAINT_FRAGMENT_SOURCE,
+        );
+        gl.bindVertexArray(densityVao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, densityBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, MAX_GPU_DENSITY_SEGMENTS * 7 * 4, gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 7 * 4, 0);
+        gl.vertexAttribDivisor(0, 1);
+        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 7 * 4, 4 * 4);
+        gl.vertexAttribDivisor(1, 1);
+        this.recreateDensityTargets(1, 1);
         this.adaptive = new AdaptiveResolutionController(options.renderScale, {
             initialScale: Math.min(WEBGL2_STARTUP_SCALE, options.renderScale),
             severeSamples: 1,
@@ -349,6 +423,107 @@ export class WebGL2Renderer implements RenderBackend {
         this.boundTextures.clear();
         return { texture, framebuffer, width, height, kind };
     }
+    private recreateDensityTargets(width: number, height: number) {
+        const gl = this.gl;
+        for (const target of this.densityTargets) {
+            gl.deleteTexture(target.texture);
+            gl.deleteFramebuffer(target.framebuffer);
+        }
+        this.densityTargets = Array.from({ length: 2 }, () => {
+            const texture = gl.createTexture(),
+                framebuffer = gl.createFramebuffer();
+            if (!texture || !framebuffer) throw new Error('WebGL2 density target allocation failed.');
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, width, height, 0, gl.RED, gl.HALF_FLOAT, null);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+            if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE)
+                throw new Error('WebGL2 density framebuffer is incomplete.');
+            gl.viewport(0, 0, width, height);
+            gl.clearColor(0, 0, 0, 0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            return { texture, framebuffer };
+        });
+        this.densityWidth = width;
+        this.densityHeight = height;
+        this.densityActive = 0;
+        this.densityDecay = 1;
+        this.densityMayBeNonzero = false;
+        this.densityMaxEstimate = 0;
+        this.densitySegments = [];
+        this.densityGeometry.reset();
+        this.currentFramebuffer = undefined;
+        this.currentViewport = '';
+        this.currentProgram = null;
+        this.currentVao = null;
+        this.boundTextures.clear();
+    }
+    /** Apply accumulated decay before max-blended paint, matching the WebGPU pass order. */
+    private renderCursorDensity() {
+        const gl = this.gl;
+        if (this.densityDecay < 1) {
+            const next = 1 - this.densityActive;
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.densityTargets[next].framebuffer);
+            gl.viewport(0, 0, this.densityWidth, this.densityHeight);
+            gl.useProgram(this.densityDecayProgram);
+            gl.bindVertexArray(this.vao);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, this.densityTargets[this.densityActive].texture);
+            gl.uniform1i(gl.getUniformLocation(this.densityDecayProgram, 'densitySource'), 0);
+            gl.uniform1f(gl.getUniformLocation(this.densityDecayProgram, 'decay'), this.densityDecay);
+            gl.uniform2f(
+                gl.getUniformLocation(this.densityDecayProgram, 'densitySize'),
+                this.densityWidth,
+                this.densityHeight,
+            );
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+            this.densityActive = next;
+            this.densityDecay = 1;
+        }
+        if (this.densitySegments.length) {
+            const packed = new Float32Array(this.densitySegments.length * 7);
+            this.densitySegments.forEach((s, i) =>
+                packed.set([s.ax, s.ay, s.bx, s.by, s.radius, s.strength, s.falloff], i * 7),
+            );
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.densityTargets[this.densityActive].framebuffer);
+            gl.viewport(0, 0, this.densityWidth, this.densityHeight);
+            gl.useProgram(this.densityPaintProgram);
+            gl.bindVertexArray(this.densityVao);
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.densitySegmentBuffer);
+            gl.bufferSubData(gl.ARRAY_BUFFER, 0, packed);
+            gl.uniform1f(
+                gl.getUniformLocation(this.densityPaintProgram, 'aspect'),
+                this.densityWidth / this.densityHeight,
+            );
+            gl.enable(gl.BLEND);
+            gl.blendEquation(gl.MAX);
+            gl.blendFunc(gl.ONE, gl.ONE);
+            gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.densitySegments.length);
+            gl.disable(gl.BLEND);
+            gl.blendEquation(gl.FUNC_ADD);
+            this.densitySegments = [];
+            this.densityMayBeNonzero = true;
+        }
+        if (this.densityMayBeNonzero && this.densityMaxEstimate < DENSITY_EXTINCTION_THRESHOLD) {
+            for (const target of this.densityTargets) {
+                gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
+                gl.clearColor(0, 0, 0, 0);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+            }
+            this.densityMayBeNonzero = false;
+            this.densityMaxEstimate = 0;
+        }
+        this.currentFramebuffer = undefined;
+        this.currentViewport = '';
+        this.currentProgram = null;
+        this.currentVao = null;
+        this.activeUnit = -1;
+        this.boundTextures.clear();
+    }
     private allTargets() {
         return [
             ...this.baseTargets,
@@ -441,7 +616,7 @@ export class WebGL2Renderer implements RenderBackend {
         bind(0, source);
         bind(1, aux);
         bind(1, cube, gl.TEXTURE_3D);
-        if (name === 'BASE') bind(2, this.densityTexture);
+        if (name === 'BASE') bind(2, this.densityTargets[this.densityActive].texture);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     private uploadCube(data: Uint16Array, size: number) {
@@ -460,6 +635,7 @@ export class WebGL2Renderer implements RenderBackend {
     private render(now: number) {
         const targets = this.colourTargets;
         if (!targets.length) return;
+        this.renderCursorDensity();
         const p = this.options.parameters;
         const ablationReady =
             this.webglAblate &&
@@ -893,24 +1069,38 @@ export class WebGL2Renderer implements RenderBackend {
         this.cursorState = state;
         this.invalidate();
     }
-    setCursorDensityField(field: CursorDensityFieldSnapshot) {
-        if (field.version === this.densityVersion) return;
-        const gl = this.gl;
-        const uploadSize = field.width * field.height;
-        if (this.densityUpload.length !== uploadSize) this.densityUpload = new Uint8Array(uploadSize);
-        const upload = this.densityUpload;
-        for (let i = 0; i < uploadSize; i++) upload[i] = Math.round(field.data[i] * 255);
-        gl.bindTexture(gl.TEXTURE_2D, this.densityTexture);
-        if (field.width !== this.densityWidth || field.height !== this.densityHeight) {
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, field.width, field.height, 0, gl.RED, gl.UNSIGNED_BYTE, upload);
-            this.densityWidth = field.width;
-            this.densityHeight = field.height;
-        } else {
-            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, field.width, field.height, gl.RED, gl.UNSIGNED_BYTE, upload);
+    /** CPU snapshots are ignored: this backend owns its R16F density field. */
+    setCursorDensityField(_field: CursorDensityFieldSnapshot) {}
+    resetCursorDensityStroke() {
+        this.densityGeometry.reset();
+    }
+    queueCursorDensityUpdate(update: CursorDensityUpdate) {
+        if (this.destroyed) return;
+        const finite = (value: number, fallback = 0) => (Number.isFinite(value) ? value : fallback);
+        const size = densityMapSize(finite(update.cssWidth, 1), finite(update.cssHeight, 1));
+        if (size.width !== this.densityWidth || size.height !== this.densityHeight) {
+            this.recreateDensityTargets(size.width, size.height);
+            this.densityGeometry.reset();
         }
-        this.boundTextures.clear();
-        this.densityVersion = field.version;
-        this.invalidate();
+        if (update.resetStroke) this.densityGeometry.reset();
+        const segments = this.densityGeometry.add(
+            update.points,
+            finite(update.radius),
+            finite(update.falloff),
+            finite(update.buildUpSeconds),
+        );
+        if (segments.length) {
+            this.densityDroppedSegments += appendBoundedDensitySegments(this.densitySegments, segments);
+            this.densityMaxEstimate = Math.max(this.densityMaxEstimate, ...segments.map((segment) => segment.strength));
+        }
+        const dt = Math.max(0, finite(update.dt));
+        const decayRate = Math.max(0, finite(update.decayRate));
+        if (this.densityMayBeNonzero && dt > 0 && decayRate > 0) {
+            const decay = Math.exp(-decayRate * Math.min(dt, 86_400));
+            this.densityDecay *= decay;
+            this.densityMaxEstimate *= decay;
+        }
+        if (segments.length || this.densityDecay < 1) this.invalidate();
     }
     setPaused(v: boolean) {
         if (v === this.paused) return;
@@ -946,7 +1136,14 @@ export class WebGL2Renderer implements RenderBackend {
         for (const t of this.lutTextures.values()) this.gl.deleteTexture(t);
         this.gl.deleteBuffer(this.uniformBuffer);
         this.gl.deleteBuffer(this.cursorBuffer);
-        this.gl.deleteTexture(this.densityTexture);
+        this.gl.deleteBuffer(this.densitySegmentBuffer);
+        this.gl.deleteProgram(this.densityDecayProgram);
+        this.gl.deleteProgram(this.densityPaintProgram);
+        for (const target of this.densityTargets) {
+            this.gl.deleteTexture(target.texture);
+            this.gl.deleteFramebuffer(target.framebuffer);
+        }
+        this.gl.deleteVertexArray(this.densityVao);
         this.gl.deleteVertexArray(this.vao);
     }
 }

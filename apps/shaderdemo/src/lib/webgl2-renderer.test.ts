@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { POST_KINDS } from './pipeline';
 import { RGB_COLOUR_KINDS } from './colour-effects';
 import {
+    WEBGL2_CURSOR_DECAY_SOURCE,
+    WEBGL2_CURSOR_PAINT_FRAGMENT_SOURCE,
+    WEBGL2_CURSOR_PAINT_VERTEX_SOURCE,
     WEBGL2_FRAGMENT_SOURCE,
     WEBGL2_STARTUP_SCALE,
     WEBGL2_SUPPORTED_COLOUR,
@@ -95,6 +98,28 @@ describe('WebGL2 parity backend', () => {
         expect(shaders.BASE).not.toContain('headEnergy');
         expect(shaders.BASE).not.toContain('float trail =');
         expect(shaders.BASE).not.toContain('halogen');
+    });
+
+    it('keeps WebGL2 cursor density GPU-resident with faithful decay and max paint contracts', () => {
+        const implementation = WebGL2Renderer.toString();
+        expect(implementation).toContain('gpuCursorDensity = true');
+        expect(implementation).toContain('gl.R16F');
+        expect(implementation).toContain('Array.from({ length: 2 }');
+        expect(implementation).toContain('this.renderCursorDensity()');
+        expect(implementation.indexOf('this.renderCursorDensity()')).toBeLessThan(
+            implementation.indexOf('this.draw("BASE"'),
+        );
+        expect(implementation).toContain('gl.blendEquation(gl.MAX)');
+        expect(implementation).toContain('gl.drawArraysInstanced');
+        expect(implementation).toContain('appendBoundedDensitySegments');
+        expect(implementation).not.toContain('texSubImage2D');
+        expect(implementation).not.toContain('readPixels');
+        expect(implementation).not.toContain('gl.finish');
+        expect(WEBGL2_CURSOR_DECAY_SOURCE).toContain('*decay');
+        expect(WEBGL2_CURSOR_PAINT_VERTEX_SOURCE).toContain('min(a,b)-values.x');
+        expect(WEBGL2_CURSOR_PAINT_FRAGMENT_SOURCE).toContain('log(1.+9.*distance)/log(10.)');
+        expect(WEBGL2_CURSOR_PAINT_FRAGMENT_SOURCE).toContain('12.*max(paintValues.z,0.)');
+        expect(WEBGL2_CURSOR_PAINT_FRAGMENT_SOURCE).toContain('(distance-.92)/.08');
     });
 
     it('covers every schema post effect and reports none unsupported', () => {

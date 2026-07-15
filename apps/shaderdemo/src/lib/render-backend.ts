@@ -8,6 +8,8 @@ export type RendererBackendName = 'webgpu' | 'webgl2';
 
 export interface RenderBackend {
     readonly backend: RendererBackendName;
+    /** True when cursor density remains resident in renderer-owned GPU textures. */
+    readonly gpuCursorDensity: boolean;
     readonly unsupportedEffects?: readonly string[];
     onStats?: (fps: number, width: number, height: number, rolling?: FrameRollingSummary, renderScale?: number) => void;
     onGpuStats?: (stats: GpuTimingStats | null) => void;
