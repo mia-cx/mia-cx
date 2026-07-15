@@ -114,7 +114,7 @@ void main() {
     rgb = vec3(texture(_group_0_binding_1_fs, redUv).x, rgb.y, texture(_group_0_binding_1_fs, blueUv).z);`;
     else
         effect = `
-    rgb = blend_2(rgb, texture(_group_0_binding_3_fs, uv).xyz, _group_0_binding_0_fs.post[8].x);`;
+    rgb = blend_2(rgb, texture(_group_0_binding_3_fs, vec2(uv.x, 1.0 - uv.y)).xyz, _group_0_binding_0_fs.post[8].x);`;
     return `${header}const int kind = ${index};\n${common}${effect}\n    _fs2p_location0 = vec4(rgb, 1.0);\n}`;
 }
 export function specializeWebGL2Shader(name: keyof typeof SELECTORS, index: number): string {

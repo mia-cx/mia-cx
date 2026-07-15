@@ -43,6 +43,9 @@ describe('WebGL2 parity backend', () => {
         expect(source).toContain('uv + radial * amount');
         expect(source).toContain('uv - radial * amount');
         expect(source).not.toContain('vec2(d, 0.0)');
+        const godRaysComposite = specializeWebGL2Shader('POST_EFFECT', 27);
+        expect(godRaysComposite).toContain('texture(_group_0_binding_3_fs, vec2(uv.x, 1.0 - uv.y))');
+        expect(godRaysComposite).not.toContain('texture(_group_0_binding_3_fs, uv)');
     });
 
     it('lazily installs specialized programs and assigns samplers only at installation', () => {
