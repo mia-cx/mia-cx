@@ -1042,6 +1042,7 @@ export class AtmosphereRenderer {
     private frameTimingSlots: FrameTimingSlot[] = [];
     private frameTimingCursor = 0;
     private lastFrameTimingAt = 0;
+    private lastGpuTimingEvidenceAt = performance.now();
     private adaptiveGeneration = 0;
     private readonly visibilityHandler = () => {
         if (document.hidden) {
@@ -1484,6 +1485,7 @@ export class AtmosphereRenderer {
     private resetAdaptive(now: number) {
         this.adaptiveGeneration += 1;
         this.lastFrameTimingAt = 0;
+        this.lastGpuTimingEvidenceAt = now;
         this.adaptiveResolution.reset(now);
     }
     private tick = (now: number) => {
@@ -1900,11 +1902,30 @@ export class AtmosphereRenderer {
             enc.copyBufferToBuffer(this.queryResolveBuffer!, 0, this.queryReadbackBuffer!, 0, bytes);
             this.queryReadbackBusy = true;
         }
+        const submissionStartedAt = performance.now();
+        const submissionScale = this.adaptiveResolution.effectiveScale;
+        const submissionGeneration = this.adaptiveGeneration;
         d.queue.submit([enc.finish()]);
         this.submissionPending = true;
         void d.queue.onSubmittedWorkDone().then(
             () => {
                 this.submissionPending = false;
+                const completedAt = performance.now();
+                if (
+                    !this.destroyed &&
+                    submissionGeneration === this.adaptiveGeneration &&
+                    !this.paused &&
+                    !document.hidden &&
+                    completedAt - this.lastGpuTimingEvidenceAt > 1_000
+                ) {
+                    const nextScale = this.adaptiveResolution.sampleGpu(
+                        completedAt - submissionStartedAt,
+                        completedAt,
+                        true,
+                        submissionScale,
+                    );
+                    if (nextScale !== undefined) this.recreateTargets();
+                }
                 if (!this.destroyed && (!this.paused || this.invalid)) this.schedule();
             },
             () => {
@@ -1933,6 +1954,7 @@ export class AtmosphereRenderer {
                     const stats = aggregateGpuTimestamps(values, labels);
                     this.gpuStatsCallback?.(stats);
                     const now = performance.now();
+                    if (Number.isFinite(stats.totalMs) && stats.totalMs > 0) this.lastGpuTimingEvidenceAt = now;
                     // The dedicated two-timestamp ring is preferred. Some WebGPU implementations accept
                     // those empty timestamp passes but never return a mappable result, so retain the proven
                     // detailed timestamp path as a processing-time-only fallback rather than falling back to rAF.
@@ -1977,6 +1999,7 @@ export class AtmosphereRenderer {
                 if (values.length < 2 || values[1] <= values[0]) return;
                 const gpuMs = Number(values[1] - values[0]) / 1_000_000;
                 this.lastFrameTimingAt = performance.now();
+                this.lastGpuTimingEvidenceAt = this.lastFrameTimingAt;
                 const nextScale = this.adaptiveResolution.sampleGpu(gpuMs, performance.now(), true, slot.scale);
                 if (nextScale !== undefined) this.recreateTargets();
             })

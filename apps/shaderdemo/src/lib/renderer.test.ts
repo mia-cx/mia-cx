@@ -225,6 +225,9 @@ describe('field configuration', () => {
         expect(source).toContain('sampleGpu(gpuMs');
         expect(source).toContain('sampleGpu(stats.totalMs');
         expect(source).toContain('lastFrameTimingAt');
+        expect(source).toContain('lastGpuTimingEvidenceAt');
+        expect(source).toContain('completedAt - submissionStartedAt');
+        expect(source).toContain('submissionGeneration === this.adaptiveGeneration');
         expect(source).not.toContain('adaptiveResolution.sample(dt');
         expect(source).toContain('frameInterval = 1e3 / 30');
         expect(source).toContain('now + 0.5 < this.nextRenderAt');
