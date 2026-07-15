@@ -120,6 +120,9 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).not.toContain('gl.finish');
         expect(WEBGL2_CURSOR_DECAY_SOURCE).toContain('*decay');
         expect(WEBGL2_CURSOR_PAINT_VERTEX_SOURCE).toContain('min(a,b)-values.x');
+        expect(WEBGL2_CURSOR_PAINT_VERTEX_SOURCE).toContain('layout(location=2) in vec2 corner');
+        expect(WEBGL2_CURSOR_PAINT_VERTEX_SOURCE).not.toContain('gl_VertexID');
+        expect(implementation).toContain('gl.vertexAttribDivisor(2, 0)');
         expect(WEBGL2_CURSOR_PAINT_FRAGMENT_SOURCE).toContain('log(1.+9.*distance)/log(10.)');
         expect(WEBGL2_CURSOR_PAINT_FRAGMENT_SOURCE).toContain('12.*max(paintValues.z,0.)');
         expect(WEBGL2_CURSOR_PAINT_FRAGMENT_SOURCE).toContain('(distance-.92)/.08');

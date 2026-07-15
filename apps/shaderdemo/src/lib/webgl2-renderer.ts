@@ -58,13 +58,13 @@ export const WEBGL2_CURSOR_PAINT_VERTEX_SOURCE = `#version 300 es
 precision highp float;
 layout(location=0) in vec4 endpoints;
 layout(location=1) in vec3 values;
+layout(location=2) in vec2 corner;
 uniform float aspect;
 out vec2 q;
 flat out vec2 a;
 flat out vec2 b;
 flat out vec3 paintValues;
-const vec2 corners[6]=vec2[6](vec2(-1.,-1.),vec2(1.,-1.),vec2(-1.,1.),vec2(-1.,1.),vec2(1.,-1.),vec2(1.,1.));
-void main(){a=endpoints.xy;b=endpoints.zw;paintValues=values;vec2 lo=min(a,b)-values.x;vec2 hi=max(a,b)+values.x;q=mix(lo,hi,(corners[gl_VertexID]+1.)*.5);gl_Position=vec4(q.x/aspect,q.y,0.,1.);}`;
+void main(){a=endpoints.xy;b=endpoints.zw;paintValues=values;vec2 lo=min(a,b)-values.x;vec2 hi=max(a,b)+values.x;q=mix(lo,hi,(corner+1.)*.5);gl_Position=vec4(q.x/aspect,q.y,0.,1.);}`;
 export const WEBGL2_CURSOR_PAINT_FRAGMENT_SOURCE = `#version 300 es
 precision highp float;
 in vec2 q;
@@ -248,6 +248,7 @@ export class WebGL2Renderer implements RenderBackend {
     private densityPaintProgram: WebGLProgram;
     private densityVao: WebGLVertexArrayObject;
     private densitySegmentBuffer: WebGLBuffer;
+    private densityCornerBuffer: WebGLBuffer;
     private vao: WebGLVertexArrayObject;
     private raf = 0;
     private pendingFence: PendingFence | null = null;
@@ -298,14 +299,16 @@ export class WebGL2Renderer implements RenderBackend {
             cursorUbo = gl.createBuffer(),
             vao = gl.createVertexArray(),
             densityVao = gl.createVertexArray(),
-            densityBuffer = gl.createBuffer();
-        if (!ubo || !cursorUbo || !vao || !densityVao || !densityBuffer)
+            densityBuffer = gl.createBuffer(),
+            densityCornerBuffer = gl.createBuffer();
+        if (!ubo || !cursorUbo || !vao || !densityVao || !densityBuffer || !densityCornerBuffer)
             throw new Error('WebGL2 resource allocation failed.');
         this.uniformBuffer = ubo;
         this.cursorBuffer = cursorUbo;
         this.vao = vao;
         this.densityVao = densityVao;
         this.densitySegmentBuffer = densityBuffer;
+        this.densityCornerBuffer = densityCornerBuffer;
         this.densityDecayProgram = program(gl, WEBGL2_CURSOR_DECAY_SOURCE);
         this.densityPaintProgram = linkedProgram(
             gl,
@@ -321,6 +324,11 @@ export class WebGL2Renderer implements RenderBackend {
         gl.enableVertexAttribArray(1);
         gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 7 * 4, 4 * 4);
         gl.vertexAttribDivisor(1, 1);
+        gl.bindBuffer(gl.ARRAY_BUFFER, densityCornerBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(2);
+        gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 2 * 4, 0);
+        gl.vertexAttribDivisor(2, 0);
         this.recreateDensityTargets(1, 1);
         this.adaptive = new AdaptiveResolutionController(options.renderScale, {
             initialScale: Math.min(WEBGL2_STARTUP_SCALE, options.renderScale),
@@ -1137,6 +1145,7 @@ export class WebGL2Renderer implements RenderBackend {
         this.gl.deleteBuffer(this.uniformBuffer);
         this.gl.deleteBuffer(this.cursorBuffer);
         this.gl.deleteBuffer(this.densitySegmentBuffer);
+        this.gl.deleteBuffer(this.densityCornerBuffer);
         this.gl.deleteProgram(this.densityDecayProgram);
         this.gl.deleteProgram(this.densityPaintProgram);
         for (const target of this.densityTargets) {
