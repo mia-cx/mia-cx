@@ -31,6 +31,7 @@ import {
     UNIFORM_FLOATS,
     GPU_TIMING_SAMPLE_INTERVAL,
     GPU_FRAME_TIMING_RING_SIZE,
+    MAX_IN_FLIGHT_SUBMISSIONS,
     aggregateGpuTimestamps,
     advanceSimulationTime,
     bindGroupCacheKey,
@@ -218,6 +219,7 @@ describe('field configuration', () => {
     it('uses a nonblocking per-frame two-query timing ring separate from sparse pass telemetry', () => {
         const source = AtmosphereRenderer.toString();
         expect(GPU_FRAME_TIMING_RING_SIZE).toBeGreaterThanOrEqual(3);
+        expect(MAX_IN_FLIGHT_SUBMISSIONS).toBe(2);
         expect(GPU_TIMING_SAMPLE_INTERVAL).toBe(30);
         expect(source).toContain('acquireFrameTimingSlot');
         expect(source).toContain('beginComputePass');
@@ -228,6 +230,10 @@ describe('field configuration', () => {
         expect(source).toContain('lastGpuTimingEvidenceAt');
         expect(source).toContain('completedAt - submissionStartedAt');
         expect(source).toContain('submissionGeneration === this.adaptiveGeneration');
+        expect(source).toContain('this.submissionsInFlight < MAX_IN_FLIGHT_SUBMISSIONS');
+        expect(source).toContain('const hadOlderSubmission = this.submissionsInFlight > 0');
+        expect(source).toContain('!hadOlderSubmission');
+        expect(source).not.toContain('submissionPending');
         expect(source).not.toContain('adaptiveResolution.sample(dt');
         expect(source).toContain('frameInterval = 1e3 / 30');
         expect(source).toContain('now + 0.5 < this.nextRenderAt');

@@ -70,6 +70,7 @@ const PIPELINE_COUNT = 15;
 const CURSOR_DECAY_PIPELINE = 13;
 const CURSOR_PAINT_PIPELINE = 14;
 export const GPU_FRAME_TIMING_RING_SIZE = 3;
+export const MAX_IN_FLIGHT_SUBMISSIONS = 2;
 type FrameTimingSlot = {
     resolve: GPUBuffer;
     readback: GPUBuffer;
@@ -1031,7 +1032,7 @@ export class AtmosphereRenderer {
     private frameTelemetry = new FrameTelemetry();
     private adaptiveResolution: AdaptiveResolutionController;
     private destroyed = false;
-    private submissionPending = false;
+    private submissionsInFlight = 0;
     private invalid = true;
     readonly gpuTimingSupported = false;
     private querySet?: GPUQuerySet;
@@ -1500,7 +1501,7 @@ export class AtmosphereRenderer {
         const dt = Math.min(0.1, Math.max(0, (now - this.lastTime) / 1000));
         this.lastTime = now;
         if (animated) this.simTime = advanceSimulationTime(this.simTime, dt, this.options.parameters.animationSpeed);
-        if ((this.invalid || animated) && !this.submissionPending) {
+        if ((this.invalid || animated) && this.submissionsInFlight < MAX_IN_FLIGHT_SUBMISSIONS) {
             this.render();
             this.invalid = false;
             if (animated) {
@@ -1905,14 +1906,16 @@ export class AtmosphereRenderer {
         const submissionStartedAt = performance.now();
         const submissionScale = this.adaptiveResolution.effectiveScale;
         const submissionGeneration = this.adaptiveGeneration;
+        const hadOlderSubmission = this.submissionsInFlight > 0;
         d.queue.submit([enc.finish()]);
-        this.submissionPending = true;
+        this.submissionsInFlight += 1;
         void d.queue.onSubmittedWorkDone().then(
             () => {
-                this.submissionPending = false;
+                this.submissionsInFlight = Math.max(0, this.submissionsInFlight - 1);
                 const completedAt = performance.now();
                 if (
                     !this.destroyed &&
+                    !hadOlderSubmission &&
                     submissionGeneration === this.adaptiveGeneration &&
                     !this.paused &&
                     !document.hidden &&
@@ -1929,7 +1932,7 @@ export class AtmosphereRenderer {
                 if (!this.destroyed && (!this.paused || this.invalid)) this.schedule();
             },
             () => {
-                this.submissionPending = false;
+                this.submissionsInFlight = Math.max(0, this.submissionsInFlight - 1);
                 if (!this.destroyed) {
                     this.paused = true;
                     this.onLost?.('WebGPU stopped after a submission failure. Reload to recover.');
