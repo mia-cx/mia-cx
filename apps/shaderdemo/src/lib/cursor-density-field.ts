@@ -14,11 +14,31 @@ export interface DensityStrokePoint {
     timeStamp: number;
 }
 
-const TARGET_ROWS = 512;
-const MAX_COLUMNS = 1024;
+export const DENSITY_MAP_ROWS = 512;
+export const DENSITY_MAP_MAX_COLUMNS = 2048;
+export const DENSITY_MAP_MAX_TEXELS = 1024 * DENSITY_MAP_ROWS;
 export const MOVEMENT_CONTINUITY_MS = 120;
 const INITIAL_HEAD_STRENGTH = 0.05;
 const BUILD_UP_LOG_CURVE = 3;
+
+/** Preserve CSS aspect while keeping the persistent R16F map within a fixed texel budget. */
+export function densityMapSize(cssWidth: number, cssHeight: number) {
+    const width = Number.isFinite(cssWidth) && cssWidth > 0 ? cssWidth : 1;
+    const height = Number.isFinite(cssHeight) && cssHeight > 0 ? cssHeight : 1;
+    const aspect = width / height;
+    const rows = Math.max(
+        1,
+        Math.min(
+            DENSITY_MAP_ROWS,
+            Math.floor(DENSITY_MAP_MAX_COLUMNS / aspect),
+            Math.floor(Math.sqrt(DENSITY_MAP_MAX_TEXELS / aspect)),
+        ),
+    );
+    return {
+        width: Math.max(1, Math.min(DENSITY_MAP_MAX_COLUMNS, Math.round(rows * aspect))),
+        height: rows,
+    };
+}
 
 /** Logarithmic ease-out: responds early, then approaches full strength progressively. */
 export function cursorBuildUpCurve(t: number): number {
@@ -73,7 +93,7 @@ interface WeightedSegment {
 /** Persistent, aspect-correct CPU mask used by the cursor density effect. */
 export class CursorDensityField {
     width = 1;
-    height = TARGET_ROWS;
+    height = DENSITY_MAP_ROWS;
     version = 0;
     /** Number of union raster passes, exposed for performance regression tests. */
     rasterPasses = 0;
@@ -85,13 +105,12 @@ export class CursorDensityField {
     private envelope = new MovementEnvelope();
 
     resize(cssWidth: number, cssHeight: number): boolean {
-        const aspect = cssWidth > 0 && cssHeight > 0 ? cssWidth / cssHeight : 1;
-        const width = Math.max(1, Math.min(MAX_COLUMNS, Math.round(TARGET_ROWS * aspect)));
-        if (width === this.width && this.height === TARGET_ROWS) return false;
+        const { width, height } = densityMapSize(cssWidth, cssHeight);
+        if (width === this.width && height === this.height) return false;
         this.width = width;
-        this.height = TARGET_ROWS;
-        this.density = new Float32Array(width * TARGET_ROWS);
-        this.coverage = new Float32Array(width * TARGET_ROWS);
+        this.height = height;
+        this.density = new Float32Array(width * height);
+        this.coverage = new Float32Array(width * height);
         this.touched = [];
         this.endStroke(false);
         this.version++;

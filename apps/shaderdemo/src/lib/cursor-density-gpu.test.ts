@@ -9,10 +9,14 @@ import {
 } from './cursor-density-gpu';
 
 describe('GPU cursor density geometry', () => {
-    it('sizes maps defensively and bounds extreme aspect ratios', () => {
+    it('preserves ultrawide aspect ratios without exceeding the density-map budget', () => {
         expect(densityMapSize(100, 100)).toEqual({ width: DENSITY_MAP_ROWS, height: DENSITY_MAP_ROWS });
         expect(densityMapSize(Infinity, Number.NaN)).toEqual({ width: DENSITY_MAP_ROWS, height: DENSITY_MAP_ROWS });
-        expect(densityMapSize(1e9, 1)).toEqual({ width: DENSITY_MAP_MAX_COLUMNS, height: DENSITY_MAP_ROWS });
+        const ultrawide = densityMapSize(3440, 1440);
+        expect(ultrawide.width / ultrawide.height).toBeCloseTo(3440 / 1440, 2);
+        expect(ultrawide.width).toBeGreaterThan(1024);
+        expect(ultrawide.width * ultrawide.height).toBeLessThanOrEqual(1024 * DENSITY_MAP_ROWS);
+        expect(densityMapSize(1e9, 1).width).toBe(DENSITY_MAP_MAX_COLUMNS);
     });
 
     it('bounds queued work deterministically and reports dropped segments', () => {

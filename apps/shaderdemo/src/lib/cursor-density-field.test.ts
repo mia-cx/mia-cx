@@ -52,12 +52,14 @@ describe('CursorDensityField', () => {
         expect(densityPressureCoverage(1.1, 1)).toBe(0);
     });
 
-    it('uses about 128 rows and aspect-correct bounded columns', () => {
+    it('keeps the density texture aspect aligned with ultrawide CSS coordinates', () => {
         const field = new CursorDensityField();
         field.resize(400, 200);
         expect(field.snapshot()).toMatchObject({ width: 1024, height: 512 });
-        field.resize(10_000, 100);
-        expect(field.snapshot().width).toBe(1024);
+        field.resize(3440, 1440);
+        const ultrawide = field.snapshot();
+        expect(ultrawide.width / ultrawide.height).toBeCloseTo(3440 / 1440, 2);
+        expect(ultrawide.width).toBeGreaterThan(1024);
     });
 
     it('repeated stamps use max rather than accumulating', () => {

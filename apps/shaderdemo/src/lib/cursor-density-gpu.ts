@@ -1,7 +1,13 @@
-import { cursorBuildUpCurve, MOVEMENT_CONTINUITY_MS, type DensityStrokePoint } from './cursor-density-field';
+import {
+    cursorBuildUpCurve,
+    densityMapSize,
+    DENSITY_MAP_MAX_COLUMNS,
+    DENSITY_MAP_ROWS,
+    MOVEMENT_CONTINUITY_MS,
+    type DensityStrokePoint,
+} from './cursor-density-field';
 
-export const DENSITY_MAP_ROWS = 512;
-export const DENSITY_MAP_MAX_COLUMNS = 1024;
+export { densityMapSize, DENSITY_MAP_MAX_COLUMNS, DENSITY_MAP_ROWS };
 export const MAX_GPU_DENSITY_SEGMENTS = 2048;
 export const DENSITY_EXTINCTION_THRESHOLD = 1 / 65535;
 const INITIAL_HEAD_STRENGTH = 0.05;
@@ -26,16 +32,6 @@ export interface GpuDensitySegment {
     radius: number;
     strength: number;
     falloff: number;
-}
-
-export function densityMapSize(cssWidth: number, cssHeight: number) {
-    const width = Number.isFinite(cssWidth) && cssWidth > 0 ? cssWidth : 1;
-    const height = Number.isFinite(cssHeight) && cssHeight > 0 ? cssHeight : 1;
-    const aspect = width / height;
-    return {
-        width: Math.max(1, Math.min(DENSITY_MAP_MAX_COLUMNS, Math.round(DENSITY_MAP_ROWS * aspect))),
-        height: DENSITY_MAP_ROWS,
-    };
 }
 
 export function appendBoundedDensitySegments<T>(
