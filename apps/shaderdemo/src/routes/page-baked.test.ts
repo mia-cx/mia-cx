@@ -10,6 +10,9 @@ const source = readFileSync(new URL('./+page.svelte', import.meta.url), 'utf8');
 describe('baked shader-only page', () => {
     it('contains only the canvas, basic FPS counter, and nonvisual status fallback', () => {
         expect(source).toContain('<canvas');
+        expect(source).toContain('let fpsVisible = $state(false)');
+        expect(source).toContain("event.key.toLowerCase() !== 'f'");
+        expect(source).toContain('{#if ready && fpsVisible}');
         expect(source).toContain('class="fps"');
         expect(source).toContain('{fps.toFixed(1)} FPS');
         for (const markup of ['<main', '<article', '<header', '<nav', '<button', '<input', '<select'])

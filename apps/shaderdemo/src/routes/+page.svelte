@@ -10,6 +10,7 @@
     let ready = $state(false);
     let status = $state('Starting graphics…');
     let fps = $state(0);
+    let fpsVisible = $state(false);
     let options = BAKED_RENDER_OPTIONS;
     const cursorState = new CursorState();
     const cursorDensityField = new CursorDensityField();
@@ -59,6 +60,10 @@
         cursorState.leave();
         sendCursor();
     }
+    function keyDown(event: KeyboardEvent) {
+        if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.key.toLowerCase() !== 'f') return;
+        fpsVisible = !fpsVisible;
+    }
 
     onMount(() => {
         let disposed = false;
@@ -72,6 +77,7 @@
                 renderer = instance;
                 let lastFpsUpdate = 0;
                 instance.onStats = (nextFps) => {
+                    if (!fpsVisible) return;
                     const now = performance.now();
                     if (now - lastFpsUpdate < 500) return;
                     lastFpsUpdate = now;
@@ -147,6 +153,7 @@
         window.addEventListener('pointerup', pointerUp);
         window.addEventListener('pointercancel', pointerLeave);
         window.addEventListener('blur', pointerLeave);
+        window.addEventListener('keydown', keyDown);
         return () => {
             disposed = true;
             resetDensityStroke();
@@ -156,6 +163,7 @@
             window.removeEventListener('pointerup', pointerUp);
             window.removeEventListener('pointercancel', pointerLeave);
             window.removeEventListener('blur', pointerLeave);
+            window.removeEventListener('keydown', keyDown);
             cancelAnimationFrame(cursorFrame);
             renderer?.destroy();
         };
@@ -168,7 +176,7 @@
 </svelte:head>
 
 <canvas class:ready bind:this={canvas} aria-label="Animated coloured noise field"></canvas>
-{#if ready}<output class="fps" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
+{#if ready && fpsVisible}<output class="fps" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
 {#if !ready}<p class="status" role="status" aria-live="polite">{status}</p>{/if}
 
 <style>
