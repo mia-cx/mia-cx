@@ -71,7 +71,9 @@
     header {
         position: fixed;
         inset: 0 0 auto;
-        z-index: 20;
+        /* Above anything the page lifts into the root stacking context: the portrait overlay (6)
+           and the social menus (30) must never paint over the header. */
+        z-index: 40;
         display: flex;
         justify-content: center;
         width: 100%;
