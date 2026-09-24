@@ -44,6 +44,8 @@
     let canvas: HTMLCanvasElement;
     let renderer: RenderBackend | undefined;
     let ready = $state(false);
+    /** No usable graphics backend, or the device was lost: show the flat haze instead. */
+    let failed = $state(false);
     let status = $state('Starting graphics…');
     let fps = $state(0);
     let fpsVisible = $state(false);
@@ -202,6 +204,7 @@
                 instance.setPaused(paused);
                 instance.onLost = (message) => {
                     ready = false;
+                    failed = true;
                     status = message;
                     // A device lost before its first frame would otherwise leave the page hidden.
                     settle();
@@ -214,7 +217,9 @@
                 });
             })
             .catch((error) => {
-                if (!disposed) status = error instanceof Error ? error.message : String(error);
+                if (disposed) return settle();
+                failed = true;
+                status = error instanceof Error ? error.message : String(error);
                 settle();
             });
 
@@ -293,6 +298,7 @@
 
 <canvas
     class:ready
+    class:failed
     class:dims={animated}
     class="{layer} {className}"
     bind:this={canvas}
@@ -350,6 +356,16 @@
             /* From the first pixel of scroll until 90% of the hero has passed the top of the view. */
             animation-range: exit-crossing 0% exit-crossing 90%;
         }
+    }
+    /*
+     * Without WebGPU or WebGL2 the page gets the field's resting colour as a flat background. It
+     * sits behind the content rather than over it, since there is no light to float.
+     */
+    canvas.failed {
+        z-index: -1;
+        opacity: 1;
+        background: var(--atmosphere-fallback, #3b2736);
+        animation: none;
     }
     .fps {
         position: fixed;
