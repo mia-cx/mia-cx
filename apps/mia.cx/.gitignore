@@ -11,3 +11,4 @@ vite.config.ts.timestamp-*
 dist
 vault.generated.ts
 static/vault
+test-results
