@@ -1066,7 +1066,23 @@ export class AtmosphereRenderer {
         this.gpuStatsCallback = callback;
         if (callback && !this.gpuTimingSupported) callback(null);
     }
-    onLost?: (message: string) => void;
+    /*
+     * A loss can land during create(), before the caller has attached a handler. It is kept and
+     * replayed to whichever handler arrives next, so the boot sequence still settles.
+     */
+    private lostHandler?: (message: string) => void;
+    private lostMessage?: string;
+    get onLost() {
+        return this.lostHandler;
+    }
+    set onLost(handler: ((message: string) => void) | undefined) {
+        this.lostHandler = handler;
+        if (handler && this.lostMessage) handler(this.lostMessage);
+    }
+    private lost(message: string) {
+        this.lostMessage = message;
+        this.lostHandler?.(message);
+    }
 
     private constructor(
         private canvas: HTMLCanvasElement,
@@ -1254,7 +1270,7 @@ export class AtmosphereRenderer {
                 self.paused = true;
                 if (self.rafId) cancelAnimationFrame(self.rafId);
                 self.rafId = 0;
-                self.onLost?.(`WebGPU stopped after device loss: ${info.message || info.reason}. Reload to recover.`);
+                self.lost(`WebGPU stopped after device loss: ${info.message || info.reason}. Reload to recover.`);
             }
         });
         // The canvas is bound last. A canvas that has handed out a WebGPU context can never hand out
@@ -1941,7 +1957,7 @@ export class AtmosphereRenderer {
                 this.submissionsInFlight = Math.max(0, this.submissionsInFlight - 1);
                 if (!this.destroyed) {
                     this.paused = true;
-                    this.onLost?.('WebGPU stopped after a submission failure. Reload to recover.');
+                    this.lost('WebGPU stopped after a submission failure. Reload to recover.');
                 }
             },
         );

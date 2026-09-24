@@ -51,7 +51,10 @@ describe('transparent shader presentation', () => {
 
     it('keeps the canvas clipped to the iOS dynamic viewport behind scrolling site content', () => {
         // The page is the field's dark base, the same colour as the header tint.
-        expect(app).toContain('<meta name="theme-color" content="#221820" media="(prefers-color-scheme: dark)" />');
+        // Prettier may break the tag across lines, so match its attributes loosely.
+        expect(app).toMatch(
+            /<meta\s+name="theme-color"\s+content="#221820"\s+media="\(prefers-color-scheme: dark\)"\s*\/>/,
+        );
         expect(css).toContain('--haze: #221820');
         expect(css).toContain('--bg: var(--haze)');
         expect(css).toContain('background: var(--bg)');

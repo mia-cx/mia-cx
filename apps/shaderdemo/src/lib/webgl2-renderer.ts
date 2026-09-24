@@ -245,7 +245,20 @@ export class WebGL2Renderer implements RenderBackend {
     readonly unsupportedEffects: string[] = [];
     onStats: RenderBackend['onStats'];
     onGpuStats: RenderBackend['onGpuStats'];
-    onLost: RenderBackend['onLost'];
+    /* A loss during create() is kept and replayed to the handler attached afterwards. */
+    private lostHandler: RenderBackend['onLost'];
+    private lostMessage?: string;
+    get onLost() {
+        return this.lostHandler;
+    }
+    set onLost(handler: RenderBackend['onLost']) {
+        this.lostHandler = handler;
+        if (handler && this.lostMessage) handler(this.lostMessage);
+    }
+    private lost(message: string) {
+        this.lostMessage = message;
+        this.lostHandler?.(message);
+    }
     private programs = new Map<ProgramKey, WebGLProgram>();
     private baseTargets: Target[] = [];
     private colourTargets: Target[] = [];
@@ -1091,9 +1104,9 @@ export class WebGL2Renderer implements RenderBackend {
         this.paused = true;
         if (this.raf) cancelAnimationFrame(this.raf);
         this.raf = 0;
-        this.onLost?.('WebGL2 context lost.');
+        this.lost('WebGL2 context lost.');
     };
-    private contextRestored = () => this.onLost?.('WebGL2 context restored; reload to rebuild graphics resources.');
+    private contextRestored = () => this.lost('WebGL2 context restored; reload to rebuild graphics resources.');
     setOptions(o: RenderOptions) {
         const resize =
             this.options.renderScale !== o.renderScale ||

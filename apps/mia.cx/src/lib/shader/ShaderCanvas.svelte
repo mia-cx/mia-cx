@@ -63,30 +63,37 @@
     let held = $state<string | null>(null);
 
     /*
-     * Browsers without scroll-driven animations get the same dim from an IntersectionObserver on the
-     * hero: its callbacks fire only at the thresholds, and the canvas's opacity transition smooths
-     * the steps, so scrolling still costs nothing per tick. `fallbackDim` stays 1 where the CSS
-     * animation runs, so the two never fight.
+     * Browsers without scroll-driven animations get the same dim from a scroll listener, the same
+     * measure the header's own fallback uses (-top / 90% of the hero's height), so the two stay in
+     * lockstep even when the hero is taller than the viewport, as it is on phones. The listener only
+     * exists where the CSS cannot run; `fallbackDim` stays 1 everywhere else, so the two never fight.
+     * The capability test names all three properties the timeline needs, matching Header.svelte.
      */
+    const SCROLL_TIMELINES = '(view-timeline: --hero) and (animation-timeline: --hero) and (timeline-scope: --hero)';
     let fallbackDim = $state(1);
     $effect(() => {
-        if (!dims || typeof CSS === 'undefined' || CSS.supports('animation-timeline: --hero')) {
+        if (!dims || typeof CSS === 'undefined' || CSS.supports(SCROLL_TIMELINES)) {
             fallbackDim = 1;
             return;
         }
         const hero = document.querySelector('[data-section="hero"]');
         if (!hero) return;
-        const observer = new IntersectionObserver(
-            ([entry]) => {
-                // Exit progress, as the CSS range does: 0 while the hero fills the view, 1 once 90% of it has gone.
-                const exit = entry.boundingClientRect.top >= 0 ? 0 : Math.min(1, (1 - entry.intersectionRatio) / 0.9);
-                fallbackDim = 1 - 0.5 * exit;
-            },
-            { threshold: Array.from({ length: 11 }, (_, i) => i / 10) },
-        );
-        observer.observe(hero);
+        let frame = 0;
+        const measure = () => {
+            frame = 0;
+            const rect = hero.getBoundingClientRect();
+            const exit = Math.min(1, Math.max(0, -rect.top / Math.max(1, rect.height * 0.9)));
+            fallbackDim = 1 - 0.5 * exit;
+        };
+        // One measurement per frame at most, however many scroll events arrive.
+        const onScroll = () => {
+            if (!frame) frame = requestAnimationFrame(measure);
+        };
+        measure();
+        window.addEventListener('scroll', onScroll, { passive: true });
         return () => {
-            observer.disconnect();
+            window.removeEventListener('scroll', onScroll);
+            if (frame) cancelAnimationFrame(frame);
             fallbackDim = 1;
         };
     });
@@ -340,7 +347,7 @@
      * custom properties, no calc(), no transition to fight it, and nothing on the main thread per
      * scroll tick. Pages without a hero pass a halved `opacity` prop instead.
      */
-    @supports (animation-timeline: --hero) {
+    @supports (view-timeline: --hero) and (animation-timeline: --hero) and (timeline-scope: --hero) {
         @keyframes shader-dim {
             from {
                 opacity: 1;
