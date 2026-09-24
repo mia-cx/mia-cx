@@ -48,7 +48,8 @@ The field sometimes covers the hero text. That is accepted: a glyph-mask imprint
 Shaders compile in the browser and cannot be shipped precompiled, so a first visit waits for them.
 `app.html` sets `data-boot="loading"` on `<html>` before paint, which hides the page and shows a ring
 after 350 ms. The layout moves it to `entering` once the GPU has finished the shader's first frame
-(each renderer exposes this as `firstFrame`), at once if graphics fail, or after 12 s if the GPU stalls. The ring
+(each renderer exposes this as `firstFrame`), at once if graphics fail or the device is lost, or after 12 s if
+the GPU stalls. If the app bundle never hydrates, the shell reveals on its own after 5 s. The ring
 blurs out while blocks blur and rise in, staggered by `--enter`. The attribute is then removed, so later
 navigations do not animate. Animations fill backwards only, because a lingering `filter` would stop the
 header's backdrop blur. Without JavaScript nothing is hidden, and reduced motion gets a plain fade.

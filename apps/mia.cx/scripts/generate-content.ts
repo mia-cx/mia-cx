@@ -131,7 +131,13 @@ function resolveLinks(note: Note): string {
             fail(note.file, `links to "${target.trim()}", which is not a published note`);
             return whole;
         }
-        const href = isPost(linked) ? `/blog/${linked.slug}` : `/work/${linked.slug}`;
+        // Post pages are parked until Svartz publishes them, so a post link only works if the post
+        // lives somewhere else already; anything else would be a 404.
+        if (isPost(linked) && !linked.data.external) {
+            fail(note.file, `links to the post "${linked.title}", which has no page yet`);
+            return whole;
+        }
+        const href = isPost(linked) ? String(linked.data.external) : `/work/${linked.slug}`;
         return `[${(label ?? linked.title).trim()}](${href})`;
     });
 

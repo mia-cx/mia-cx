@@ -28,6 +28,8 @@
         }, ENTRANCE_MS);
     }
     onMount(() => {
+        // Tells the shell's own failsafe in app.html that the app is running and owns the reveal.
+        document.documentElement.dataset.hydrated = '';
         const timer = setTimeout(reveal, MAX_WAIT_MS);
         return () => clearTimeout(timer);
     });

@@ -110,6 +110,14 @@
     function sendCursor() {
         renderer?.setCursorState(cursorState);
     }
+
+    /** Fires once: on the first frame, on a failed start, or on a device lost before either. */
+    let settled = false;
+    function settle() {
+        if (settled) return;
+        settled = true;
+        onsettle?.();
+    }
     function resetDensityStroke() {
         densityPoints = [];
         cursorDensityField.endStroke(false);
@@ -188,17 +196,19 @@
                 instance.onLost = (message) => {
                     ready = false;
                     status = message;
+                    // A device lost before its first frame would otherwise leave the page hidden.
+                    settle();
                 };
                 return (instance.firstFrame ?? Promise.resolve()).then(() => {
                     if (disposed) return;
                     ready = true;
                     status = '';
-                    onsettle?.();
+                    settle();
                 });
             })
             .catch((error) => {
                 if (!disposed) status = error instanceof Error ? error.message : String(error);
-                onsettle?.();
+                settle();
             });
 
         let cursorFrame = 0;
@@ -281,7 +291,8 @@
     bind:this={canvas}
     style:--shader-opacity={opacity * fallbackDim}
     style:opacity={held}
-    aria-label={label}></canvas>
+    aria-label={label}
+></canvas>
 {#if ready && fpsVisible}<output class="fps" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
 
