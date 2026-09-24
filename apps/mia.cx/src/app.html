@@ -2,12 +2,44 @@
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <link
-            rel="icon"
-            href="%sveltekit.assets%/favicon.png" />
+        <link rel="icon" href="%sveltekit.assets%/favicon.svg" />
         <meta
             name="viewport"
-            content="width=device-width, initial-scale=1" />
+            content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
+        <meta
+            name="theme-color"
+            content="#221820"
+            media="(prefers-color-scheme: dark)"
+        />
+        <meta
+            name="theme-color"
+            content="#e6dde2"
+            media="(prefers-color-scheme: light)"
+        />
+        <script>
+            // Runs before paint. An explicit choice wins; otherwise the system preference applies via CSS.
+            try {
+                const theme = localStorage.getItem('theme');
+                if (theme === 'light' || theme === 'dark')
+                    document.documentElement.dataset.theme = theme;
+            } catch {}
+            // Hide the page until the shader has compiled, then the layout reveals it. Without
+            // JavaScript this never runs and the page shows as normal. Once the app has hydrated
+            // it marks the root and owns the timing; if it never does, this reveals at 5 s so a
+            // broken bundle cannot leave a blank page.
+            document.documentElement.dataset.boot = 'loading';
+            setTimeout(() => {
+                const root = document.documentElement;
+                if (
+                    root.dataset.boot !== 'loading' ||
+                    'hydrated' in root.dataset
+                )
+                    return;
+                root.dataset.boot = 'entering';
+                setTimeout(() => delete root.dataset.boot, 1800);
+            }, 5000);
+        </script>
         %sveltekit.head%
     </head>
     <body data-sveltekit-preload-data="hover">

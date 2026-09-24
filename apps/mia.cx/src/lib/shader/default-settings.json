@@ -1,0 +1,719 @@
+{
+    "format": "mia-cx-shaderdemo-settings",
+    "version": 2,
+    "settings": {
+        "seed": 385.477323689453,
+        "parameters": {
+            "fieldScale": 1536,
+            "flowStretch": 2.5,
+            "billowAmount": 0.8,
+            "ridgeAmount": 2,
+            "ridgeSharpness": 2.9,
+            "baseBlendMode": 3,
+            "warpScale": 0.2,
+            "warpStrength": 0,
+            "secondaryEnabled": 1,
+            "secondaryScale": 0.45,
+            "secondaryCloudAmount": 0.15,
+            "secondaryRibbonAmount": 1,
+            "secondaryRibbonSharpness": 4,
+            "secondaryBlendMode": 0,
+            "secondaryRibbonBlendMode": 1,
+            "thresholdEnabled": 1,
+            "threshold": 0.5,
+            "thresholdSoftness": 0.5,
+            "finalContrast": 1.6,
+            "animationSpeed": 0.3,
+            "centerDarkness": 0.3,
+            "centerWidth": 0.8,
+            "centerHeight": 0.85,
+            "centerRoundness": 4.7,
+            "centerSoftness": 1.5,
+            "octave1Noise": 0,
+            "octave1Threshold": 0,
+            "octave1Smoothness": 0.85,
+            "octave1Distance": 0,
+            "octave2Noise": 0.005,
+            "octave2Threshold": 0,
+            "octave2Smoothness": 1,
+            "octave2Distance": 0,
+            "octave3Noise": 0.01,
+            "octave3Threshold": 0,
+            "octave3Smoothness": 1,
+            "octave3Distance": 0.3,
+            "octave4Noise": 0.01,
+            "octave4Threshold": 0,
+            "octave4Smoothness": 0.67,
+            "octave4Distance": 0.5,
+            "octave5Noise": 0.005,
+            "octave5Threshold": 0,
+            "octave5Smoothness": 0,
+            "octave5Distance": 1.8,
+            "octave1Pixelate": 0,
+            "octave2Pixelate": 0,
+            "octave3Pixelate": 0,
+            "octave4Pixelate": 0,
+            "octave5Pixelate": 0,
+            "octave1BlurRadius": 0,
+            "octave2BlurRadius": 0,
+            "octave3BlurRadius": 0,
+            "octave4BlurRadius": 0,
+            "octave5BlurRadius": 0,
+            "colorGradeEnabled": 1,
+            "exposure": 0,
+            "temperature": 7950,
+            "tint": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "vibrance": -0.01,
+            "shadows": 0,
+            "highlights": 0,
+            "godRaysEnabled": 1,
+            "godRaysAmount": -100,
+            "godRaysIntensity": 3,
+            "godRaysThreshold": 0,
+            "godRaysSoftness": 1,
+            "godRaysCenterX": 0,
+            "godRaysCenterY": -2,
+            "godRaysSamples": 64,
+            "godRaysRenderScale": 0.25,
+            "bloomEnabled": 1,
+            "bloomThreshold": 0.27,
+            "bloomKnee": 0.32,
+            "bloomIntensity": 1.6,
+            "bloomRadius": 1.51,
+            "glowEnabled": 1,
+            "glowIntensity": 0.15,
+            "glowHue": 0.97,
+            "chromaticAberration": 12,
+            "vignetteAmount": 1,
+            "vignetteSoftness": 0.01,
+            "lensDistortion": 0.1,
+            "sharpen": 0.17,
+            "filmGrainAmount": 0.015,
+            "filmGrainSize": 0.5,
+            "godRaysBlendMode": 3,
+            "bloomBlendMode": 3,
+            "glowBlendMode": 1,
+            "chromaticAberrationEnabled": 1,
+            "vignetteEnabled": 0,
+            "lensDistortionEnabled": 0,
+            "sharpenEnabled": 0,
+            "filmGrainEnabled": 0,
+            "halationEnabled": 1,
+            "halationAmount": 0,
+            "halationRadius": 8,
+            "halationThreshold": 0.7,
+            "streakEnabled": 0,
+            "streakAmount": 1.92,
+            "streakLength": 17,
+            "streakAngle": -0.64,
+            "streakThreshold": 1.6,
+            "starburstEnabled": 0,
+            "starburstAmount": 2,
+            "starburstRadius": 7,
+            "starburstBlades": 6,
+            "starburstThreshold": 0.98,
+            "lensDirtEnabled": 0,
+            "lensDirtAmount": 2,
+            "lensDirtScale": 8.5,
+            "lensDirtThreshold": 0,
+            "lensGhostEnabled": 0,
+            "lensGhostAmount": 0.16,
+            "lensGhostCount": 8,
+            "lensGhostSpacing": 0.1,
+            "bokehEnabled": 0,
+            "bokehAmount": 2,
+            "bokehRadius": 13,
+            "bokehSamples": 32,
+            "bokehBlades": 6,
+            "bokehThreshold": 0.95,
+            "gateWeaveEnabled": 0,
+            "gateWeaveAmount": 1.1,
+            "gateWeaveSpeed": 5,
+            "filmDamageEnabled": 0,
+            "filmDamageAmount": 1,
+            "filmDust": 0,
+            "filmScratches": 0,
+            "filmFlicker": 0,
+            "radialBlurEnabled": 0,
+            "radialBlurAmount": 0.19,
+            "radialBlurSamples": 32,
+            "spinBlurEnabled": 0,
+            "spinBlurAmount": 0.299,
+            "spinBlurSamples": 31,
+            "directionalBlurEnabled": 0,
+            "directionalBlurAmount": 50,
+            "directionalBlurAngle": 2.5,
+            "directionalBlurSamples": 32,
+            "rollingShutterEnabled": 0,
+            "rollingShutterAmount": 0.117,
+            "rollingShutterSpeed": 1.3,
+            "heatHazeEnabled": 0,
+            "heatHazeAmount": 0,
+            "heatHazeScale": 30,
+            "heatHazeSpeed": 1,
+            "prismEnabled": 0,
+            "prismAmount": 0,
+            "prismAngle": 0,
+            "kaleidoscopeEnabled": 0,
+            "kaleidoscopeAmount": 1,
+            "kaleidoscopeSegments": 4,
+            "datamoshEnabled": 0,
+            "datamoshAmount": 0.52,
+            "datamoshBlockSize": 36,
+            "scanlineEnabled": 0,
+            "scanlineAmount": 0.004,
+            "scanlineFrequency": 93,
+            "scanlineSpeed": 0,
+            "godRaysFalloff": 2,
+            "cursorEnabled": 1,
+            "cursorDensityPressureEnabled": 1,
+            "cursorDensityRadius": 2,
+            "cursorDensityPressureFalloff": 1,
+            "cursorDensityStrength": 0.4,
+            "cursorDensityDarkBias": 1.3,
+            "cursorDensityBuildUp": 1,
+            "cursorDensityDecay": 0.6
+        },
+        "colour": [
+            {
+                "id": "85f669db-f052-4019-a47e-75c0e495d227",
+                "type": "curve",
+                "enabled": true,
+                "mode": "rgb",
+                "channels": {
+                    "r": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 31,
+                            "y": 53
+                        },
+                        {
+                            "x": 174,
+                            "y": 159
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ],
+                    "g": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 54,
+                            "y": 39
+                        },
+                        {
+                            "x": 163,
+                            "y": 167
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ],
+                    "b": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 107,
+                            "y": 94
+                        },
+                        {
+                            "x": 197,
+                            "y": 139
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "42009788-4300-4117-a9bf-8130e3b271fb",
+                "type": "levels",
+                "enabled": true,
+                "channels": {
+                    "r": {
+                        "inputLow": 0,
+                        "inputHigh": 237,
+                        "gamma": 1,
+                        "outputLow": 0,
+                        "outputHigh": 255
+                    },
+                    "g": {
+                        "inputLow": 0,
+                        "inputHigh": 255,
+                        "gamma": 0.5,
+                        "outputLow": 0,
+                        "outputHigh": 255
+                    },
+                    "b": {
+                        "inputLow": 0,
+                        "inputHigh": 255,
+                        "gamma": 0.8,
+                        "outputLow": 16,
+                        "outputHigh": 255
+                    }
+                }
+            },
+            {
+                "id": "ae59b8dc-4fa3-4763-a94e-4d64f8aa4532",
+                "type": "curve",
+                "enabled": true,
+                "mode": "rgb",
+                "channels": {
+                    "r": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 59,
+                            "y": 46
+                        },
+                        {
+                            "x": 103,
+                            "y": 147
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ],
+                    "g": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 77,
+                            "y": 26
+                        },
+                        {
+                            "x": 173,
+                            "y": 114
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ],
+                    "b": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 78,
+                            "y": 79
+                        },
+                        {
+                            "x": 170,
+                            "y": 194
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "2fdf1fd2-174b-48e4-badd-ec37e10b944d",
+                "type": "curve",
+                "enabled": true,
+                "mode": "hsl",
+                "channels": {
+                    "h": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 53,
+                            "y": 73
+                        },
+                        {
+                            "x": 98,
+                            "y": 142
+                        },
+                        {
+                            "x": 219,
+                            "y": 225
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ],
+                    "s": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 21,
+                            "y": 56
+                        },
+                        {
+                            "x": 181,
+                            "y": 187
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ],
+                    "l": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 149,
+                            "y": 111
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "dd8c33dc-5e3d-4f0a-bc8d-7c493771c445",
+                "type": "levels",
+                "enabled": true,
+                "channels": {
+                    "r": {
+                        "inputLow": 0,
+                        "inputHigh": 255,
+                        "gamma": 1.6,
+                        "outputLow": 11,
+                        "outputHigh": 255
+                    },
+                    "g": {
+                        "inputLow": 0,
+                        "inputHigh": 255,
+                        "gamma": 1.1,
+                        "outputLow": 5,
+                        "outputHigh": 255
+                    },
+                    "b": {
+                        "inputLow": 0,
+                        "inputHigh": 255,
+                        "gamma": 1,
+                        "outputLow": 3,
+                        "outputHigh": 255
+                    }
+                }
+            },
+            {
+                "id": "31df111e-42f9-4cad-a196-d28bc1e42990",
+                "type": "curve",
+                "enabled": false,
+                "mode": "rgb",
+                "channels": {
+                    "r": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 129,
+                            "y": 106
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ],
+                    "g": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 66,
+                            "y": 62
+                        },
+                        {
+                            "x": 216,
+                            "y": 228
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ],
+                    "b": [
+                        {
+                            "x": 0,
+                            "y": 0
+                        },
+                        {
+                            "x": 69,
+                            "y": 57
+                        },
+                        {
+                            "x": 175,
+                            "y": 176
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "ec35ed76-8a16-4c44-8a0c-43a0b5b0b537",
+                "type": "curve",
+                "enabled": true,
+                "mode": "rgb",
+                "channels": {
+                    "r": [
+                        {
+                            "x": 0,
+                            "y": 11
+                        },
+                        {
+                            "x": 67,
+                            "y": 67
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ],
+                    "g": [
+                        {
+                            "x": 0,
+                            "y": 11
+                        },
+                        {
+                            "x": 67,
+                            "y": 67
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ],
+                    "b": [
+                        {
+                            "x": 0,
+                            "y": 11
+                        },
+                        {
+                            "x": 67,
+                            "y": 67
+                        },
+                        {
+                            "x": 255,
+                            "y": 255
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "794b96c2-c0b2-406f-97f3-4e008c008a20",
+                "type": "hsl",
+                "enabled": false,
+                "hue": -6,
+                "saturation": 110,
+                "lightness": 2
+            },
+            {
+                "id": "cf34e745-b4f9-4671-9abd-9e8c12381ccb",
+                "type": "curve",
+                "enabled": false,
+                "mode": "rgb",
+                "channels": {
+                    "r": [
+                        {
+                            "x": 0,
+                            "y": 255
+                        },
+                        {
+                            "x": 255,
+                            "y": 0
+                        }
+                    ],
+                    "g": [
+                        {
+                            "x": 0,
+                            "y": 255
+                        },
+                        {
+                            "x": 255,
+                            "y": 0
+                        }
+                    ],
+                    "b": [
+                        {
+                            "x": 0,
+                            "y": 255
+                        },
+                        {
+                            "x": 255,
+                            "y": 0
+                        }
+                    ]
+                }
+            },
+            {
+                "id": "153435b9-65d8-4761-939b-2ca522640bf4",
+                "type": "hsl",
+                "enabled": true,
+                "hue": -9,
+                "saturation": 100,
+                "lightness": 0
+            },
+            {
+                "id": "colour:colour-grade:0",
+                "type": "colour-grade",
+                "enabled": true
+            }
+        ],
+        "post": [
+            {
+                "id": "post:god-rays:0",
+                "type": "god-rays",
+                "enabled": true
+            },
+            {
+                "id": "post:bloom:0",
+                "type": "bloom",
+                "enabled": true
+            },
+            {
+                "id": "post:glow:0",
+                "type": "glow",
+                "enabled": true
+            },
+            {
+                "id": "post:halation:0",
+                "type": "halation",
+                "enabled": true
+            },
+            {
+                "id": "post:chromatic-aberration:0",
+                "type": "chromatic-aberration",
+                "enabled": true
+            },
+            {
+                "id": "post:vignette:0",
+                "type": "vignette",
+                "enabled": false
+            },
+            {
+                "id": "post:lens-distortion:0",
+                "type": "lens-distortion",
+                "enabled": false
+            },
+            {
+                "id": "post:sharpen:0",
+                "type": "sharpen",
+                "enabled": false
+            },
+            {
+                "id": "post:film-grain:0",
+                "type": "film-grain",
+                "enabled": false
+            },
+            {
+                "id": "post:directional-blur:0",
+                "type": "directional-blur",
+                "enabled": false
+            },
+            {
+                "id": "post:rolling-shutter:0",
+                "type": "rolling-shutter",
+                "enabled": false
+            },
+            {
+                "id": "post:heat-haze:0",
+                "type": "heat-haze",
+                "enabled": false
+            },
+            {
+                "id": "post:prism-dispersion:0",
+                "type": "prism-dispersion",
+                "enabled": false
+            },
+            {
+                "id": "post:kaleidoscope:0",
+                "type": "kaleidoscope",
+                "enabled": false
+            },
+            {
+                "id": "post:datamosh:0",
+                "type": "datamosh",
+                "enabled": false
+            },
+            {
+                "id": "post:scanline-displacement:0",
+                "type": "scanline-displacement",
+                "enabled": false
+            },
+            {
+                "id": "post:anamorphic-streaks:0",
+                "type": "anamorphic-streaks",
+                "enabled": false
+            },
+            {
+                "id": "post:diffraction-starburst:0",
+                "type": "diffraction-starburst",
+                "enabled": false
+            },
+            {
+                "id": "post:lens-dirt:0",
+                "type": "lens-dirt",
+                "enabled": false
+            },
+            {
+                "id": "post:lens-ghosts:0",
+                "type": "lens-ghosts",
+                "enabled": false
+            },
+            {
+                "id": "post:bokeh-bloom:0",
+                "type": "bokeh-bloom",
+                "enabled": false
+            },
+            {
+                "id": "post:gate-weave:0",
+                "type": "gate-weave",
+                "enabled": false
+            },
+            {
+                "id": "post:film-damage:0",
+                "type": "film-damage",
+                "enabled": false
+            },
+            {
+                "id": "post:radial-blur:0",
+                "type": "radial-blur",
+                "enabled": false
+            },
+            {
+                "id": "post:spin-blur:0",
+                "type": "spin-blur",
+                "enabled": false
+            }
+        ]
+    },
+    "assets": []
+}

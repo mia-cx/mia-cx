@@ -1,0 +1,308 @@
+@import '@fontsource-variable/archivo/wdth.css';
+
+:root {
+    /* The shader's dark base, sampled from a render. The page and the header tint share it, so the
+       page is already the field's colour before the shader's first frame. */
+    --haze: #221820;
+    /* Resolved per element, so it follows --haze when a theme overrides it. */
+    --bg: var(--haze);
+    --panel: #0d0f12;
+    --panel-line: #1a1c22;
+
+    /* Ink, warm off-white from the bloom core. */
+    --ink: #e9e5dd;
+    --ink-dim: #8f8b85;
+    --ink-faint: #4d4a47;
+
+    /* Accents lifted from the shader: bloom magenta, bokeh violet. */
+    --accent: #ff3d8a;
+    --violet: #5b4ddc;
+
+    /* Roles that used to be hardcoded. */
+    --wordmark: #fff;
+    --control: rgb(13 15 18 / 55%);
+    --menu-hover: rgb(255 255 255 / 6%);
+    --code: rgb(255 255 255 / 7%);
+    --pre: rgb(0 0 0 / 45%);
+    --shadow: rgb(7 8 9);
+    --menu-shadow: rgb(0 0 0 / 90%);
+
+    --font-sans: 'Archivo Variable', Archivo, system-ui, sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+    --header-height: 72px;
+
+    /* One content width for every page, including the header and footer. */
+    --content-width: 880px;
+    --gutter: clamp(20px, 4vw, 56px);
+
+    color-scheme: dark;
+}
+
+/*
+ * Light mode. Paper is the bloom core's off-white; ink is the field's dark plum. The field itself
+ * renders over the page unchanged — its dark areas are transparent, so paper shows through them.
+ */
+:root[data-theme='light'] {
+    --panel: #ebe6de;
+    --panel-line: #dcd6ce;
+    --haze: #e6dde2;
+
+    --ink: #1b1519;
+    --ink-dim: #6b6560;
+    --ink-faint: #b3ada6;
+
+    --accent: #d61f6f;
+    --violet: #4b3fc9;
+
+    --wordmark: #000;
+    --control: rgb(255 255 255 / 55%);
+    --menu-hover: rgb(0 0 0 / 5%);
+    --code: rgb(0 0 0 / 6%);
+    --pre: rgb(0 0 0 / 7%);
+    --shadow: rgb(243 239 232);
+    --menu-shadow: rgb(0 0 0 / 25%);
+
+    color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme]) {
+        --panel: #ebe6de;
+        --panel-line: #dcd6ce;
+        --haze: #e6dde2;
+        --ink: #1b1519;
+        --ink-dim: #6b6560;
+        --ink-faint: #b3ada6;
+        --accent: #d61f6f;
+        --violet: #4b3fc9;
+        --wordmark: #000;
+        --control: rgb(255 255 255 / 55%);
+        --menu-hover: rgb(0 0 0 / 5%);
+        --code: rgb(0 0 0 / 6%);
+        --pre: rgb(0 0 0 / 7%);
+        --shadow: rgb(243 239 232);
+        --menu-shadow: rgb(0 0 0 / 25%);
+        color-scheme: light;
+    }
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    margin: 0;
+    min-height: 100dvh;
+}
+
+.container {
+    width: min(100% - 2 * var(--gutter), var(--content-width));
+    margin-inline: auto;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+dl,
+dd,
+figure {
+    margin: 0;
+}
+
+ul,
+ol {
+    padding: 0;
+    list-style: none;
+}
+
+a {
+    color: inherit;
+    text-decoration-color: var(--ink-faint);
+    text-underline-offset: 0.18em;
+}
+a:hover {
+    color: var(--accent);
+    text-decoration-color: currentColor;
+}
+
+:focus-visible {
+    outline: 2px solid var(--violet);
+    outline-offset: 3px;
+}
+
+img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+/* Square corners everywhere. */
+*,
+*::before,
+*::after {
+    border-radius: 0;
+}
+
+button,
+input,
+textarea,
+select {
+    font: inherit;
+    color: inherit;
+}
+
+.mono {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    html {
+        scroll-behavior: smooth;
+    }
+}
+
+/*
+ * First-load entrance. `data-boot` is set on <html> before paint and moves loading → entering →
+ * (removed); see app.html and the root layout. While loading, the page is hidden and a ring shows
+ * if the wait is long enough to notice. Entering cross-dissolves: the ring blurs out while each
+ * block blurs in, staggered by its `--enter` index. Fill mode is `backwards` only, so no filter or
+ * transform is left behind; a lingering filter would stop the header's backdrop blur working.
+ */
+.boot {
+    display: none;
+}
+:root[data-boot] .boot {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+}
+.boot span {
+    width: 28px;
+    height: 28px;
+    border: 1.5px solid var(--panel-line);
+    border-top-color: var(--ink);
+    border-radius: 50%;
+}
+:root[data-boot='loading'] .boot span {
+    /* Shown only when the wait is long enough to notice, so a cached load never flashes it. */
+    animation:
+        boot-ring-in 300ms ease 350ms backwards,
+        boot-spin 800ms linear infinite;
+}
+:root[data-boot='entering'] .boot {
+    opacity: 0;
+    filter: blur(6px);
+    transition:
+        opacity 500ms ease,
+        filter 500ms ease;
+}
+:root[data-boot='entering'] .boot span {
+    animation: boot-spin 800ms linear infinite;
+}
+
+:root[data-boot='loading'] header[data-header] .bar,
+:root[data-boot='loading'] .page,
+:root[data-boot='loading'] footer {
+    opacity: 0;
+}
+:root[data-boot='entering'] header[data-header] .bar,
+:root[data-boot='entering'] .page main > :not(.hero),
+:root[data-boot='entering'] [data-enter],
+:root[data-boot='entering'] footer .inner {
+    animation: boot-enter 800ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: calc(120ms + var(--enter, 0) * 70ms);
+}
+:root[data-boot='entering'] footer .inner {
+    --enter: 6;
+}
+.page main > :nth-child(1) {
+    --enter: 1;
+}
+.page main > :nth-child(2) {
+    --enter: 2;
+}
+.page main > :nth-child(3) {
+    --enter: 3;
+}
+.page main > :nth-child(4) {
+    --enter: 4;
+}
+.page main > :nth-child(n + 5) {
+    --enter: 5;
+}
+
+@keyframes boot-enter {
+    from {
+        opacity: 0;
+        filter: blur(10px);
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        filter: none;
+        transform: none;
+    }
+}
+@keyframes boot-ring-in {
+    from {
+        opacity: 0;
+    }
+}
+@keyframes boot-spin {
+    to {
+        transform: rotate(1turn);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root[data-boot='entering'] header[data-header] .bar,
+    :root[data-boot='entering'] .page main > :not(.hero),
+    :root[data-boot='entering'] [data-enter],
+    :root[data-boot='entering'] footer .inner {
+        animation: boot-fade 300ms ease backwards;
+    }
+    :root[data-boot='loading'] .boot span {
+        animation: boot-ring-in 300ms ease 350ms backwards;
+    }
+    :root[data-boot='entering'] .boot span {
+        animation: none;
+    }
+    @keyframes boot-fade {
+        from {
+            opacity: 0;
+        }
+    }
+}
