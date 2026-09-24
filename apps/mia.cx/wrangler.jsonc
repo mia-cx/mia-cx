@@ -1,0 +1,20 @@
+// The site runs as a Cloudflare Worker. Every page is prerendered and served as a static asset;
+// the Worker only answers what isn't one, such as the 404 page.
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "mia-cx",
+    "main": ".svelte-kit/cloudflare/_worker.js",
+    "compatibility_date": "2026-09-24",
+    "compatibility_flags": ["nodejs_als"],
+    "routes": [{ "pattern": "mia.cx", "custom_domain": true }],
+    // Kept on alongside the domain so branch builds get preview URLs.
+    "workers_dev": true,
+    "preview_urls": true,
+    "assets": {
+        "binding": "ASSETS",
+        "directory": ".svelte-kit/cloudflare",
+    },
+    "observability": {
+        "enabled": true,
+    },
+}

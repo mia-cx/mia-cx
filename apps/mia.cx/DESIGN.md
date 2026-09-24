@@ -14,7 +14,7 @@ reserved for controls.
 | `/about`       | Mia's approved biography, followed by contact                                      |
 | `/blog`        | Coming soon, linking to Svartz; post pages are parked in `parked/`                 |
 
-Everything prerenders to static files in `dist/` through `adapter-static`.
+Everything prerenders to static files in `.svelte-kit/cloudflare/` through `adapter-cloudflare`, served as the assets of a Cloudflare Worker (see `wrangler.jsonc`).
 
 ## Home
 

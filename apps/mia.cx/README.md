@@ -35,4 +35,6 @@ npm run build
 
 You can preview the production build with `npm run preview`.
 
-> To deploy your app, you may need to install an [adapter](https://kit.svelte.dev/docs/adapters) for your target environment.
+## Deploying
+
+The site runs as a Cloudflare Worker, configured in `wrangler.jsonc`. Cloudflare builds it from the repo root with `pnpm --filter @mia-cx/mia.cx build` and deploys with `pnpm --filter @mia-cx/mia.cx exec wrangler deploy`. To check the built Worker locally, run `npx wrangler dev` after a build.
