@@ -188,7 +188,8 @@
         height: calc(100% * var(--zoom));
         aspect-ratio: 2105 / 3475;
         background: rgb(221 138 231);
-        opacity: 0.14;
+        /* Without scroll timelines, the field publishes its dim for this; with them, the animation below runs. */
+        opacity: calc(0.14 * var(--atmosphere-dim, 1));
         mask-image: var(--photo), linear-gradient(to bottom, #000 var(--neck-start), transparent var(--neck-end));
         mask-size: 100% 100%;
         mask-composite: intersect;
