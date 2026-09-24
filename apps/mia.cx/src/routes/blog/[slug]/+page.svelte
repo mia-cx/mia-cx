@@ -1,11 +1,12 @@
 <script lang="ts">
     import '$lib/styles/prose.css';
+    import Mentions from '$lib/components/Mentions.svelte';
+    import { formatDate } from '$lib/content/vault';
     import { site } from '$lib/content/site';
 
     let { data } = $props();
     const post = $derived(data.post);
-    const formatted = (iso: string) =>
-        new Date(iso).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
+    const formatted = (iso: string) => formatDate(iso, 'long');
 </script>
 
 <svelte:head>
@@ -25,16 +26,17 @@
             </p>
         </header>
 
-        <div class="prose">
-            <!-- Mia's own markdown, vendored from her wiki. -->
-            {@html data.html}
-        </div>
+        <!-- Mia's own markdown, from the vault. -->
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -- rendered from the vault, which is authored in this repo -->
+        <div class="prose">{@html data.html}</div>
 
         {#if post.source}
             <p class="source mono">
                 Originally posted <a href={post.source} rel="external">here ↗</a>
             </p>
         {/if}
+
+        <Mentions mentions={data.mentions} />
     </article>
 </main>
 

@@ -1,11 +1,10 @@
 ---
 tags:
   - work/code
-publish: true
 listed: true
 featured: true
-created: 2026-05-06T00:00
-summary: "In-browser dithering and colour conversion."
+created_at: 2026-05-06T00:00
+description: "In-browser dithering and colour conversion."
 stack:
   - TypeScript
   - Svelte

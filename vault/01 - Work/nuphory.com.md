@@ -1,10 +1,9 @@
 ---
 tags:
   - work/code
-publish: true
 listed: true
-created: 2022-12-06T00:00
-summary: Storefront and link portal for an artist project.
+created_at: 2022-12-06T00:00
+description: Storefront and link portal for an artist project.
 stack:
   - SvelteKit
   - Printful API

@@ -1,9 +1,8 @@
 ---
 tags:
   - work/code
-publish: true
-created: 2022-08-28T00:00
-summary: "A pixel-perfect monospace typeface, with binary strips."
+created_at: 2022-08-28T00:00
+description: "A pixel-perfect monospace typeface, with binary strips."
 year: 2024
 stack:
   - Type design

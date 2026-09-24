@@ -1,9 +1,8 @@
 ---
 tags:
   - work/code
-publish: true
-created: 2026-07-23T00:00
-summary: "System-wide AI autocomplete for macOS. Bring your model, press Tab."
+created_at: 2026-07-23T00:00
+description: "System-wide AI autocomplete for macOS. Bring your model, press Tab."
 status: Public alpha
 stack:
   - Swift

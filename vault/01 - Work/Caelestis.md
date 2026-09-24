@@ -1,11 +1,10 @@
 ---
 tags:
   - work/code
-publish: true
 listed: true
 featured: true
-created: 2026-08-02T00:00
-summary: "A fast, customisable template overlay for wplace.live, with a shared server and a progress dashboard."
+created_at: 2026-08-02T00:00
+description: "A fast, customisable template overlay for wplace.live, with a shared server and a progress dashboard."
 stack:
   - TypeScript
   - Svelte

@@ -1,9 +1,8 @@
 ---
 tags:
   - work/code
-publish: true
-created: 2019-06-10T00:00
-summary: Simplifying Minecraft server management for developers and admins.
+created_at: 2019-06-10T00:00
+description: Simplifying Minecraft server management for developers and admins.
 status: Old project
 stack:
   - Java

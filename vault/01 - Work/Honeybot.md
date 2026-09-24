@@ -1,9 +1,8 @@
 ---
 tags:
   - work/code
-publish: true
-created: 2026-07-06T00:00
-summary: "A Discord moderation bot that catches scam and spam raids with honeypot channels. Built on protocord."
+created_at: 2026-07-06T00:00
+description: "A Discord moderation bot that catches scam and spam raids with honeypot channels. Built on protocord."
 stack:
   - TypeScript
   - SQLite

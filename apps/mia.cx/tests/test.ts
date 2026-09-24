@@ -69,6 +69,11 @@ test('blog is a coming-soon page linking to Svartz', async ({ page }) => {
     );
 });
 
+test('posts have no pages while the blog is off', async ({ page }) => {
+    const response = await page.goto('/blog/crunch-time');
+    expect(response?.status()).toBe(404);
+});
+
 test('every page carries the sticky header and the sitemap', async ({ page }) => {
     for (const route of ['/', '/work', '/blog', '/about']) {
         await page.goto(route);

@@ -1,10 +1,9 @@
 ---
 tags:
   - work/code
-publish: true
 listed: true
-created: 2021-12-22T00:00
-summary: The official site for an online music collective.
+created_at: 2021-12-22T00:00
+description: The official site for an online music collective.
 stack:
   - SvelteKit
   - Shopify

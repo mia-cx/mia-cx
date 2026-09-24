@@ -1,6 +1,7 @@
 /** Route loaders, shared so pages stay presentation-only. */
 import { error } from '@sveltejs/kit';
-import { postBySlug, posts, render, work, workBySlug, workWithPages } from './vault';
+import { SECTIONS } from './sections';
+import { mentionsOf, postBySlug, posts, render, work, workBySlug, workWithPages } from './vault';
 
 export const workEntries = () => workWithPages.map(({ slug }) => ({ slug }));
 
@@ -11,18 +12,22 @@ export function loadWork(slug: string) {
     return {
         note,
         html: render(note.markdown),
+        mentions: mentionsOf(note.entry),
         previous: workWithPages[index - 1] ?? null,
         next: workWithPages[index + 1] ?? null,
     };
 }
 
-/** Externally hosted posts have no page of their own; the index links straight out. */
-export const postEntries = () => posts.filter((post) => !post.external).map(({ slug }) => ({ slug }));
+/** Posts with pages: none while the blog is off, and never the ones hosted elsewhere. */
+export const publishedPosts = SECTIONS.blog.published ? posts.filter((post) => !post.external) : [];
+
+export const postEntries = () => publishedPosts.map(({ slug }) => ({ slug }));
 
 export function loadPost(slug: string) {
     const post = postBySlug(slug);
-    if (!post || post.external) error(404, 'No such post');
-    return { post, html: render(post.markdown) };
+    // The Worker would otherwise render an unpublished post on request.
+    if (!post || !publishedPosts.includes(post)) error(404, 'No such post');
+    return { post, html: render(post.markdown), mentions: mentionsOf(post.entry) };
 }
 
 export { formatDate } from './vault';
