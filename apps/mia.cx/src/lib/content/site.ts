@@ -74,63 +74,6 @@ export const contact = {
  * (soundcloud.com/patchstep) and the smart links in its track descriptions, checked 2026-09-10.
  * Where a release has its own smart link it is used; otherwise the track's SoundCloud page is.
  */
-export const music = {
-    releases: [
-        {
-            title: 'australis // see the light',
-            credit: 'feat. Lunanescence',
-            year: '2025',
-            href: 'https://too.fm/australis',
-        },
-        { title: 'crystal tempest', credit: 'ANvX cut', year: '2025', href: 'https://soundcloud.com/patchstep/tempest' },
-        {
-            title: 'breaks to drink sprite to',
-            credit: 'w/ Lunanescence',
-            year: '2023',
-            href: 'https://too.fm/breaks',
-        },
-        {
-            title: 'sundown',
-            credit: 'with Light Shard',
-            year: '2022',
-            href: 'https://soundcloud.com/patchstep/sundown',
-        },
-        {
-            title: 'lament',
-            credit: 'feat. Lunanescence',
-            year: '2022',
-            href: 'https://soundcloud.com/patchstep/lament',
-        },
-        { title: 'refraction', year: '2022', href: 'https://soundcloud.com/patchstep/refraction' },
-        { title: 'nostalgia', year: '2022', href: 'https://soundcloud.com/patchstep/nostalgia' },
-        {
-            title: 'junebug',
-            credit: 'trans pride war dub',
-            year: '2022',
-            href: 'https://soundcloud.com/patchstep/junebug',
-        },
-        {
-            title: 'The Rains of Castamere',
-            credit: 'on kalimba',
-            year: '2021',
-            href: 'https://soundcloud.com/patchstep/rains-of-castamere',
-        },
-        { title: 'circadia', year: '2021', href: 'https://soundcloud.com/patchstep/circadia' },
-        { title: 'night', year: '2021', href: 'https://soundcloud.com/patchstep/night' },
-        { title: 'day', year: '2021', href: 'https://soundcloud.com/patchstep/day' },
-        { title: 'insomnia', year: '2021', href: 'https://soundcloud.com/patchstep/insomnia' },
-        { title: '5 AM', year: '2020', href: 'https://soundcloud.com/patchstep/5am' },
-        { title: 'astronaut', year: '2018', href: 'https://soundcloud.com/patchstep/astronaut' },
-    ],
-    platforms: [
-        { label: 'Newgrounds', href: 'https://patchstep.newgrounds.com' },
-        { label: 'YouTube', href: 'https://www.youtube.com/channel/UChfFDsXEIpRapvbNB42Nl4A' },
-        { label: 'Bandcamp', href: 'https://music.patchstep.com' },
-        { label: 'Spotify', href: 'https://open.spotify.com/artist/5QKpNE47kzOTNDAYyaAzOd' },
-        { label: 'Apple Music', href: 'https://music.apple.com/nl/artist/patch/1543434338' },
-        { label: 'SoundCloud', href: 'https://soundcloud.com/patchstep' },
-    ],
-};
 
 export const nav = [
     { label: 'Work', href: '/work' },
@@ -169,14 +112,3 @@ export const biography = [
     'I’m especially useful for planning and ideation, when we can question assumptions and figure out the shape of the product you really need. I’m happy to talk about technical or creative direction over Discord, email, or in person. Your idea doesn’t need to be fully formed.',
 ];
 
-/** Published to npm. Listed on the Work page but not part of the vault. */
-export const packages = [
-    { label: 'rule-composer', note: 'Agent rules', href: 'https://www.npmjs.com/package/rule-composer' },
-    {
-        label: '@mia-cx/tailwindcss-themes',
-        note: 'Tailwind plugin',
-        href: 'https://www.npmjs.com/package/@mia-cx/tailwindcss-themes',
-    },
-    { label: '@mia-cx/config', note: 'Shared config', href: 'https://www.npmjs.com/package/@mia-cx/config' },
-    { label: 'kerning-template', note: 'Type tool', href: 'https://npmjs.com/package/kerning-template' },
-];

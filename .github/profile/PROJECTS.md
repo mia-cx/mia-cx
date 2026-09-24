@@ -6,21 +6,12 @@
 
 - [projects](#projects)
   - [Table of Contents](#table-of-contents)
-  - [Tissues](#tissues)
   - [Clients](#clients)
     - [nuphory.com](#nuphorycom)
     - [hypertrance.eu](#hypertranceeu)
     - [Dance Xperience](#dance-xperience)
     - [Aero](#aero)
   - [Open Source Contributions](#open-source-contributions)
-
-## Tissues
-
-For years now, I've been looking for a functional and effective way to track my tasks. A proper to-do app. The one app that I've found actually integrates well with the way I work is [Microsoft To Do](https://todo.microsoft.com/).
-
-I was finally happy, but after using it for a while, I got a little tired of having to track my GitHub Issues & Projects _as well as_ my Microsoft To Do Tasks. Again, I started searching for potential existing ways to integrate GitHub with my Microsoft To Do. Turns out, none exist.
-
-This is why I started [Tissues](https://github.com/mia-cx/tissues).
 
 ## Clients
 
