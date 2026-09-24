@@ -49,10 +49,15 @@ export const svartzSlug = (path: string) =>
         .replace(/_index$/, 'index');
 
 /** GitHub-style heading anchors, so tables of contents written in Obsidian keep working. */
-export const slugifyHeading = (text: string) =>
-    text
-        .toLowerCase()
-        .replace(/<[^>]+>/g, '')
+export function slugifyHeading(text: string) {
+    // Strip tags until none are left, so a nested `<<b>b>` cannot leave one behind.
+    let stripped = text.toLowerCase();
+    for (let previous = ''; previous !== stripped;) {
+        previous = stripped;
+        stripped = stripped.replace(/<[^>]+>/g, '');
+    }
+    return stripped
         .replace(/[^\w\- ]+/g, '')
         .trim()
         .replace(/\s+/g, '-');
+}
