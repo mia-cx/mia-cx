@@ -1,5 +1,6 @@
 <script lang="ts">
     import '$lib/styles/prose.css';
+    import Mentions from '$lib/components/Mentions.svelte';
     import { site } from '$lib/content/site';
 
     let { data } = $props();
@@ -45,6 +46,8 @@
             <dd><a href={note.source} rel="external">{note.source.replace('https://github.com/', '')}</a></dd>
         {/if}
     </dl>
+
+    <Mentions mentions={data.mentions} />
 
     <nav class="siblings mono" aria-label="Other work">
         {#if data.previous}<a href="/work/{data.previous.slug}">← {data.previous.title}</a>{:else}<span></span>{/if}
