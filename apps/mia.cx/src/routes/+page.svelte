@@ -46,6 +46,21 @@
                 fetchpriority="high"
             />
         </div>
+        <!--
+            The same photo again, above the shader, faded out across the neck. The field still washes
+            over the shoulders and body, but never over the face. Same box, same source, so the two
+            layers line up to the pixel and the browser downloads the image once.
+        -->
+        <div class="portrait portrait-top" aria-hidden="true" data-enter style:--enter="0">
+            <img
+                src={portrait800}
+                srcset={portraitSet}
+                sizes="(max-width: 820px) 100vw, 50vw"
+                alt=""
+                width="2105"
+                height="3475"
+            />
+        </div>
     </section>
 
     <section class="selected" aria-labelledby="selected" style:--enter="6">
@@ -114,6 +129,10 @@
         /* Where the centre of the photo sits, as a share of the viewport width. The text column
            starts at 50vw, so this is stable at every zoom level and window size. */
         --face: 40vw;
+        /* Where the top layer crossfades back to the field, as a share of the photo's height: just
+           below the chin to where the shoulders begin. */
+        --neck-start: 17%;
+        --neck-end: 24%;
         /* Spans the viewport rather than the grid column so the photo is placed in viewport terms. */
         position: absolute;
         top: calc(var(--header-height) + 24px);
@@ -141,6 +160,13 @@
             #000 calc((50% - var(--drop)) / var(--zoom)),
             transparent calc((100% - var(--drop)) / var(--zoom))
         );
+    }
+    /* Above the shader's canvas (z-index 5), below the header (20). */
+    .portrait-top {
+        z-index: 6;
+    }
+    .portrait-top img {
+        mask-image: linear-gradient(to bottom, #000 var(--neck-start), transparent var(--neck-end));
     }
     .lead {
         color: var(--ink-dim);
