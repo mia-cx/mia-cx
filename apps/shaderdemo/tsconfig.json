@@ -3,7 +3,6 @@
     "compilerOptions": {
         "strict": true,
         "moduleResolution": "bundler",
-        "resolveJsonModule": true,
-        "types": ["@webgpu/types"]
+        "resolveJsonModule": true
     }
 }

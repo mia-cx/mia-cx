@@ -29,11 +29,13 @@
         <nav aria-labelledby="sitemap">
             <h2 id="sitemap">Sitemap</h2>
             <ul>
-                {#each sitemap as item}
+                {#each sitemap as item (item.href)}
                     <li>
                         <a href={item.href} rel={item.external ? 'external' : undefined}>
                             {item.label}
-                            {#if item.external}<IconArrowUpRight class="arrow" />{:else}<IconArrowRight class="arrow" />{/if}
+                            {#if item.external}<IconArrowUpRight class="arrow" />{:else}<IconArrowRight
+                                    class="arrow"
+                                />{/if}
                         </a>
                     </li>
                 {/each}

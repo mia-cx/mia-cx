@@ -41,10 +41,7 @@
     }
 </script>
 
-<button
-    type="button"
-    onclick={toggle}
-    aria-label={`Switch to ${next} mode${nextIsSystem ? ' (follow system)' : ''}`}>
+<button type="button" onclick={toggle} aria-label={`Switch to ${next} mode${nextIsSystem ? ' (follow system)' : ''}`}>
     {#if effective === 'dark'}<IconSun />{:else}<IconMoon />{/if}
 </button>
 

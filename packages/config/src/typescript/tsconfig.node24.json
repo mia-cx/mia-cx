@@ -1,11 +1,13 @@
 {
     "schema": "https://json.schemastore.org/tsconfig",
     "extends": "./tsconfig.base.json",
-    "display": "mia-cx nodenext tsconfig",
+    "display": "mia-cx node24 tsconfig",
     "compilerOptions": {
-        "lib": ["es2023"],
-        "module": "nodenext",
-        "target": "esnext",
+        "lib": [
+            "es2024"
+        ],
+        "module": "node20",
+        "target": "es2024",
         "moduleResolution": "nodenext"
     }
 }

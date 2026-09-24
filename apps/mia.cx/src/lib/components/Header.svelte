@@ -6,8 +6,7 @@
      * so as the hero leaves they spill down the viewport and then settle. That runs off the hero's
      * own view timeline where the browser supports it, and off a scroll listener where it does not.
      */
-    import { onMount } from 'svelte';
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
     import GradientBlur from './GradientBlur.svelte';
     import EasedGradient from './EasedGradient.svelte';
     import { nav, site } from '$lib/content/site';
@@ -36,7 +35,7 @@
 
     const bottom = $derived(`${bottomFor(heroExit)}%`);
 
-    const path = $derived($page.url.pathname);
+    const path = $derived(page.url.pathname);
     const current = (href: string) =>
         href.includes('#') ? undefined : path === href || (href !== '/' && path.startsWith(href)) ? 'page' : undefined;
 </script>
@@ -55,18 +54,14 @@
     }}
 />
 
-<header
-    bind:this={header}
-    data-header
-    data-hero-visible={heroVisible}
-    style:--bottom={bottom}>
+<header bind:this={header} data-header data-hero-visible={heroVisible} style:--bottom={bottom}>
     <GradientBlur class="header-layer" blur={12} detail={4} angle="to top" />
     <EasedGradient class="header-layer" from="var(--haze)" to="transparent" angle="to bottom" detail={8} />
 
     <div class="bar container">
         <a class="wordmark" href="/">{site.domain}</a>
         <nav aria-label="Site">
-            {#each nav as item}
+            {#each nav as item (item.href)}
                 <a class="mono" href={item.href} aria-current={current(item.href)}>{item.label}</a>
             {/each}
             <ThemeToggle />

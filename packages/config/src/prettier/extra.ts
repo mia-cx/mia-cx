@@ -9,13 +9,8 @@ import { PluginOptions as TailwindCSSPrettierConfig } from "prettier-plugin-tail
  * TODO integrate types from `prettier-plugin-glsl`.
  */
 export const glsl: Config = {
-	...base,
-	plugins: [
-		...new Set([
-			...(base.plugins as string[]),
-			"prettier-plugin-glsl",
-		]),
-	],
+    ...base,
+    plugins: [...new Set([...(base.plugins as string[]), "prettier-plugin-glsl"])],
 };
 
 /**
@@ -23,13 +18,8 @@ export const glsl: Config = {
  * TODO integrate types from `prettier-plugin-nginx`.
  */
 export const nginx: Config = {
-	...base,
-	plugins: [
-		...new Set([
-			...(base.plugins as string[]),
-			"prettier-plugin-nginx",
-		]),
-	],
+    ...base,
+    plugins: [...new Set([...(base.plugins as string[]), "prettier-plugin-nginx"])],
 };
 
 /**
@@ -37,32 +27,22 @@ export const nginx: Config = {
  * TODO integrate types from `prettier-plugin-sh`.
  */
 export const sh: Config = {
-	...base,
+    ...base,
 
-	functionNextLine: true,
-	indent: 2,
-	switchCaseIndent: true,
+    functionNextLine: true,
+    indent: 2,
+    switchCaseIndent: true,
 
-	plugins: [
-		...new Set([
-			...(base.plugins as string[]),
-			"prettier-plugin-sh",
-		]),
-	],
+    plugins: [...new Set([...(base.plugins as string[]), "prettier-plugin-sh"])],
 };
 
 /**
  * Keep in mind you will need to install the `prettier-plugin-tailwindcss` package.
  */
 export const tailwindcss: Config & TailwindCSSPrettierConfig = {
-	...base,
-	plugins: [
-		...new Set([
-			...(base.plugins as string[]),
-			"prettier-plugin-tailwindcss",
-		]),
-	],
-	overrides: [...new Set([...(base.overrides as Override[])])],
+    ...base,
+    plugins: [...new Set([...(base.plugins as string[]), "prettier-plugin-tailwindcss"])],
+    overrides: [...new Set([...(base.overrides as Override[])])],
 };
 
 /**
@@ -70,45 +50,40 @@ export const tailwindcss: Config & TailwindCSSPrettierConfig = {
  * TODO integrate types from `prettier-plugin-xml`.
  */
 export const xml: Config = {
-	...base,
+    ...base,
 
-	xmlSortAttributesByKey: true,
+    xmlSortAttributesByKey: true,
 
-	plugins: [
-		...new Set([
-			...(base.plugins as string[]),
-			"prettier-plugin-xml",
-		]),
-	],
+    plugins: [...new Set([...(base.plugins as string[]), "prettier-plugin-xml"])],
 };
 
 /**
  * Keep in mind you will need to install the `prettier-plugin-sh` and `prettier-plugin-xml` packages.
  */
 export default {
-	...base,
-	...glsl,
-	...sh,
-	...tailwindcss,
-	...xml,
+    ...base,
+    ...glsl,
+    ...sh,
+    ...tailwindcss,
+    ...xml,
 
-	plugins: [
-		...new Set([
-			...(base.plugins as string[]),
-			...(glsl.plugins as string[]),
-			...(sh.plugins as string[]),
-			...(tailwindcss.plugins as string[]),
-			...(xml.plugins as string[]),
-		]),
-	],
+    plugins: [
+        ...new Set([
+            ...(base.plugins as string[]),
+            ...(glsl.plugins as string[]),
+            ...(sh.plugins as string[]),
+            ...(tailwindcss.plugins as string[]),
+            ...(xml.plugins as string[]),
+        ]),
+    ],
 
-	overrides: [
-		...new Set([
-			...(base.overrides as Override[]),
-			...(glsl.overrides as Override[]),
-			...(sh.overrides as Override[]),
-			...(tailwindcss.overrides as Override[]),
-			...(xml.overrides as Override[]),
-		]),
-	],
+    overrides: [
+        ...new Set([
+            ...(base.overrides as Override[]),
+            ...(glsl.overrides as Override[]),
+            ...(sh.overrides as Override[]),
+            ...(tailwindcss.overrides as Override[]),
+            ...(xml.overrides as Override[]),
+        ]),
+    ],
 } satisfies Config;

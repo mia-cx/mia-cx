@@ -1,7 +1,7 @@
 <script lang="ts">
     import '../app.css';
     import { onMount, type Snippet } from 'svelte';
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
     import ShaderCanvas from '$lib/shader/ShaderCanvas.svelte';
     import Header from '$lib/components/Header.svelte';
     import Footer from '$lib/components/Footer.svelte';
@@ -9,7 +9,7 @@
     let { children }: { children: Snippet } = $props();
 
     /** Only the home page has a hero for the header's blur to key off. */
-    const hasHero = $derived($page.url.pathname === '/');
+    const hasHero = $derived(page.url.pathname === '/');
 
     /*
      * First load only: the page stays hidden while the shader compiles, then everything enters

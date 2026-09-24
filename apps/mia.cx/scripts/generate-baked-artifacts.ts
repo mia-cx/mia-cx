@@ -4,7 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { format, resolveConfig } from 'prettier';
 import settingsDocument from '../src/lib/shader/default-settings.json';
 import { composeAdjustmentLut } from '../src/lib/shader/adjustments';
-import { leadingAdjustmentRegion, rendererStagePlan, type ColourEffect, type PostEffect } from '../src/lib/shader/pipeline';
+import {
+    leadingAdjustmentRegion,
+    rendererStagePlan,
+    type ColourEffect,
+    type PostEffect,
+} from '../src/lib/shader/pipeline';
 import type { ShaderParameters } from '../src/lib/shader/renderer';
 import { POST_PARAMETER_SCHEMA } from '../src/lib/shader/renderer';
 

@@ -7,6 +7,6 @@
         "noFallthroughCasesInSwitch": true,
         "noUncheckedIndexedAccess": true,
         "skipLibCheck": true,
-        "strict": true,
+        "strict": true
     }
 }

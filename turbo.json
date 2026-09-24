@@ -22,9 +22,17 @@
             "interactive": true,
             "persistent": true
         },
-        "format": {},
+        "format": {
+            "dependsOn": ["^build"]
+        },
+        "@mia-cx/config#format": {
+            "dependsOn": ["build"]
+        },
+        "@mia-cx/config#lint": {
+            "dependsOn": ["build", "format"]
+        },
         "lint": {
-            "dependsOn": ["format"]
+            "dependsOn": ["^build", "format"]
         },
         "test": {
             "dependsOn": ["build", "lint"],

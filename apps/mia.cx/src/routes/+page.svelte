@@ -11,7 +11,6 @@
     import { featuredWork } from '$lib/content/vault';
 
     const featured = featuredWork;
-
 </script>
 
 <svelte:head>
@@ -43,16 +42,20 @@
                 alt="Portrait of {site.name}"
                 width="2105"
                 height="3475"
-                fetchpriority="high" />
+                fetchpriority="high"
+            />
         </div>
     </section>
 
     <section class="selected" aria-labelledby="selected" style:--enter="6">
         <h2 id="selected">Featured work</h2>
         <ul>
-            {#each featured as item}
+            {#each featured as item (item.slug)}
                 <li>
-                    <a href={item.markdown ? `/work/${item.slug}` : (item.live ?? item.source)} rel={item.markdown ? undefined : 'external'}>
+                    <a
+                        href={item.markdown ? `/work/${item.slug}` : (item.live ?? item.source)}
+                        rel={item.markdown ? undefined : 'external'}
+                    >
                         <span class="title">{item.title}</span>
                         <span class="note">{item.summary}</span>
                         {#if item.stack.length}<span class="mono meta">{item.stack.join(' · ')}</span>{/if}

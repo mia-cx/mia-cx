@@ -187,7 +187,8 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).toContain(
             'const internalResolution = [this.baseTargets[0].width, this.baseTargets[0].height]',
         );
-        expect(implementation.match(/packUniform\(internalResolution/g)).toHaveLength(2);
+        // The test runner's transform may wrap imports, so match the call loosely.
+        expect(implementation.match(/packUniform\)?\(internalResolution/g)).toHaveLength(2);
         expect(implementation).toContain('data[0] = this.godRays.width');
         expect(implementation).toContain('data[0] = this.canvas.width');
         expect(implementation).not.toContain('packUniform([this.canvas.width, this.canvas.height]');
@@ -212,7 +213,7 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).toContain('pending.generation !== this.adaptiveGeneration');
         expect(implementation).toContain('pending.scale');
         expect(implementation).toContain('this.adaptive.sampleGpu');
-        expect(implementation).toContain('if (nextScale !== void 0) this.recreateTargets()');
+        expect(implementation).toMatch(/if \(nextScale !== (void 0|undefined)\) this\.recreateTargets\(\)/);
         expect(implementation).toContain('this.pendingTimerQueries.length === 0');
         expect(implementation).toContain('TIMER_QUERY_WATCHDOG_MS');
         expect(implementation).toContain('this.disableTimerQueries()');
@@ -223,7 +224,7 @@ describe('WebGL2 parity backend', () => {
         const implementation = WebGL2Renderer.toString();
         expect(implementation).toContain('new URLSearchParams(location.search).get("webglAblate") === "1"');
         expect(implementation).toContain('ablationSample === ABLATION_WARMUPS + ABLATION_SAMPLES');
-        expect(implementation).toContain('pending.ablationVariant !== void 0');
+        expect(implementation).toMatch(/pending\.ablationVariant !== (void 0|undefined)/);
         expect(implementation).toContain('label: `ablation:${variant.label}`');
         expect(implementation).not.toContain('.finish()');
         expect(implementation).not.toContain('readPixels');
