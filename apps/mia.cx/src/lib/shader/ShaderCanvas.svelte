@@ -160,9 +160,12 @@
                     ready = false;
                     status = message;
                 };
-                ready = true;
-                status = '';
-                onsettle?.();
+                return (instance.firstFrame ?? Promise.resolve()).then(() => {
+                    if (disposed) return;
+                    ready = true;
+                    status = '';
+                    onsettle?.();
+                });
             })
             .catch((error) => {
                 if (!disposed) status = error instanceof Error ? error.message : String(error);

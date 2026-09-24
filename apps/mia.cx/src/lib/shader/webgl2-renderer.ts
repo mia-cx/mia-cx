@@ -223,6 +223,25 @@ type DensityTarget = { texture: WebGLTexture; framebuffer: WebGLFramebuffer };
 export class WebGL2Renderer implements RenderBackend {
     readonly backend = 'webgl2' as const;
     readonly gpuCursorDensity = true;
+    // Declared before `firstFrame` so the field definition does not overwrite what its executor sets.
+    private resolveFirstFrame: () => void = () => {};
+    readonly firstFrame = new Promise<void>((resolve) => (this.resolveFirstFrame = resolve));
+    private firstFrameFence: WebGLSync | null = null;
+    private firstFrameFenced = false;
+    /** Polls without blocking; a fence is signalled once the GPU has finished the first frame. */
+    private pollFirstFrame = () => {
+        const gl = this.gl,
+            fence = this.firstFrameFence;
+        if (!fence || this.destroyed) return;
+        const status = gl.clientWaitSync(fence, 0, 0);
+        if (status === gl.TIMEOUT_EXPIRED) {
+            requestAnimationFrame(this.pollFirstFrame);
+            return;
+        }
+        gl.deleteSync(fence);
+        this.firstFrameFence = null;
+        this.resolveFirstFrame();
+    };
     readonly unsupportedEffects: string[] = [];
     onStats: RenderBackend['onStats'];
     onGpuStats: RenderBackend['onGpuStats'];
@@ -894,6 +913,12 @@ export class WebGL2Renderer implements RenderBackend {
                 ablationVariant: this.ablationVariants ? this.ablationVariant : undefined,
             };
             this.scheduleFencePoll();
+        }
+        if (!this.firstFrameFenced) {
+            this.firstFrameFenced = true;
+            this.firstFrameFence = this.gl.fenceSync(this.gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+            if (this.firstFrameFence) requestAnimationFrame(this.pollFirstFrame);
+            else this.resolveFirstFrame();
         }
         this.gl.flush();
         this.invalid = false;

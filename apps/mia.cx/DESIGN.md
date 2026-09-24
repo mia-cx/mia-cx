@@ -47,7 +47,8 @@ The field sometimes covers the hero text. That is accepted: a glyph-mask imprint
 
 Shaders compile in the browser and cannot be shipped precompiled, so a first visit waits for them.
 `app.html` sets `data-boot="loading"` on `<html>` before paint, which hides the page and shows a ring
-after 350 ms. The layout moves it to `entering` when the shader settles, or after 4 s at most. The ring
+after 350 ms. The layout moves it to `entering` once the GPU has finished the shader's first frame
+(each renderer exposes this as `firstFrame`), at once if graphics fail, or after 12 s if the GPU stalls. The ring
 blurs out while blocks blur and rise in, staggered by `--enter`. The attribute is then removed, so later
 navigations do not animate. Animations fill backwards only, because a lingering `filter` would stop the
 header's backdrop blur. Without JavaScript nothing is hidden, and reduced motion gets a plain fade.
@@ -74,9 +75,9 @@ forced dark. Choosing the system's own theme clears the override.
 
 | Token          | Dark      | Light     | Role                              |
 | -------------- | --------- | --------- | --------------------------------- |
-| `--bg`         | `#070809` | `#f3efe8` | page                              |
+| `--haze`       | `#221820` | `#e6dde2` | page and header tint              |
+| `--bg`         | `var(--haze)` | same | page; matches the field before its first frame |
 | `--panel-line` | `#1a1c22` | `#dcd6ce` | hairlines, control borders        |
-| `--haze`       | `#221820` | `#e6dde2` | header tint                       |
 | `--ink`        | `#e9e5dd` | `#1b1519` | text                              |
 | `--ink-dim`    | `#8f8b85` | `#6b6560` | labels, metadata                  |
 | `--ink-faint`  | `#4d4a47` | `#b3ada6` | quiet details                     |

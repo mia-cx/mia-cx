@@ -50,8 +50,10 @@ describe('transparent shader presentation', () => {
     });
 
     it('keeps the canvas clipped to the iOS dynamic viewport behind scrolling site content', () => {
-        expect(app).toContain('<meta name="theme-color" content="#070809" media="(prefers-color-scheme: dark)" />');
-        expect(css).toContain('--bg: #070809');
+        // The page is the field's dark base, the same colour as the header tint.
+        expect(app).toContain('<meta name="theme-color" content="#221820" media="(prefers-color-scheme: dark)" />');
+        expect(css).toContain('--haze: #221820');
+        expect(css).toContain('--bg: var(--haze)');
         expect(css).toContain('background: var(--bg)');
         expect(page).not.toContain('safari-chrome-guard');
         expect(page).toContain('@supports (-webkit-touch-callout: none)');

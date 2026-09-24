@@ -1,12 +1,13 @@
 @import '@fontsource-variable/archivo/wdth.css';
 
 :root {
-    /* Surfaces, sampled from the shader's dark plum base. */
-    --bg: #070809;
+    /* The shader's dark base, sampled from a render. The page and the header tint share it, so the
+       page is already the field's colour before the shader's first frame. */
+    --haze: #221820;
+    /* Resolved per element, so it follows --haze when a theme overrides it. */
+    --bg: var(--haze);
     --panel: #0d0f12;
     --panel-line: #1a1c22;
-    /* The shader's dark base, sampled from a render. For scrims that should read as the field, not black. */
-    --haze: #221820;
 
     /* Ink, warm off-white from the bloom core. */
     --ink: #e9e5dd;
@@ -43,7 +44,6 @@
  * renders over the page unchanged — its dark areas are transparent, so paper shows through them.
  */
 :root[data-theme='light'] {
-    --bg: #f3efe8;
     --panel: #ebe6de;
     --panel-line: #dcd6ce;
     --haze: #e6dde2;
@@ -67,7 +67,6 @@
 }
 @media (prefers-color-scheme: light) {
     :root:not([data-theme]) {
-        --bg: #f3efe8;
         --panel: #ebe6de;
         --panel-line: #dcd6ce;
         --haze: #e6dde2;

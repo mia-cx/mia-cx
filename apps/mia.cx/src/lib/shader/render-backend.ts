@@ -10,6 +10,11 @@ export interface RenderBackend {
     readonly backend: RendererBackendName;
     /** True when cursor density remains resident in renderer-owned GPU textures. */
     readonly gpuCursorDensity: boolean;
+    /**
+     * Resolves once the GPU has finished the first frame, so it is actually on screen. Pipeline
+     * creation returning is not enough: drivers may still be compiling when it does.
+     */
+    readonly firstFrame?: Promise<void>;
     readonly unsupportedEffects?: readonly string[];
     onStats?: (fps: number, width: number, height: number, rolling?: FrameRollingSummary, renderScale?: number) => void;
     onGpuStats?: (stats: GpuTimingStats | null) => void;

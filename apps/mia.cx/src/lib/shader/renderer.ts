@@ -987,6 +987,9 @@ struct Out { @builtin(position) position:vec4f,@location(0) q:vec2f,@location(1)
 export class AtmosphereRenderer {
     readonly backend = 'webgpu' as const;
     readonly gpuCursorDensity = true;
+    // Declared before `firstFrame` so the field definition does not overwrite what its executor sets.
+    private resolveFirstFrame: () => void = () => {};
+    readonly firstFrame = new Promise<void>((resolve) => (this.resolveFirstFrame = resolve));
     private device?: GPUDevice;
     private context: GPUCanvasContext | null = null;
     private pipelines: GPURenderPipeline[] = [];
@@ -1098,7 +1101,9 @@ export class AtmosphereRenderer {
             const info = await module.getCompilationInfo();
             const errors = info.messages.filter((message) => message.type === 'error');
             if (errors.length) throw new Error(errors.map((message) => message.message).join('\n'));
-            return self.device!.createRenderPipeline({
+            // The async form resolves when the pipeline is compiled, and lets the browser compile
+            // them in parallel; the sync form returns at once and stalls the first frame instead.
+            return self.device!.createRenderPipelineAsync({
                 layout: 'auto',
                 vertex: { module, entryPoint: 'vs' },
                 fragment: { module, entryPoint: 'fs', targets: [{ format: target }] },
@@ -1149,7 +1154,7 @@ export class AtmosphereRenderer {
             const errors = info.messages.filter((message) => message.type === 'error');
             if (errors.length) throw new Error(errors.map((message) => message.message).join('\n'));
             self.pipelines.push(
-                self.device.createRenderPipeline({
+                await self.device.createRenderPipelineAsync({
                     layout: 'auto',
                     vertex: { module, entryPoint: 'vs' },
                     fragment: {
@@ -1908,6 +1913,7 @@ export class AtmosphereRenderer {
         this.submissionsInFlight += 1;
         void d.queue.onSubmittedWorkDone().then(
             () => {
+                this.resolveFirstFrame();
                 this.submissionsInFlight = Math.max(0, this.submissionsInFlight - 1);
                 const completedAt = performance.now();
                 if (

@@ -17,7 +17,8 @@
      * and cleared once the entrance has played, so later navigations do not animate.
      */
     const ENTRANCE_MS = 1800;
-    const MAX_WAIT_MS = 4000;
+    // Only a stalled GPU reaches this; failure reveals at once through onsettle.
+    const MAX_WAIT_MS = 12000;
     function reveal() {
         const root = document.documentElement;
         if (root.dataset.boot !== 'loading') return;

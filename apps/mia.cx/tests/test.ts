@@ -79,6 +79,6 @@ test('every page carries the sticky header and the sitemap', async ({ page }) =>
 
 test('the first-load entrance clears itself', async ({ page }) => {
     await page.goto('/');
-    // Revealed when the shader settles, or after the four-second failsafe at the latest.
-    await expect(page.locator('html')).not.toHaveAttribute('data-boot', /.+/, { timeout: 8000 });
+    // Revealed when the first shader frame is on screen, when graphics fail, or after the failsafe.
+    await expect(page.locator('html')).not.toHaveAttribute('data-boot', /.+/, { timeout: 16000 });
 });
