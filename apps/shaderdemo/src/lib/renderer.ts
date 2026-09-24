@@ -1580,9 +1580,9 @@ export class AtmosphereRenderer {
         }
         const sampleGpu = Boolean(
             !this.paused &&
-                this.querySet &&
-                !this.queryReadbackBusy &&
-                this.renderedFrames % GPU_TIMING_SAMPLE_INTERVAL === 0,
+            this.querySet &&
+            !this.queryReadbackBusy &&
+            this.renderedFrames % GPU_TIMING_SAMPLE_INTERVAL === 0,
         );
         const gpuLabels: string[] | undefined = sampleGpu ? [] : undefined;
         const data = packUniform(

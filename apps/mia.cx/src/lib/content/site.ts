@@ -111,4 +111,3 @@ export const biography = [
     "I’m particularly interested in accessibility and tools that make everyday life easier. Right now I'm working on Caelestis, a tool to make collaborative painting on Wplace easier, and more engaging. Like Figma or Google Docs for a pixel art MMORPG. I'm also working on Maal, a meal-planning app to make meal planning not just feasible, but possible for people with ADHD, like me.",
     'I’m especially useful for planning and ideation, when we can question assumptions and figure out the shape of the product you really need. I’m happy to talk about technical or creative direction over Discord, email, or in person. Your idea doesn’t need to be fully formed.',
 ];
-

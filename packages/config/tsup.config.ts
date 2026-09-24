@@ -1,23 +1,23 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-	cjsInterop: true,
-	clean: true,
+    cjsInterop: true,
+    clean: true,
 
-	entry: ["./src/**/*.[tj]s"],
-	external: ["eslint", "prettier", "typescript"],
+    entry: ["./src/**/*.[tj]s"],
+    external: ["eslint", "prettier", "typescript"],
 
-	// experimentalDts: true,
-	dts: true,
+    // experimentalDts: true,
+    dts: true,
 
-	format: ["cjs", "esm"],
+    format: ["cjs", "esm"],
 
-	// minify: "terser",
-	outDir: "dist/",
+    // minify: "terser",
+    outDir: "dist/",
 
-	// splitting: true,
-	target: ["esnext"],
-	treeshake: "recommended",
+    // splitting: true,
+    target: ["esnext"],
+    treeshake: "recommended",
 
-	tsconfig: "./tsconfig.json",
+    tsconfig: "./tsconfig.json",
 });
