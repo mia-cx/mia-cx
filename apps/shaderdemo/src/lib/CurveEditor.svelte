@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { curveLut, MAX_CURVE_POINTS, type CurveEdit, type CurvePoint } from './adjustments';
+    import { curveLut, MAX_CURVE_POINTS, type CurveEdit, type CurvePoint } from '@mia-cx/atmosphere/adjustments';
     export let points: CurvePoint[];
     export let descriptors: readonly string[];
     export let channels: Record<string, CurvePoint[]>;

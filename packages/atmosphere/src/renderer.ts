@@ -1,3 +1,5 @@
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference -- ambient declarations only travel with a module this way
+/// <reference path="./webgpu-flags.d.ts" />
 import { FrameTelemetry, type FrameRollingSummary } from './telemetry';
 import { AdaptiveResolutionController } from './adaptive-resolution';
 import { ADJUSTMENT_LUT_SIZE, composeAdjustmentLut, isNeutralAdjustment } from './adjustments';

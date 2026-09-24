@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { POST_BLEND_MODES, type ParameterKey, type ShaderParameters } from './renderer';
+    import { POST_BLEND_MODES, type ParameterKey, type ShaderParameters } from '@mia-cx/atmosphere/renderer';
     type SchemaEntry = { key: ParameterKey; label: string; min: number; max: number; step: number; default: number };
     let {
         parameters,

@@ -13,7 +13,7 @@
         type Channel,
         type LevelsKey,
         type HslAdjustmentKey,
-    } from './adjustments';
+    } from '@mia-cx/atmosphere/adjustments';
     let { adjustment, onchange }: { adjustment: Adjustment; onchange: (value: Adjustment) => void } = $props();
     let descriptors = $derived(adjustment.type === 'curve' && adjustment.mode === 'hsl' ? HSL_CHANNELS : CHANNELS);
     let channelMask: CurveChannel[] = $state([]);
@@ -92,7 +92,7 @@
 {:else if adjustment.type === 'curve'}
     <CurveEditor
         points={adjustment.channels[channel as keyof typeof adjustment.channels]}
-        channels={adjustment.channels as Record<string, import('./adjustments').CurvePoint[]>}
+        channels={adjustment.channels as Record<string, import('@mia-cx/atmosphere/adjustments').CurvePoint[]>}
         {descriptors}
         {channelMask}
         onedit={(edit) => onchange(applyCurveEditToChannels(adjustment, channelMask, edit))}

@@ -1,5 +1,10 @@
 <script lang="ts">
-    import { SELECTIVE_RANGES, parseCube, saveCubeAsset, type RgbColourEffect } from './colour-effects';
+    import {
+        SELECTIVE_RANGES,
+        parseCube,
+        saveCubeAsset,
+        type RgbColourEffect,
+    } from '@mia-cx/atmosphere/colour-effects';
     let { effect, onchange }: { effect: RgbColourEffect; onchange: (x: RgbColourEffect) => void } = $props();
     const names = (e: RgbColourEffect) =>
         e.type === 'lift-gamma-gain'

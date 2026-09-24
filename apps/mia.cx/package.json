@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm generate:baked && pnpm generate:content && vite build",
+    "build": "pnpm generate:content && vite build",
     "check": "pnpm generate:content && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "dev": "pnpm generate:content && vite dev",
@@ -15,7 +15,6 @@
     "test": "npm run test:integration && npm run test:unit",
     "test:integration": "playwright test",
     "test:unit": "vitest run",
-    "generate:baked": "tsx scripts/generate-baked-artifacts.ts",
     "generate:content": "tsx scripts/generate-content.ts"
   },
   "devDependencies": {
@@ -47,6 +46,7 @@
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",
     "@nanostores/persistent": "^1.3.5",
-    "marked": "^18.0.14"
+    "marked": "^18.0.14",
+    "@mia-cx/atmosphere": "workspace:*"
   }
 }

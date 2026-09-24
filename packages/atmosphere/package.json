@@ -1,0 +1,47 @@
+{
+  "name": "@mia-cx/atmosphere",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Chromatic Atmosphere field: a WebGPU renderer with a WebGL2 fallback, and a Svelte canvas that floats it over a page.",
+  "type": "module",
+  "svelte": "./src/ShaderCanvas.svelte",
+  "exports": {
+    "./ShaderCanvas.svelte": {
+      "types": "./src/ShaderCanvas.svelte",
+      "svelte": "./src/ShaderCanvas.svelte",
+      "default": "./src/ShaderCanvas.svelte"
+    },
+    "./default-settings.json": "./src/default-settings.json",
+    "./*": "./src/*.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "build": "tsx scripts/generate.ts",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "format": "prettier --write .",
+    "lint": "prettier --check . && eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@mia-cx/config": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "prettier-plugin-svelte": "^4.1.1",
+    "svelte": "5.57.1",
+    "svelte-check": "^4.7.6",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "@nanostores/persistent": "^1.3.5"
+  }
+}
