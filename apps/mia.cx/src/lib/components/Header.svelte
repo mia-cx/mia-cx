@@ -7,10 +7,8 @@
      * own view timeline where the browser supports it, and off a scroll listener where it does not.
      */
     import { page } from '$app/state';
-    import GradientBlur from './GradientBlur.svelte';
-    import EasedGradient from './EasedGradient.svelte';
+    import { EasedGradient, GradientBlur, ThemeToggle } from '@mia-cx/ui';
     import { nav, site } from '$lib/content/site';
-    import ThemeToggle from './ThemeToggle.svelte';
 
     let { hasHero = false }: { hasHero?: boolean } = $props();
 

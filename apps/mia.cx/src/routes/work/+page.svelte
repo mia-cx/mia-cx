@@ -1,5 +1,5 @@
 <script lang="ts">
-    import IconArrowUpRight from '~icons/lucide/arrow-up-right';
+    import { ArrowLink } from '@mia-cx/ui';
     import { listedWork } from '$lib/content/vault';
     import { SVARTZ_REPO, site } from '$lib/content/site';
 </script>
@@ -36,7 +36,7 @@
 
     <p class="more">
         More projects and details are coming soon, once
-        <a href={SVARTZ_REPO} rel="external">Svartz<IconArrowUpRight class="arrow" /></a>
+        <ArrowLink class="svartz" href={SVARTZ_REPO}>Svartz</ArrowLink>
         is ready to publish them.
     </p>
 </main>
@@ -110,23 +110,8 @@
         padding: 28px 0 clamp(48px, 10vh, 96px);
         color: var(--ink-dim);
     }
-    .more a {
-        display: inline-flex;
-        align-items: flex-start;
+    .more :global(.svartz) {
         color: var(--ink);
         font-weight: 600;
-        text-decoration: none;
-    }
-    .more a:hover {
-        color: var(--accent);
-    }
-    .more a :global(.arrow) {
-        color: var(--ink-dim);
-        font-size: 0.9em;
-        margin-left: 1px;
-        margin-top: -0.1em;
-    }
-    .more a:hover :global(.arrow) {
-        color: inherit;
     }
 </style>

@@ -1,9 +1,7 @@
 <script lang="ts">
-    import { contact, site, sitemap } from '$lib/content/site';
-    import Socials from './Socials.svelte';
+    import { contact, otherSocials, primarySocials, site, sitemap } from '$lib/content/site';
+    import { ArrowLink, Socials } from '@mia-cx/ui';
     import IconMail from '~icons/lucide/mail';
-    import IconArrowRight from '~icons/lucide/arrow-right';
-    import IconArrowUpRight from '~icons/lucide/arrow-up-right';
 
     const year = new Date().getFullYear();
 </script>
@@ -12,16 +10,13 @@
     <div class="inner container">
         <section class="brand">
             <h2>{site.domain}</h2>
-            <a class="contribute" href="https://github.com/mia-cx/mia-cx" rel="external">
-                Contribute to this website <IconArrowUpRight class="arrow" />
-            </a>
+            <ArrowLink class="contribute" href="https://github.com/mia-cx/mia-cx">Contribute to this website</ArrowLink>
             <div class="reach">
-                <Socials />
-                <a class="email" href="mailto:{contact.email}">
+                <Socials featured={primarySocials} more={otherSocials} />
+                <ArrowLink class="email" href="mailto:{contact.email}">
                     <IconMail class="mail" />
                     <span>{contact.email}</span>
-                    <IconArrowUpRight class="arrow" />
-                </a>
+                </ArrowLink>
             </div>
             <p class="copyright">© {year} {site.domain}</p>
         </section>
@@ -31,12 +26,7 @@
             <ul>
                 {#each sitemap as item (item.href)}
                     <li>
-                        <a href={item.href} rel={item.external ? 'external' : undefined}>
-                            {item.label}
-                            {#if item.external}<IconArrowUpRight class="arrow" />{:else}<IconArrowRight
-                                    class="arrow"
-                                />{/if}
-                        </a>
+                        <ArrowLink href={item.href}>{item.label}</ArrowLink>
                     </li>
                 {/each}
             </ul>
@@ -69,16 +59,7 @@
         line-height: 1;
         letter-spacing: -0.02em;
     }
-    a {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        text-decoration: none;
-    }
-    a:hover {
-        color: var(--accent);
-    }
-    .contribute {
+    .brand :global(.contribute) {
         font-weight: 620;
     }
     .reach {
@@ -87,9 +68,6 @@
         align-items: center;
         gap: 12px 28px;
         margin-top: 26px;
-    }
-    .email :global(.mail) {
-        font-size: 20px;
     }
     .copyright {
         margin-top: 26px;
@@ -107,35 +85,20 @@
         display: grid;
         gap: 8px;
     }
-    :global(footer .arrow) {
-        font-size: 0.9em;
-        color: var(--ink-dim);
-    }
-    /* Internal links slide their arrow on hover. */
-    a:not([rel='external'], .email) :global(.arrow) {
-        transition: transform 160ms ease;
-    }
-    a:not([rel='external'], .email):hover :global(.arrow) {
-        transform: translate(4px, 0);
-    }
-    /* External marker, as on the live site: small, raised, tucked against the last letter. */
-    a[rel='external'],
-    .email {
-        align-items: flex-start;
-    }
-    a[rel='external'] :global(.arrow),
-    .email :global(.arrow) {
-        margin-left: -4px;
-        margin-top: -0.1em;
-    }
-    .email {
+    /* The email keeps its envelope on the baseline while its ↗ marker sits at cap height. */
+    .reach :global(.email) {
         align-items: center;
     }
-    .email :global(.arrow) {
+    .reach :global(.email .label) {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .reach :global(.email .arrow) {
         align-self: flex-start;
     }
-    a:hover :global(.arrow) {
-        color: inherit;
+    .reach :global(.email .mail) {
+        font-size: 20px;
     }
 
     @media (max-width: 620px) {

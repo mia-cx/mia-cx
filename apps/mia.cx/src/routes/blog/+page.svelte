@@ -1,5 +1,5 @@
 <script lang="ts">
-    import IconArrowUpRight from '~icons/lucide/arrow-up-right';
+    import { ArrowLink } from '@mia-cx/ui';
     import { SVARTZ_REPO, site } from '$lib/content/site';
 </script>
 
@@ -12,7 +12,7 @@
     <h1>Blog</h1>
     <p>
         Coming soon, once
-        <a href={SVARTZ_REPO} rel="external">Svartz<IconArrowUpRight class="arrow" /></a>
+        <ArrowLink class="svartz" href={SVARTZ_REPO}>Svartz</ArrowLink>
         is ready to publish it.
     </p>
 </main>
@@ -35,22 +35,7 @@
         font-size: clamp(17px, 1.5vw, 20px);
         line-height: 1.55;
     }
-    a {
-        display: inline-flex;
-        align-items: flex-start;
+    p :global(.svartz) {
         font-weight: 600;
-        text-decoration: none;
-    }
-    a:hover {
-        color: var(--accent);
-    }
-    a :global(.arrow) {
-        color: var(--ink-dim);
-        font-size: 0.9em;
-        margin-left: 1px;
-        margin-top: -0.1em;
-    }
-    a:hover :global(.arrow) {
-        color: inherit;
     }
 </style>

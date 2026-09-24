@@ -3,18 +3,24 @@
      * Primary icons plus a square +N button opening a panel with the rest. The panel is absolutely
      * positioned so it never reflows the row, and closes on Escape, outside click, or blur out.
      */
-    import { otherSocials, primarySocials } from '$lib/content/site';
     import SocialIcon from './SocialIcon.svelte';
+    import type { Social } from './socials';
 
-    let { panelId = 'more-socials' }: { panelId?: string } = $props();
+    let {
+        /** Shown as bare icons. */
+        featured,
+        /** Behind the +N button, in this order. */
+        more,
+        panelId = 'more-socials',
+    }: { featured: Social[]; more: Social[]; panelId?: string } = $props();
 
     let open = $state(false);
-    let wrapper: HTMLDivElement;
-    let trigger: HTMLButtonElement;
+    let wrapper = $state<HTMLDivElement>();
+    let trigger = $state<HTMLButtonElement>();
 
     // Anything without a link yet is left out rather than shown as a dead control.
-    const primary = primarySocials.filter((social) => social.href);
-    const rest = otherSocials.filter((social) => social.href);
+    const primary = $derived(featured.filter((social) => social.href));
+    const rest = $derived(more.filter((social) => social.href));
 
     function close(refocus = false) {
         open = false;
@@ -42,31 +48,33 @@
         {/each}
     </ul>
 
-    <div class="more" bind:this={wrapper}>
-        <button
-            bind:this={trigger}
-            type="button"
-            aria-expanded={open}
-            aria-controls={panelId}
-            onclick={() => (open = !open)}
-        >
-            <span aria-hidden="true">+{rest.length}</span>
-            <span class="visually-hidden">{open ? 'Hide' : 'Show'} {rest.length} more links</span>
-        </button>
+    {#if rest.length}
+        <div class="more" bind:this={wrapper}>
+            <button
+                bind:this={trigger}
+                type="button"
+                aria-expanded={open}
+                aria-controls={panelId}
+                onclick={() => (open = !open)}
+            >
+                <span aria-hidden="true">+{rest.length}</span>
+                <span class="sr-only">{open ? 'Hide' : 'Show'} {rest.length} more links</span>
+            </button>
 
-        <div id={panelId} class="panel" hidden={!open}>
-            <ul>
-                {#each rest as social (social.id)}
-                    <li>
-                        <a href={social.href} rel="external">
-                            <SocialIcon id={social.id} />
-                            <span>{social.label}</span>
-                        </a>
-                    </li>
-                {/each}
-            </ul>
+            <div id={panelId} class="panel" hidden={!open}>
+                <ul>
+                    {#each rest as social (social.id)}
+                        <li>
+                            <a href={social.href} rel="external">
+                                <SocialIcon id={social.id} />
+                                <span>{social.label}</span>
+                            </a>
+                        </li>
+                    {/each}
+                </ul>
+            </div>
         </div>
-    </div>
+    {/if}
 </div>
 
 <style>
@@ -120,6 +128,18 @@
         letter-spacing: 0.02em;
     }
 
+    /* Self-contained, so the component does not depend on a site's own visually-hidden helper. */
+    .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
     .panel {
         position: absolute;
         top: calc(100% + 8px);
