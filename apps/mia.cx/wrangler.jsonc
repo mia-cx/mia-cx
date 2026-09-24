@@ -6,6 +6,10 @@
     "main": ".svelte-kit/cloudflare/_worker.js",
     "compatibility_date": "2026-09-24",
     "compatibility_flags": ["nodejs_als"],
+    "routes": [{ "pattern": "mia.cx", "custom_domain": true }],
+    // Kept on alongside the domain so branch builds get preview URLs.
+    "workers_dev": true,
+    "preview_urls": true,
     "assets": {
         "binding": "ASSETS",
         "directory": ".svelte-kit/cloudflare",
