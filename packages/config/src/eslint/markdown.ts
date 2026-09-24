@@ -1,4 +1,4 @@
-import markdown from "@eslint/markdown";
+import eslintMarkdown from "@eslint/markdown";
 import type { TSESLint } from "@typescript-eslint/utils";
 import eslintConfigPrettier from "eslint-config-prettier";
 import * as eslintPluginMdx from "eslint-plugin-mdx";
@@ -6,8 +6,11 @@ import { base } from "./base";
 
 export const md: TSESLint.FlatConfig.ConfigArray = [
     ...base,
-    ...(markdown.configs.recommended as TSESLint.FlatConfig.ConfigArray),
+    ...(eslintMarkdown.configs.recommended as TSESLint.FlatConfig.ConfigArray),
 ];
+
+/** The 1.x name, kept so existing `{ markdown }` imports keep loading. */
+export const markdown = md;
 
 export const mdx: TSESLint.FlatConfig.ConfigArray = [
     ...base,
