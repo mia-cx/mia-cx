@@ -60,6 +60,8 @@
                 width="2105"
                 height="3475"
             />
+            <!-- The field's haze, without its light, so the face sits in the same wash as the rest. -->
+            <div class="haze" style:--photo="url({portrait800})"></div>
         </div>
     </section>
 
@@ -171,6 +173,46 @@
     }
     .portrait-top img {
         mask-image: linear-gradient(to bottom, #000 var(--neck-start), transparent var(--neck-end));
+    }
+    /*
+     * Over the photo, the field reads as a flat purple wash, measured at about 14%: fitting renders
+     * with and without the canvas gives out = 0.86 × photo + (31, 19, 32) per channel. The top layer
+     * sits above the canvas and would miss it, so it gets the same wash, cut to the photo's outline
+     * and the neck fade. It halves as the hero scrolls away, as the field does.
+     */
+    .haze {
+        position: absolute;
+        top: var(--drop);
+        left: var(--face);
+        translate: -50% 0;
+        height: calc(100% * var(--zoom));
+        aspect-ratio: 2105 / 3475;
+        background: rgb(221 138 231);
+        /* Without scroll timelines, the field publishes its dim for this; with them, the animation below runs. */
+        opacity: calc(0.14 * var(--atmosphere-dim, 1));
+        mask-image: var(--photo), linear-gradient(to bottom, #000 var(--neck-start), transparent var(--neck-end));
+        mask-size: 100% 100%;
+        mask-composite: intersect;
+        transition: opacity 600ms ease;
+    }
+    /* Nothing below is washed until the field is up, or ever, without graphics. */
+    :global(html:not(:has(canvas.ready))) .haze {
+        opacity: 0;
+    }
+    @supports (view-timeline: --hero) and (animation-timeline: --hero) and (timeline-scope: --hero) {
+        @keyframes haze-dim {
+            from {
+                opacity: 0.14;
+            }
+            to {
+                opacity: 0.07;
+            }
+        }
+        :global(html:has(canvas.ready)) .haze {
+            animation: haze-dim linear both;
+            animation-timeline: --hero;
+            animation-range: exit-crossing 0% exit-crossing 90%;
+        }
     }
     .lead {
         color: var(--ink-dim);
@@ -297,6 +339,13 @@
         }
         .portrait img {
             position: static;
+            translate: none;
+            width: 100%;
+            height: auto;
+        }
+        .haze {
+            top: 0;
+            left: 0;
             translate: none;
             width: 100%;
             height: auto;

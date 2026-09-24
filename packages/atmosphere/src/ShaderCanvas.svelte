@@ -70,6 +70,8 @@
      * lockstep even when the hero is taller than the viewport, as it is on phones. The listener only
      * exists where the CSS cannot run; `fallbackDim` stays 1 everywhere else, so the two never fight.
      * The capability test names all three properties the timeline needs, matching Header.svelte.
+     * The value is also published as `--atmosphere-dim` on the root, for anything on the page that has
+     * to dim along with the field.
      */
     const SCROLL_TIMELINES = '(view-timeline: --hero) and (animation-timeline: --hero) and (timeline-scope: --hero)';
     let fallbackDim = $state(1);
@@ -86,6 +88,7 @@
             const rect = hero.getBoundingClientRect();
             const exit = Math.min(1, Math.max(0, -rect.top / Math.max(1, rect.height * 0.9)));
             fallbackDim = 1 - 0.5 * exit;
+            document.documentElement.style.setProperty('--atmosphere-dim', String(fallbackDim));
         };
         // One measurement per frame at most, however many scroll events arrive.
         const onScroll = () => {
@@ -97,6 +100,7 @@
             window.removeEventListener('scroll', onScroll);
             if (frame) cancelAnimationFrame(frame);
             fallbackDim = 1;
+            document.documentElement.style.removeProperty('--atmosphere-dim');
         };
     });
     $effect(() => {
