@@ -26,8 +26,8 @@
 
     const bottomFor = (progress: number) => {
         if (progress <= 0) return INITIAL;
-        if (progress < 0.2) return INITIAL + (PEAK - INITIAL) * (progress / 0.2);
-        if (progress < 0.9) return PEAK + (SETTLED - PEAK) * ((progress - 0.2) / 0.7);
+        if (progress < 0.5) return INITIAL + (PEAK - INITIAL) * (progress / 0.5);
+        if (progress < 0.9) return PEAK + (SETTLED - PEAK) * ((progress - 0.5) / 0.4);
         return SETTLED;
     };
 
@@ -150,7 +150,7 @@
             0% {
                 --bottom: -60%;
             }
-            20% {
+            50% {
                 --bottom: -500%;
             }
             90%,
@@ -161,7 +161,14 @@
         header[data-hero-visible] :global(.header-layer) {
             animation: header-spill linear both;
             animation-timeline: --hero;
-            animation-range: exit 0% 90%;
+            /*
+             * From the first pixel of scroll until 90% of the hero has passed the top of the view,
+             * the same measure as the scroll listener. Plain `exit` only starts once the hero's
+             * bottom edge leaves, which squeezed the whole spill into the last few scrolled pixels.
+             */
+            animation-range: exit-crossing 0% exit-crossing 90%;
+            /* Track the scroll exactly; the transition would trail it. */
+            transition: none;
         }
     }
 </style>

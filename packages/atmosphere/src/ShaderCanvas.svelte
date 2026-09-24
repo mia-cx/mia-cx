@@ -44,6 +44,8 @@
     let canvas: HTMLCanvasElement;
     let renderer: RenderBackend | undefined;
     let ready = $state(false);
+    /** No usable graphics backend, or the device was lost: show the flat haze instead. */
+    let failed = $state(false);
     let status = $state('Starting graphics…');
     let fps = $state(0);
     let fpsVisible = $state(false);
@@ -202,6 +204,7 @@
                 instance.setPaused(paused);
                 instance.onLost = (message) => {
                     ready = false;
+                    failed = true;
                     status = message;
                     // A device lost before its first frame would otherwise leave the page hidden.
                     settle();
@@ -214,7 +217,9 @@
                 });
             })
             .catch((error) => {
-                if (!disposed) status = error instanceof Error ? error.message : String(error);
+                if (disposed) return settle();
+                failed = true;
+                status = error instanceof Error ? error.message : String(error);
                 settle();
             });
 
@@ -300,6 +305,8 @@
     style:opacity={held}
     aria-label={label}
 ></canvas>
+<!-- A layer of its own, so a lost device's last frame can never show over it. -->
+{#if failed}<div class="fallback" aria-hidden="true"></div>{/if}
 {#if ready && fpsVisible}<output class="fps" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
 
@@ -347,8 +354,20 @@
         canvas.ready.dims {
             animation: shader-dim linear both;
             animation-timeline: --hero;
-            animation-range: exit 0% 90%;
+            /* From the first pixel of scroll until 90% of the hero has passed the top of the view. */
+            animation-range: exit-crossing 0% exit-crossing 90%;
         }
+    }
+    /*
+     * Without WebGPU or WebGL2 the page gets the field's resting colour as a flat background. It
+     * sits behind the content rather than over it, since there is no light to float.
+     */
+    .fallback {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background: var(--atmosphere-fallback, #3b2736);
+        pointer-events: none;
     }
     .fps {
         position: fixed;
