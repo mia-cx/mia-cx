@@ -152,6 +152,8 @@
         window.addEventListener('pointerdown', pointerDown);
         window.addEventListener('pointerup', pointerUp);
         window.addEventListener('pointercancel', pointerLeave);
+        // Leaving the viewport for browser chrome fires neither pointercancel nor blur.
+        document.documentElement.addEventListener('pointerleave', pointerLeave);
         window.addEventListener('blur', pointerLeave);
         window.addEventListener('keydown', keyDown);
         return () => {
@@ -162,6 +164,7 @@
             window.removeEventListener('pointerdown', pointerDown);
             window.removeEventListener('pointerup', pointerUp);
             window.removeEventListener('pointercancel', pointerLeave);
+            document.documentElement.removeEventListener('pointerleave', pointerLeave);
             window.removeEventListener('blur', pointerLeave);
             window.removeEventListener('keydown', keyDown);
             cancelAnimationFrame(cursorFrame);

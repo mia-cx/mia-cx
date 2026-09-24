@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { sveltekit } from '@sveltejs/kit/vite';
 import Icons from 'unplugin-icons/vite';
 import type { Plugin, ViteDevServer } from 'vite';
 import { defineConfig } from 'vitest/config';
 
-const vault = resolve(import.meta.dirname, '../../vault');
+// Not import.meta.dirname: Node 18, which Cloudflare's builder still runs, does not have it.
+const vault = fileURLToPath(new URL('../../vault', import.meta.url));
 
 /** Rebuild the generated content whenever a note changes, so `dev` reflects the vault live. */
 function vaultWatcher(): Plugin {

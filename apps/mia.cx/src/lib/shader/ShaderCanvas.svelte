@@ -61,6 +61,35 @@
      */
     let animated = $state(dims);
     let held = $state<string | null>(null);
+
+    /*
+     * Browsers without scroll-driven animations get the same dim from an IntersectionObserver on the
+     * hero: its callbacks fire only at the thresholds, and the canvas's opacity transition smooths
+     * the steps, so scrolling still costs nothing per tick. `fallbackDim` stays 1 where the CSS
+     * animation runs, so the two never fight.
+     */
+    let fallbackDim = $state(1);
+    $effect(() => {
+        if (!dims || typeof CSS === 'undefined' || CSS.supports('animation-timeline: --hero')) {
+            fallbackDim = 1;
+            return;
+        }
+        const hero = document.querySelector('[data-section="hero"]');
+        if (!hero) return;
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                // Exit progress, as the CSS range does: 0 while the hero fills the view, 1 once 90% of it has gone.
+                const exit = entry.boundingClientRect.top >= 0 ? 0 : Math.min(1, (1 - entry.intersectionRatio) / 0.9);
+                fallbackDim = 1 - 0.5 * exit;
+            },
+            { threshold: Array.from({ length: 11 }, (_, i) => i / 10) },
+        );
+        observer.observe(hero);
+        return () => {
+            observer.disconnect();
+            fallbackDim = 1;
+        };
+    });
     $effect(() => {
         const wantsAnimation = dims;
         // Reading `animated` reactively would re-run this effect the moment it flips and cancel
@@ -223,6 +252,9 @@
         window.addEventListener('pointerdown', pointerDown);
         window.addEventListener('pointerup', pointerUp);
         window.addEventListener('pointercancel', pointerLeave);
+        // Leaving the viewport for browser chrome fires neither pointercancel nor blur, and the next
+        // move would otherwise draw a stroke from the stale endpoint.
+        document.documentElement.addEventListener('pointerleave', pointerLeave);
         window.addEventListener('blur', pointerLeave);
         window.addEventListener('keydown', keyDown);
         return () => {
@@ -233,6 +265,7 @@
             window.removeEventListener('pointerdown', pointerDown);
             window.removeEventListener('pointerup', pointerUp);
             window.removeEventListener('pointercancel', pointerLeave);
+            document.documentElement.removeEventListener('pointerleave', pointerLeave);
             window.removeEventListener('blur', pointerLeave);
             window.removeEventListener('keydown', keyDown);
             cancelAnimationFrame(cursorFrame);
@@ -246,7 +279,7 @@
     class:dims={animated}
     class="{layer} {className}"
     bind:this={canvas}
-    style:--shader-opacity={opacity}
+    style:--shader-opacity={opacity * fallbackDim}
     style:opacity={held}
     aria-label={label}></canvas>
 {#if ready && fpsVisible}<output class="fps" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}

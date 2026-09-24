@@ -1092,10 +1092,7 @@ export class AtmosphereRenderer {
             gpuTimingSupported ? { requiredFeatures: ['timestamp-query'] } : undefined,
         );
         Object.defineProperty(self, 'gpuTimingSupported', { value: gpuTimingSupported });
-        self.context = canvas.getContext('webgpu');
-        if (!self.context) throw new Error('Could not create a WebGPU canvas context.');
         const format = navigator.gpu.getPreferredCanvasFormat();
-        self.context.configure({ device: self.device, format, alphaMode: 'premultiplied' });
         const make = async (code: string, target: GPUTextureFormat) => {
             const module = self.device!.createShaderModule({ code });
             const info = await module.getCompilationInfo();
@@ -1260,6 +1257,11 @@ export class AtmosphereRenderer {
                 self.onLost?.(`WebGPU stopped after device loss: ${info.message || info.reason}. Reload to recover.`);
             }
         });
+        // The canvas is bound last. A canvas that has handed out a WebGPU context can never hand out
+        // a WebGL2 one, so binding earlier would break the fallback for any failure above this line.
+        self.context = canvas.getContext('webgpu');
+        if (!self.context) throw new Error('Could not create a WebGPU canvas context.');
+        self.context.configure({ device: self.device, format, alphaMode: 'premultiplied' });
         self.observer.observe(canvas);
         document.addEventListener('visibilitychange', self.visibilityHandler);
         self.resize();
