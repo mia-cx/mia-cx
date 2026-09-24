@@ -1,12 +1,12 @@
 <script lang="ts">
-    import { contact } from '$lib/content/site';
-    import Socials from './Socials.svelte';
+    import { contact, otherSocials, primarySocials } from '$lib/content/site';
+    import { Socials } from '@mia-cx/ui';
 </script>
 
 <section id="contact" aria-labelledby="contact-title">
     <h2 id="contact-title" class="visually-hidden">Contact me</h2>
     <a class="email" href="mailto:{contact.email}">{contact.email}</a>
-    <Socials panelId="contact-socials" />
+    <Socials featured={primarySocials} more={otherSocials} panelId="contact-socials" />
 </section>
 
 <style>

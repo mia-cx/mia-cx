@@ -4,10 +4,9 @@
     import portrait1200 from '$lib/assets/portrait-1200.webp';
     import portrait1600 from '$lib/assets/portrait-1600.webp';
     const portraitSet = `${portrait480} 480w, ${portrait800} 800w, ${portrait1200} 1200w, ${portrait1600} 1600w`;
-    import Socials from '$lib/components/Socials.svelte';
+    import { ArrowLink, Socials } from '@mia-cx/ui';
     import Contact from '$lib/components/Contact.svelte';
-    import IconArrowRight from '~icons/lucide/arrow-right';
-    import { intro, site } from '$lib/content/site';
+    import { intro, otherSocials, primarySocials, site } from '$lib/content/site';
     import { featuredWork } from '$lib/content/vault';
 
     const featured = featuredWork;
@@ -26,11 +25,13 @@
                 <h1 data-enter style:--enter="2">{site.name}</h1>
                 <p class="intro" data-enter style:--enter="3">
                     {intro}
-                    <a class="more" href="/about">Read more <IconArrowRight class="arrow" /></a>
+                    <ArrowLink class="more" href="/about">Read more</ArrowLink>
                 </p>
                 <p class="pronouns mono" data-enter style:--enter="4">{site.pronouns}</p>
             </div>
-            <div data-enter style:--enter="5"><Socials panelId="hero-socials" /></div>
+            <div data-enter style:--enter="5">
+                <Socials featured={primarySocials} more={otherSocials} panelId="hero-socials" />
+            </div>
         </div>
 
         <!-- Placed left of the text via grid; kept after it in source so the name reads first. -->
@@ -63,7 +64,7 @@
                 </li>
             {/each}
         </ul>
-        <a class="mono all" href="/work">All work <IconArrowRight class="arrow" /></a>
+        <ArrowLink class="mono all" href="/work">All work</ArrowLink>
     </section>
 
     <Contact />
@@ -160,25 +161,13 @@
         font-size: clamp(16px, 1.4vw, 19px);
         line-height: 1.55;
     }
-    .more {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
+    .intro :global(.more) {
         font-weight: 600;
         color: var(--ink);
-        text-decoration: none;
         white-space: nowrap;
     }
-    .more :global(.arrow) {
-        width: 1em;
-        height: 1em;
-        transition: transform 160ms ease;
-    }
-    .more:hover {
-        color: var(--accent);
-    }
-    .more:hover :global(.arrow) {
-        transform: translateX(4px);
+    .intro :global(.more .arrow) {
+        color: inherit;
     }
     .pronouns {
         margin-top: 18px;
@@ -204,22 +193,9 @@
         line-height: 1;
         letter-spacing: -0.03em;
     }
-    .all {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
+    .selected :global(.all) {
         margin-top: 20px;
         color: var(--ink-dim);
-        text-decoration: none;
-    }
-    .all :global(.arrow) {
-        transition: transform 160ms ease;
-    }
-    .all:hover :global(.arrow) {
-        transform: translateX(4px);
-    }
-    .all:hover {
-        color: var(--accent);
     }
     .selected ul {
         display: grid;

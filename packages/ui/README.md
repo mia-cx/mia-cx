@@ -1,58 +1,22 @@
-# create-svelte
+# @mia-cx/ui
 
-Everything you need to build a Svelte library, powered by [`create-svelte`](https://github.com/sveltejs/kit/tree/main/packages/create-svelte).
+Design tokens and the Svelte components shared by mia.cx sites. Ships as source; the consuming app's
+Vite compiles it (add it to `ssr.noExternal`), and `unplugin-icons` with the Lucide and Simple Icons
+sets must be in the app's Vite config, since the components import `~icons/*`.
 
-Read more about creating a library [in the docs](https://kit.svelte.dev/docs/packaging).
+## Tokens
 
-## Creating a project
+`@mia-cx/ui/tokens.css` defines the colour, type and control tokens, dark by default with a light
+theme keyed on `data-theme` or the system preference. Import it before any site styles. A site that
+wants a different look keeps the token names and changes the values; every component follows.
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Components
 
-```bash
-# create a new project in the current directory
-npm create svelte@latest
-
-# create a new project in my-app
-npm create svelte@latest my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
-
-## Building
-
-To build your library:
-
-```bash
-npm run package
-```
-
-To create a production version of your showcase app:
-
-```bash
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://kit.svelte.dev/docs/adapters) for your target environment.
-
-## Publishing
-
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
-
-To publish your library to [npm](https://www.npmjs.com):
-
-```bash
-npm publish
-```
+- `ArrowLink`: a link that ends in an arrow. Internal links get → that slides on hover; anything with
+  a scheme gets a still, raised ↗.
+- `GradientBlur` and `EasedGradient`: the progressive backdrop blur and eased tint from maal, for
+  headers that sit over the field.
+- `Socials`: bare icons for the featured networks plus a `+N` button opening the rest. Takes the two
+  lists as props. `SocialIcon` maps a `SocialId` to its icon.
+- `ThemeToggle`: one button with three states underneath (system, light, dark). Writes `data-theme`
+  and `localStorage.theme`; pair it with a pre-paint script that applies the stored choice.

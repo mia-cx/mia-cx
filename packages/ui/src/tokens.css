@@ -1,0 +1,85 @@
+/*
+ * Design tokens for mia.cx sites, dark by default with a light theme. Both palettes come from the
+ * Chromatic Atmosphere field: near-black plum base, bloom magenta, bokeh violet, warm off-white ink.
+ * A site sets `data-theme` on <html> to force a theme; otherwise the system preference applies.
+ * Another site can reuse the token names with its own values and every component follows.
+ */
+:root {
+    /* The field's dark base, sampled from a render. The page and the header tint share it, so the
+       page is already the field's colour before the shader's first frame. */
+    --haze: #221820;
+    /* Resolved per element, so it follows --haze when a theme overrides it. */
+    --bg: var(--haze);
+    --panel: #0d0f12;
+    --panel-line: #1a1c22;
+
+    /* Ink, warm off-white from the bloom core. */
+    --ink: #e9e5dd;
+    --ink-dim: #8f8b85;
+    --ink-faint: #4d4a47;
+
+    /* Accents lifted from the shader: bloom magenta, bokeh violet. */
+    --accent: #ff3d8a;
+    --violet: #5b4ddc;
+
+    /* Roles that used to be hardcoded. */
+    --wordmark: #fff;
+    --control: rgb(13 15 18 / 55%);
+    --menu-hover: rgb(255 255 255 / 6%);
+    --code: rgb(255 255 255 / 7%);
+    --pre: rgb(0 0 0 / 45%);
+    --shadow: rgb(7 8 9);
+    --menu-shadow: rgb(0 0 0 / 90%);
+
+    --font-sans: 'Archivo Variable', Archivo, system-ui, sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+    color-scheme: dark;
+}
+
+/*
+ * Light mode. Paper is the bloom core's off-white; ink is the field's dark plum. The field itself
+ * renders over the page unchanged — its dark areas are transparent, so paper shows through them.
+ */
+:root[data-theme='light'] {
+    --panel: #ebe6de;
+    --panel-line: #dcd6ce;
+    --haze: #e6dde2;
+
+    --ink: #1b1519;
+    --ink-dim: #6b6560;
+    --ink-faint: #b3ada6;
+
+    --accent: #d61f6f;
+    --violet: #4b3fc9;
+
+    --wordmark: #000;
+    --control: rgb(255 255 255 / 55%);
+    --menu-hover: rgb(0 0 0 / 5%);
+    --code: rgb(0 0 0 / 6%);
+    --pre: rgb(0 0 0 / 7%);
+    --shadow: rgb(243 239 232);
+    --menu-shadow: rgb(0 0 0 / 25%);
+
+    color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme]) {
+        --panel: #ebe6de;
+        --panel-line: #dcd6ce;
+        --haze: #e6dde2;
+        --ink: #1b1519;
+        --ink-dim: #6b6560;
+        --ink-faint: #b3ada6;
+        --accent: #d61f6f;
+        --violet: #4b3fc9;
+        --wordmark: #000;
+        --control: rgb(255 255 255 / 55%);
+        --menu-hover: rgb(0 0 0 / 5%);
+        --code: rgb(0 0 0 / 6%);
+        --pre: rgb(0 0 0 / 7%);
+        --shadow: rgb(243 239 232);
+        --menu-shadow: rgb(0 0 0 / 25%);
+        color-scheme: light;
+    }
+}

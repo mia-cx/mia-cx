@@ -21,27 +21,7 @@ export const SVARTZ_REPO = 'https://github.com/mia-cx/svartz';
 
 export const DISCORD_INVITE = 'https://discord.gg/bePPwYJk2u';
 
-export type SocialId =
-    | 'newgrounds'
-    | 'bluesky'
-    | 'youtube'
-    | 'discord'
-    | 'instagram'
-    | 'spotify'
-    | 'applemusic'
-    | 'soundcloud'
-    | 'bandcamp'
-    | 'tidal'
-    | 'tiktok'
-    | 'x'
-    | 'github'
-    | 'linkedin';
-
-export interface Social {
-    id: SocialId;
-    label: string;
-    href: string | null;
-}
+import type { Social } from '@mia-cx/ui';
 
 /** Featured in the hero and footer. */
 export const primarySocials: Social[] = [

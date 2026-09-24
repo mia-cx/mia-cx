@@ -66,12 +66,21 @@ Ported from `mia-cx/maal`, without the rounded corners.
 
 ## Footer
 
-Wordmark, "Contribute to this website", socials with `+N`, email, copyright, and a Sitemap. Internal
-links end in → which slides on hover. External links end in a still ↗ raised to cap height.
+Wordmark, "Contribute to this website", socials with `+N`, email, copyright, and a Sitemap. Links use
+`ArrowLink` from `@mia-cx/ui`: internal links end in → which slides on hover, external ones in a still
+↗ raised to cap height.
+
+## Shared pieces
+
+Colour and type tokens, `GradientBlur`, `EasedGradient`, `ThemeToggle`, `Socials`, `SocialIcon` and
+`ArrowLink` live in `packages/ui` so the next site can reuse them. The field lives in
+`packages/atmosphere`. This app keeps only what is specific to it: the header's hero-driven spill,
+the footer, contact, the routes, and the layout tokens (`--header-height`, `--content-width`,
+`--gutter`).
 
 ## Palette
 
-Dark by default, with a light theme. The toggle has three states: following the system, forced light, or
+Defined in `@mia-cx/ui/tokens.css`. Dark by default, with a light theme. The toggle has three states: following the system, forced light, or
 forced dark. Choosing the system's own theme clears the override.
 
 | Token          | Dark          | Light     | Role                                           |

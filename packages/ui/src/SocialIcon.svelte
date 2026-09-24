@@ -14,7 +14,7 @@
     import Tiktok from '~icons/simple-icons/tiktok';
     import X from '~icons/simple-icons/x';
     import Youtube from '~icons/simple-icons/youtube';
-    import type { SocialId } from '$lib/content/site';
+    import type { SocialId } from './socials';
 
     let { id }: { id: SocialId } = $props();
 

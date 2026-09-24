@@ -3,18 +3,24 @@
      * Primary icons plus a square +N button opening a panel with the rest. The panel is absolutely
      * positioned so it never reflows the row, and closes on Escape, outside click, or blur out.
      */
-    import { otherSocials, primarySocials } from '$lib/content/site';
     import SocialIcon from './SocialIcon.svelte';
+    import type { Social } from './socials';
 
-    let { panelId = 'more-socials' }: { panelId?: string } = $props();
+    let {
+        /** Shown as bare icons. */
+        featured,
+        /** Behind the +N button, in this order. */
+        more,
+        panelId = 'more-socials',
+    }: { featured: Social[]; more: Social[]; panelId?: string } = $props();
 
     let open = $state(false);
     let wrapper: HTMLDivElement;
     let trigger: HTMLButtonElement;
 
     // Anything without a link yet is left out rather than shown as a dead control.
-    const primary = primarySocials.filter((social) => social.href);
-    const rest = otherSocials.filter((social) => social.href);
+    const primary = $derived(featured.filter((social) => social.href));
+    const rest = $derived(more.filter((social) => social.href));
 
     function close(refocus = false) {
         open = false;
