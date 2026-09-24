@@ -20,7 +20,8 @@
                 <svelte:element
                     this={item.markdown || item.live || item.source ? 'a' : 'div'}
                     href={item.markdown ? `/work/${item.slug}` : (item.live ?? item.source)}
-                    rel={!item.markdown && (item.live || item.source) ? 'external' : undefined}>
+                    rel={!item.markdown && (item.live || item.source) ? 'external' : undefined}
+                >
                     <span class="title">{item.title}</span>
                     <span class="note">{item.summary}</span>
                     <span class="meta mono">
@@ -59,7 +60,6 @@
         line-height: 0.9;
         letter-spacing: -0.035em;
     }
-
 
     .grid {
         display: grid;
@@ -129,5 +129,4 @@
     .more a:hover :global(.arrow) {
         color: inherit;
     }
-
 </style>

@@ -185,7 +185,7 @@ export async function loadCubeAsset(id: string): Promise<(CubeLut & { name: stri
         const value = volatileAssets.get(id);
         return value ? { ...value, data: new Float32Array(value.data) } : null;
     }
-    const value = await new Promise<any>((resolve, reject) => {
+    const value = await new Promise<{ data: ArrayLike<number> } | null | undefined>((resolve, reject) => {
         const r = d.transaction(STORE).objectStore(STORE).get(id);
         r.onsuccess = () => resolve(r.result);
         r.onerror = () => reject(r.error);

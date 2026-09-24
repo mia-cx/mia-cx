@@ -52,7 +52,15 @@ const posts = [
         summary: 'A missed deadline, procrastination, and the first panic attack of my life.',
         source: 'https://github.com/mia-riezebos/mia-riezebos/wiki/Blog:-Crunch-Time',
     },
-] as { slug: string; title: string; date: string; updated?: string; summary: string; external?: string; source?: string }[];
+] as {
+    slug: string;
+    title: string;
+    date: string;
+    updated?: string;
+    summary: string;
+    external?: string;
+    source?: string;
+}[];
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const vault = resolve(app, '../../vault');
@@ -61,7 +69,9 @@ const yamlString = (value: string) => (/[:#\-?*&!|>'"%@`{}[\],]|^\s|\s$/.test(va
 const list = (key: string, values: string[]) =>
     values.length ? `${key}:\n${values.map((value) => `  - ${yamlString(value)}`).join('\n')}\n` : '';
 const line = (key: string, value: string | number | undefined) =>
-    value === undefined || value === '' ? '' : `${key}: ${typeof value === 'number' ? value : yamlString(String(value))}\n`;
+    value === undefined || value === ''
+        ? ''
+        : `${key}: ${typeof value === 'number' ? value : yamlString(String(value))}\n`;
 const stamp = (iso: string | undefined) => (iso ? `${iso}T00:00` : undefined);
 
 const write = (folder: string, title: string, frontmatter: string, body: string) => {
@@ -76,7 +86,10 @@ for (const item of workItems) {
     const project = detailed.get(item.title);
     const body = project ? [...project.about, ...(project.ethos ?? [])].join('\n\n') : '';
     const frontmatter =
-        list('tags', item.kinds.map((kind) => `work/${kind}`)) +
+        list(
+            'tags',
+            item.kinds.map((kind) => `work/${kind}`),
+        ) +
         'publish: true\n' +
         line('summary', item.note) +
         line('status', item.status) +
@@ -92,7 +105,9 @@ for (const post of posts) {
     const file = resolve(app, `src/lib/content/posts/${post.slug}.md`);
     let body = '';
     if (!post.external) {
-        body = readFileSync(file, 'utf8').replace(/^\s*#\s+.*\r?\n/, '').trim();
+        body = readFileSync(file, 'utf8')
+            .replace(/^\s*#\s+.*\r?\n/, '')
+            .trim();
     }
     const frontmatter =
         'tags:\n  - post\n' +

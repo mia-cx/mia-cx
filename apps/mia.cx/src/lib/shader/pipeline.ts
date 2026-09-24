@@ -247,8 +247,7 @@ export function ensureGradeLast(items: ColourEffect[]): ColourEffect[] {
 }
 
 export type ColourSegment =
-    | { type: 'scalar'; effects: Adjustment[] }
-    | { type: 'rgb'; effect: Exclude<ColourEffect, Adjustment> };
+    { type: 'scalar'; effects: Adjustment[] } | { type: 'rgb'; effect: Exclude<ColourEffect, Adjustment> };
 
 /** Preserve literal stack order, coalescing only adjacent scalar-compatible operations. */
 export function colourSegments(items: readonly ColourEffect[]): ColourSegment[] {

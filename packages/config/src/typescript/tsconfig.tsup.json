@@ -5,6 +5,8 @@
     "compilerOptions": {
         "module": "preserve",
         "target": "esnext",
-        "moduleResolution": "bundler"
-    }
+        "moduleResolution": "bundler",
+        "ignoreDeprecations": "6.0"
+    },
+    "_comment": "ignoreDeprecations: tsup still passes baseUrl to its declaration build; drop this once tsup stops."
 }

@@ -13,7 +13,8 @@
 <main class="container">
     <h1>About me</h1>
     <div class="prose">
-        {#each biography as paragraph}
+        {#each biography as paragraph (paragraph)}
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- the biography is authored in this repo -->
             <p>{@html marked.parseInline(paragraph, { async: false })}</p>
         {/each}
     </div>

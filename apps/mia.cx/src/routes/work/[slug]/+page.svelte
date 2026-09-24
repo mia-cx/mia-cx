@@ -20,6 +20,7 @@
     </header>
 
     <!-- Mia's own note body, from the vault. -->
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -- rendered from the vault, which is authored in this repo -->
     <div class="prose">{@html data.html}</div>
 
     <dl class="facts mono">

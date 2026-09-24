@@ -33,7 +33,7 @@
 
 <div class="socials">
     <ul>
-        {#each primary as social}
+        {#each primary as social (social.id)}
             <li>
                 <a href={social.href} rel="external" aria-label={social.label} title={social.label}>
                     <SocialIcon id={social.id} />
@@ -48,14 +48,15 @@
             type="button"
             aria-expanded={open}
             aria-controls={panelId}
-            onclick={() => (open = !open)}>
+            onclick={() => (open = !open)}
+        >
             <span aria-hidden="true">+{rest.length}</span>
             <span class="visually-hidden">{open ? 'Hide' : 'Show'} {rest.length} more links</span>
         </button>
 
         <div id={panelId} class="panel" hidden={!open}>
             <ul>
-                {#each rest as social}
+                {#each rest as social (social.id)}
                     <li>
                         <a href={social.href} rel="external">
                             <SocialIcon id={social.id} />

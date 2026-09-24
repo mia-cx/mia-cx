@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CursorState, CURSOR_TRAIL_SAMPLES } from './cursor';
 import { CURSOR_EFFECT_GROUPS, CURSOR_PARAMETER_KEYS, CURSOR_UNIFORM_PARAMETER_SCHEMA } from './cursor-schema';
-import { CURSOR_PARAMETER_OFFSET, packCursorUniform } from './cursor-uniform';
+import { packCursorUniform } from './cursor-uniform';
 
 const rect = { left: 10, top: 20, width: 400, height: 200 };
 describe('CursorState', () => {

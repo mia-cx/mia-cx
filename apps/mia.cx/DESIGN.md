@@ -6,12 +6,12 @@ reserved for controls.
 
 ## Routes
 
-| Route          | What it is                                                                        |
-| -------------- | --------------------------------------------------------------------------------- |
-| `/`            | Hero, featured work, contact                                                      |
+| Route          | What it is                                                                         |
+| -------------- | ---------------------------------------------------------------------------------- |
+| `/`            | Hero, featured work, contact                                                       |
 | `/work`        | The curated shortlist (`listed: true` in the vault), then a note linking to Svartz |
-| `/work/[slug]` | A write-up for any work note with a body; unlisted ones are reachable by URL only |
-| `/about`       | Mia's approved biography, followed by contact                                     |
+| `/work/[slug]` | A write-up for any work note with a body; unlisted ones are reachable by URL only  |
+| `/about`       | Mia's approved biography, followed by contact                                      |
 | `/blog`        | Coming soon, linking to Svartz; post pages are parked in `parked/`                 |
 
 Everything prerenders to static files in `dist/` through `adapter-static`.
@@ -74,16 +74,16 @@ links end in → which slides on hover. External links end in a still ↗ raised
 Dark by default, with a light theme. The toggle has three states: following the system, forced light, or
 forced dark. Choosing the system's own theme clears the override.
 
-| Token          | Dark      | Light     | Role                              |
-| -------------- | --------- | --------- | --------------------------------- |
-| `--haze`       | `#221820` | `#e6dde2` | page and header tint              |
-| `--bg`         | `var(--haze)` | same | page; matches the field before its first frame |
-| `--panel-line` | `#1a1c22` | `#dcd6ce` | hairlines, control borders        |
-| `--ink`        | `#e9e5dd` | `#1b1519` | text                              |
-| `--ink-dim`    | `#8f8b85` | `#6b6560` | labels, metadata                  |
-| `--ink-faint`  | `#4d4a47` | `#b3ada6` | quiet details                     |
-| `--accent`     | `#ff3d8a` | `#d61f6f` | hover, status, current page       |
-| `--violet`     | `#5b4ddc` | `#4b3fc9` | focus rings                       |
+| Token          | Dark          | Light     | Role                                           |
+| -------------- | ------------- | --------- | ---------------------------------------------- |
+| `--haze`       | `#221820`     | `#e6dde2` | page and header tint                           |
+| `--bg`         | `var(--haze)` | same      | page; matches the field before its first frame |
+| `--panel-line` | `#1a1c22`     | `#dcd6ce` | hairlines, control borders                     |
+| `--ink`        | `#e9e5dd`     | `#1b1519` | text                                           |
+| `--ink-dim`    | `#8f8b85`     | `#6b6560` | labels, metadata                               |
+| `--ink-faint`  | `#4d4a47`     | `#b3ada6` | quiet details                                  |
+| `--accent`     | `#ff3d8a`     | `#d61f6f` | hover, status, current page                    |
+| `--violet`     | `#5b4ddc`     | `#4b3fc9` | focus rings                                    |
 
 ## Type
 
