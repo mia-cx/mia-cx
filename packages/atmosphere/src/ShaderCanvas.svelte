@@ -347,7 +347,8 @@
         canvas.ready.dims {
             animation: shader-dim linear both;
             animation-timeline: --hero;
-            animation-range: exit 0% 90%;
+            /* From the first pixel of scroll until 90% of the hero has passed the top of the view. */
+            animation-range: exit-crossing 0% exit-crossing 90%;
         }
     }
     .fps {
