@@ -6,8 +6,6 @@ import { PRESENT as COMPACT_PRESENT } from './webgl2-compact-shaders';
 import { PRESENT as GENERATED_PRESENT } from './webgl2-shaders';
 
 const page = readFileSync(new URL('./ShaderCanvas.svelte', import.meta.url), 'utf8');
-const app = readFileSync(new URL('../../app.html', import.meta.url), 'utf8');
-const css = readFileSync(new URL('../../app.css', import.meta.url), 'utf8');
 
 describe('transparent shader presentation', () => {
     it('extracts alpha from clamped final RGB and keeps valid premultiplied colour', () => {
@@ -42,7 +40,6 @@ describe('transparent shader presentation', () => {
     });
 
     it('keeps the canvas fixed without experimental video mirroring', () => {
-        expect(app).toContain('viewport-fit=cover');
         expect(page).not.toContain("window.addEventListener('scroll', syncCanvasScroll");
         expect(page).not.toContain('captureStream');
         expect(page).not.toContain('canvas-mirror');
@@ -50,14 +47,6 @@ describe('transparent shader presentation', () => {
     });
 
     it('keeps the canvas clipped to the iOS dynamic viewport behind scrolling site content', () => {
-        // The page is the field's dark base, the same colour as the header tint.
-        // Prettier may break the tag across lines, so match its attributes loosely.
-        expect(app).toMatch(
-            /<meta\s+name="theme-color"\s+content="#221820"\s+media="\(prefers-color-scheme: dark\)"\s*\/>/,
-        );
-        expect(css).toContain('--haze: #221820');
-        expect(css).toContain('--bg: var(--haze)');
-        expect(css).toContain('background: var(--bg)');
         expect(page).not.toContain('safari-chrome-guard');
         expect(page).toContain('@supports (-webkit-touch-callout: none)');
         expect(page).toContain('height: 100dvh');

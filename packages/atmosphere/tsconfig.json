@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "target": "es2022",
+        "lib": ["es2023", "dom", "dom.iterable"],
+        "types": ["vite/client"],
+        "resolveJsonModule": true,
+        "allowJs": true,
+        "checkJs": true,
+        "noEmit": true,
+        "isolatedModules": true,
+        "verbatimModuleSyntax": true,
+        "sourceMap": true,
+        "strict": true,
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "noFallthroughCasesInSwitch": true,
+        "skipLibCheck": true
+    },
+    "include": ["src/**/*", "scripts/**/*", "vite.config.ts"],
+    "_comment": "Not the shared base: the renderer predates noUncheckedIndexedAccess and the apps type-check it without it."
+}

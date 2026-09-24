@@ -2,6 +2,8 @@ import defaultSettingsFixture from './default-settings.json';
 import type { RenderOptions, ShaderParameters } from './renderer';
 import { BAKED_POST_PARAMETERS, BAKED_POST_PLAN } from './baked-post-plan.generated';
 import { leadingAdjustmentRegion, type ColourEffect, type PostEffect } from './pipeline';
+// Vite emits the binary as an asset and hands back its final URL, so no static/ copy is needed.
+import lutUrl from './baked-adjustment-lut.bin?url';
 
 /** Canonical build-time configuration: no persistence, migration, normalization, or asset lookup. */
 const settings = defaultSettingsFixture.settings as unknown as {
@@ -25,8 +27,11 @@ export const BAKED_RENDER_OPTIONS: RenderOptions = {
 };
 
 /** Load generated binary data without numeric-JS bloat or startup composition work. */
-export async function loadBakedRenderOptions(fetcher: typeof fetch = fetch): Promise<RenderOptions> {
-    const response = await fetcher('/baked-adjustment-lut.bin');
+export async function loadBakedRenderOptions(
+    fetcher: typeof fetch = fetch,
+    url: string = lutUrl,
+): Promise<RenderOptions> {
+    const response = await fetcher(url);
     if (!response.ok) throw new Error(`Could not load baked adjustment LUT (${response.status}).`);
     return { ...BAKED_RENDER_OPTIONS, bakedAdjustmentLut: new Uint16Array(await response.arrayBuffer()) };
 }

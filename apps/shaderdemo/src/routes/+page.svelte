@@ -1,9 +1,9 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { BAKED_RENDER_OPTIONS, loadBakedRenderOptions } from '$lib/baked-settings';
-    import { selectRenderBackend, type RenderBackend } from '$lib/render-backend';
-    import { CursorState } from '$lib/cursor';
-    import { CursorDensityField } from '$lib/cursor-density-field';
+    import { BAKED_RENDER_OPTIONS, loadBakedRenderOptions } from '@mia-cx/atmosphere/baked-settings';
+    import { selectRenderBackend, type RenderBackend } from '@mia-cx/atmosphere/render-backend';
+    import { CursorState } from '@mia-cx/atmosphere/cursor';
+    import { CursorDensityField } from '@mia-cx/atmosphere/cursor-density-field';
 
     let canvas: HTMLCanvasElement;
     let renderer: RenderBackend | undefined;

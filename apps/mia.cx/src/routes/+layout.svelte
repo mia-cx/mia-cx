@@ -2,7 +2,7 @@
     import '../app.css';
     import { onMount, type Snippet } from 'svelte';
     import { page } from '$app/state';
-    import ShaderCanvas from '$lib/shader/ShaderCanvas.svelte';
+    import ShaderCanvas from '@mia-cx/atmosphere/ShaderCanvas.svelte';
     import Header from '$lib/components/Header.svelte';
     import Footer from '$lib/components/Footer.svelte';
 

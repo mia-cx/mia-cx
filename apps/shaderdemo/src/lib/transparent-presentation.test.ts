@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { PRESENT_SHADER_SOURCE, AtmosphereRenderer } from './renderer';
-import { WebGL2Renderer } from './webgl2-renderer';
-import { PRESENT as COMPACT_PRESENT } from './webgl2-compact-shaders';
-import { PRESENT as GENERATED_PRESENT } from './webgl2-shaders';
+import { PRESENT_SHADER_SOURCE, AtmosphereRenderer } from '@mia-cx/atmosphere/renderer';
+import { WebGL2Renderer } from '@mia-cx/atmosphere/webgl2-renderer';
+import { PRESENT as COMPACT_PRESENT } from '@mia-cx/atmosphere/webgl2-compact-shaders';
+import { PRESENT as GENERATED_PRESENT } from '@mia-cx/atmosphere/webgl2-shaders';
 
 const page = readFileSync(new URL('../routes/+page.svelte', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../app.html', import.meta.url), 'utf8');
