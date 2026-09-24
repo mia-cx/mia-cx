@@ -131,8 +131,8 @@
         --face: 40vw;
         /* Where the top layer crossfades back to the field, as a share of the photo's height: from
            the top of the collar, just under the chin, to where the shoulders begin. */
-        --neck-start: 20%;
-        --neck-end: 26%;
+        --neck-start: 28%;
+        --neck-end: 34%;
         /* Spans the viewport rather than the grid column so the photo is placed in viewport terms. */
         position: absolute;
         top: calc(var(--header-height) + 24px);
