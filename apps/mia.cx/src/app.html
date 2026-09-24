@@ -7,23 +7,8 @@
             name="viewport"
             content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
-        <meta
-            name="theme-color"
-            content="#221820"
-            media="(prefers-color-scheme: dark)"
-        />
-        <meta
-            name="theme-color"
-            content="#e6dde2"
-            media="(prefers-color-scheme: light)"
-        />
+        <meta name="theme-color" content="#221820" />
         <script>
-            // Runs before paint. An explicit choice wins; otherwise the system preference applies via CSS.
-            try {
-                const theme = localStorage.getItem('theme');
-                if (theme === 'light' || theme === 'dark')
-                    document.documentElement.dataset.theme = theme;
-            } catch {}
             // Hide the page until the shader has compiled, then the layout reveals it. Without
             // JavaScript this never runs and the page shows as normal. Once the app has hydrated
             // it marks the root and owns the timing; if it never does, this reveals at 5 s so a

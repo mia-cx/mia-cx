@@ -9,9 +9,7 @@ describe('app shell', () => {
     it("is the field's dark base before the first frame, in the browser chrome too", () => {
         expect(app).toContain('viewport-fit=cover');
         // Prettier may break the tag across lines, so match its attributes loosely.
-        expect(app).toMatch(
-            /<meta\s+name="theme-color"\s+content="#221820"\s+media="\(prefers-color-scheme: dark\)"\s*\/>/,
-        );
+        expect(app).toMatch(/<meta\s+name="theme-color"\s+content="#221820"\s*\/>/);
         expect(css).toContain("@import '@mia-cx/ui/tokens.css'");
         expect(tokens).toContain('--haze: #221820');
         expect(tokens).toContain('--bg: var(--haze)');
