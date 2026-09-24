@@ -97,7 +97,7 @@
     .reach :global(.email .arrow) {
         align-self: flex-start;
     }
-    .email :global(.mail) {
+    .reach :global(.email .mail) {
         font-size: 20px;
     }
 
