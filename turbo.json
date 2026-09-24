@@ -24,7 +24,7 @@
         },
         "format": {},
         "lint": {
-            "dependsOn": ["format"]
+            "dependsOn": ["^build", "format"]
         },
         "test": {
             "dependsOn": ["build", "lint"],

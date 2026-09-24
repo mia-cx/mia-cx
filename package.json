@@ -2,6 +2,7 @@
   "name": "@mia-cx/mia-cx",
   "version": "0.0.2",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "turbo run build",
     "deploy": "turbo run deploy",
@@ -17,12 +18,12 @@
     "@mia-cx/config": "workspace:^",
     "eslint": "^10.11.0",
     "prettier": "^3.9.9",
+    "prettier-plugin-packagejson": "^3.0.2",
     "turbo": "^2.11.3",
     "typescript": "~6.0.3"
   },
   "packageManager": "pnpm@10.18.3+sha512.bbd16e6d7286fd7e01f6b3c0b3c932cda2965c06a908328f74663f10a9aea51f1129eea615134bf992831b009eabe167ecb7008b597f40ff9bc75946aadfb08d",
   "engines": {
     "node": ">=24"
-  },
-  "type": "module"
+  }
 }
