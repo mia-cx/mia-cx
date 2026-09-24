@@ -298,7 +298,6 @@
 
 <canvas
     class:ready
-    class:failed
     class:dims={animated}
     class="{layer} {className}"
     bind:this={canvas}
@@ -306,6 +305,8 @@
     style:opacity={held}
     aria-label={label}
 ></canvas>
+<!-- A layer of its own, so a lost device's last frame can never show over it. -->
+{#if failed}<div class="fallback" aria-hidden="true"></div>{/if}
 {#if ready && fpsVisible}<output class="fps" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
 
@@ -361,11 +362,12 @@
      * Without WebGPU or WebGL2 the page gets the field's resting colour as a flat background. It
      * sits behind the content rather than over it, since there is no light to float.
      */
-    canvas.failed {
+    .fallback {
+        position: fixed;
+        inset: 0;
         z-index: -1;
-        opacity: 1;
         background: var(--atmosphere-fallback, #3b2736);
-        animation: none;
+        pointer-events: none;
     }
     .fps {
         position: fixed;
