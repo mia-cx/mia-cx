@@ -7,7 +7,7 @@
      * own view timeline where the browser supports it, and off a scroll listener where it does not.
      */
     import { page } from '$app/state';
-    import { EasedGradient, GradientBlur, ThemeToggle } from '@mia-cx/ui';
+    import { EasedGradient, GradientBlur } from '@mia-cx/ui';
     import { nav, site } from '$lib/content/site';
 
     let { hasHero = false }: { hasHero?: boolean } = $props();
@@ -62,7 +62,6 @@
             {#each nav as item (item.href)}
                 <a class="mono" href={item.href} aria-current={current(item.href)}>{item.label}</a>
             {/each}
-            <ThemeToggle />
         </nav>
     </div>
 </header>

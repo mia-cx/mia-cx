@@ -322,18 +322,6 @@
     canvas.back {
         z-index: 0;
     }
-    /*
-     * Light mode inverts the field's lightness and rotates hue back by 180°, so the lobes read as
-     * ink on paper with their original hues. Alpha is untouched: dark areas stay transparent.
-     */
-    :global(:root[data-theme='light']) canvas {
-        filter: invert(1) hue-rotate(180deg);
-    }
-    @media (prefers-color-scheme: light) {
-        :global(:root:not([data-theme])) canvas {
-            filter: invert(1) hue-rotate(180deg);
-        }
-    }
 
     canvas.ready {
         opacity: var(--shader-opacity, 1);
