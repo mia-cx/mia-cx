@@ -141,7 +141,13 @@ for (const note of notes) {
         byLinkName.get(key)!.add(note);
     }
 }
-const byKey = new Map(notes.map((note) => [note.key, note]));
+/** Notes are identified by Svartz's canonical slug, so two paths that normalise alike must not both publish. */
+const byKey = new Map<string, Note>();
+for (const note of notes) {
+    const other = byKey.get(note.key);
+    if (other) fail(note.path, `normalises to the same slug as ${other.path} ("${note.key}"); rename one`);
+    else byKey.set(note.key, note);
+}
 
 /**
  * The note a wikilink means. `[[folder/Note]]` names a path and resolves exactly; a bare name that
@@ -156,7 +162,7 @@ function resolveNote(from: Note, target: string): Note | 'ambiguous' | undefined
     if (candidates.length > 1)
         fail(
             from.path,
-            `links to "${target}", which could mean ${candidates.map((note) => note.path).join(' or ')}; link by path, like [[${dirname(candidates[0].path)}/${target}]]`,
+            `links to "${target}", which could mean ${candidates.map((note) => note.path).join(' or ')}; link by path, like ${candidates.map((note) => `[[${note.path.replace(/\.md$/, '')}]]`).join(' or ')}`,
         );
     return candidates.length > 1 ? 'ambiguous' : candidates[0];
 }
