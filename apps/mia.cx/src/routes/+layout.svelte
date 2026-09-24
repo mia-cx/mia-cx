@@ -49,9 +49,12 @@
 
 <style>
     .page {
+        /*
+         * No z-index: that would make the page one stacking context, trapping everything in it
+         * below the shader. The hero's portrait overlay has to rise above the field, and the +N
+         * menu's own z-index already keeps it above the footer from the root.
+         */
         position: relative;
-        /* Contact menus can extend over the footer without sitting behind its text. */
-        z-index: 2;
         min-height: 60svh;
     }
 </style>

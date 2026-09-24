@@ -46,6 +46,21 @@
                 fetchpriority="high"
             />
         </div>
+        <!--
+            The same photo again, above the shader, faded out across the neck. The field still washes
+            over the shoulders and body, but never over the face. Same box, same source, so the two
+            layers line up to the pixel and the browser downloads the image once.
+        -->
+        <div class="portrait portrait-top" aria-hidden="true" data-enter style:--enter="0">
+            <img
+                src={portrait800}
+                srcset={portraitSet}
+                sizes="(max-width: 820px) 100vw, 50vw"
+                alt=""
+                width="2105"
+                height="3475"
+            />
+        </div>
     </section>
 
     <section class="selected" aria-labelledby="selected" style:--enter="6">
@@ -114,6 +129,10 @@
         /* Where the centre of the photo sits, as a share of the viewport width. The text column
            starts at 50vw, so this is stable at every zoom level and window size. */
         --face: 40vw;
+        /* Where the top layer crossfades back to the field, as a share of the photo's height: from
+           the top of the collar, just under the chin, to where the shoulders begin. */
+        --neck-start: 20%;
+        --neck-end: 26%;
         /* Spans the viewport rather than the grid column so the photo is placed in viewport terms. */
         position: absolute;
         top: calc(var(--header-height) + 24px);
@@ -141,6 +160,17 @@
             #000 calc((50% - var(--drop)) / var(--zoom)),
             transparent calc((100% - var(--drop)) / var(--zoom))
         );
+    }
+    /* Above the shader's canvas (z-index 5), below the header (20). */
+    .portrait-top {
+        z-index: 6;
+        /* The container spans the viewport; fade it out before the middle, where the text column
+           starts, so on tall screens the clean layer can never sit over the name. A soft edge rather
+           than a clip, so no seam shows in the hair when a lobe passes. The face is centred at 40vw. */
+        mask-image: linear-gradient(to right, #000 calc(50% - 48px), transparent 50%);
+    }
+    .portrait-top img {
+        mask-image: linear-gradient(to bottom, #000 var(--neck-start), transparent var(--neck-end));
     }
     .lead {
         color: var(--ink-dim);
@@ -234,6 +264,10 @@
     }
 
     @media (max-width: 820px) {
+        /* The portrait sits below the text here, full-bleed, so nothing needs clipping. */
+        .portrait-top {
+            mask-image: none;
+        }
         .hero {
             grid-template-columns: 1fr;
             grid-template-rows: 1fr auto;
