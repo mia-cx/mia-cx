@@ -90,12 +90,14 @@
                     instance.setCursorDensityField(cursorDensityField.snapshot());
                 }
                 instance.setPaused(paused);
+                // Ready first: a loss that landed during setup is replayed the moment the handler is
+                // attached, and it must be the last word.
+                ready = true;
+                status = '';
                 instance.onLost = (message) => {
                     ready = false;
                     status = message;
                 };
-                ready = true;
-                status = '';
             })
             .catch((error) => {
                 if (!disposed) status = error instanceof Error ? error.message : String(error);
