@@ -10,8 +10,10 @@ export type Kind = 'code' | 'audio' | 'visual';
 const KINDS: readonly string[] = ['code', 'audio', 'visual'];
 
 /**
- * One published note in a mia.cx section. The first block mirrors Svartz's `IndexEntry`
- * (packages/core/src/types.ts), with dates as ISO strings; the rest is what mia.cx adds.
+ * One published note in a mia.cx section. The first block borrows the names of Svartz's `IndexEntry`
+ * (packages/core/src/types.ts) but not its types: dates are ISO strings, links are slugs, and
+ * `content` is renderable Markdown. When Svartz becomes a dependency, the generator turns its index
+ * into this one; the rest is what mia.cx adds.
  */
 export interface VaultEntry {
     /** Svartz's canonical slug: the vault-relative path, normalised. */
@@ -150,14 +152,15 @@ export const kindLabels: Record<Kind | 'all', string> = {
 export const countByKind = (kind: Kind | 'all') =>
     kind === 'all' ? work.length : work.filter((note) => note.kinds.includes(kind)).length;
 
+/** A fragment that is already a heading id stays as it is, so `foo---bar` for "Foo - Bar" survives. */
+const anchor = (fragment: string) =>
+    slugifyHeading(fragment) === fragment ? fragment : slugifyHeading(fragment.replace(/-/g, ' '));
+
 /** Mixed-case in-page anchors, and a couple that lost their leading '#', still need to resolve. */
 function normaliseAnchors(markdown: string): string {
     return markdown
-        .replace(/\]\(#([^)]+)\)/g, (_, fragment: string) => `](#${slugifyHeading(fragment.replace(/-/g, ' '))})`)
-        .replace(
-            /\]\((?!https?:|\/|#|mailto:)([\w-]+)\)/g,
-            (_, fragment: string) => `](#${slugifyHeading(fragment.replace(/-/g, ' '))})`,
-        );
+        .replace(/\]\(#([^)]+)\)/g, (_, fragment: string) => `](#${anchor(fragment)})`)
+        .replace(/\]\((?!https?:|\/|#|mailto:)([\w-]+)\)/g, (_, fragment: string) => `](#${anchor(fragment)})`);
 }
 
 export function render(markdown: string): string {
@@ -176,5 +179,6 @@ export function render(markdown: string): string {
     return marked.parse(normaliseAnchors(markdown), { renderer, async: false, gfm: true }) as string;
 }
 
+/** Dates are calendar days, read as UTC midnight, so they are formatted in UTC to stay on that day. */
 export const formatDate = (iso: string, month: 'short' | 'long' = 'short') =>
-    new Date(iso).toLocaleDateString('en-GB', { year: 'numeric', month, day: 'numeric' });
+    new Date(iso).toLocaleDateString('en-GB', { year: 'numeric', month, day: 'numeric', timeZone: 'UTC' });

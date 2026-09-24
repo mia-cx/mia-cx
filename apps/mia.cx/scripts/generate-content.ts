@@ -2,9 +2,10 @@
  * Reads the Obsidian vault at the repository root and emits a typed index for the site.
  *
  * The vault follows Svartz's conventions (frontmatter `title`, `description`, `tags`, `aliases`,
- * `created_at`, `updated_at`, `published`), and the index is shaped like Svartz's own: one entry per
- * note, keyed by Svartz's canonical slug, with its links and backlinks. When Svartz ships as a
- * dependency it can produce this index and the app reading it stays as it is.
+ * `created_at`, `updated_at`, `published`). The index is mia.cx's own format, named after Svartz's:
+ * one entry per note, keyed by Svartz's canonical slug, with its links and backlinks. Svartz's index
+ * differs in detail (Dates, link objects, plain-text content), so when Svartz ships as a dependency
+ * this script becomes an adapter from its index to this one, and the pages stay as they are.
  *
  * What mia.cx publishes is decided by folder: see src/lib/content/sections.ts. Everything
  * Obsidian-specific (wikilinks, embeds, the title-from-filename convention) is resolved here, so
@@ -67,8 +68,17 @@ const asDate = (value: unknown): string | undefined => {
     return Number.isNaN(date.getTime()) ? undefined : date.toISOString().slice(0, 10);
 };
 
-/** Svartz's rule: missing means published; only `false` or an empty value hides a note. */
-const isPublished = (data: Record<string, unknown>) => data.published !== false && data.published !== '';
+/**
+ * Svartz's rule: missing means published, and `false` or `""` hides a note. A blank `published:` reads
+ * as null, which Svartz would publish; that is almost always a draft, so it stops the build instead.
+ */
+function isPublished(path: string, data: Record<string, unknown>) {
+    if (data.published === null) {
+        fail(path, 'has a blank `published`; set it to true or false');
+        return false;
+    }
+    return data.published !== false && data.published !== '';
+}
 
 const files = walk(vault);
 const rel = (file: string) => relative(vault, file).split('\\').join('/');
@@ -106,7 +116,7 @@ for (const file of files) {
     const section = findSection(path);
     if (!section) continue;
     const parsed = matter(readFileSync(file, 'utf8'));
-    if (!isPublished(parsed.data)) continue;
+    if (!isPublished(path, parsed.data)) continue;
     // The filename is the title unless `title` says otherwise — filenames cannot hold every character.
     const title = parsed.data.title ? String(parsed.data.title) : basename(file, '.md');
     notes.push({
@@ -121,11 +131,34 @@ for (const file of files) {
     });
 }
 
-/** Wikilinks resolve by filename, title or alias, compared the way Svartz compares them. */
-const byLinkName = new Map<string, Note>();
+/** Every note a wikilink name can mean: filenames, titles and aliases, compared the way Svartz compares them. */
+const byLinkName = new Map<string, Set<Note>>();
 for (const note of notes) {
     const names = [basename(note.path, '.md'), note.title, ...asList(note.data.aliases)];
-    for (const name of names) byLinkName.set(svartzSegment(name), note);
+    for (const name of names) {
+        const key = svartzSegment(name);
+        if (!byLinkName.has(key)) byLinkName.set(key, new Set());
+        byLinkName.get(key)!.add(note);
+    }
+}
+const byKey = new Map(notes.map((note) => [note.key, note]));
+
+/**
+ * The note a wikilink means. `[[folder/Note]]` names a path and resolves exactly; a bare name that
+ * could mean more than one note stops the build rather than linking to whichever was read last.
+ */
+function resolveNote(from: Note, target: string): Note | 'ambiguous' | undefined {
+    if (target.includes('/')) {
+        const key = target.replace(/\.md$/i, '').split('/').map(svartzSegment).join('/');
+        return byKey.get(key);
+    }
+    const candidates = [...(byLinkName.get(svartzSegment(target)) ?? [])];
+    if (candidates.length > 1)
+        fail(
+            from.path,
+            `links to "${target}", which could mean ${candidates.map((note) => note.path).join(' or ')}; link by path, like [[${dirname(candidates[0].path)}/${target}]]`,
+        );
+    return candidates.length > 1 ? 'ambiguous' : candidates[0];
 }
 
 const kindsOf = (note: Note) =>
@@ -143,18 +176,28 @@ function hrefOf(note: Note): string | undefined {
     return `/${note.section}/${note.name}`;
 }
 
-/** Copy an embedded attachment into static/ and return the URL the site should use. */
+/**
+ * Copy an embedded attachment into static/ and return its URL, or why it has none. The URL keeps the
+ * file's vault path, so two attachments with the same name in different folders stay apart.
+ */
 const assets = new Map<string, string>();
-function assetUrl(name: string): string | undefined {
+function assetUrl(name: string): { url: string } | { error: string } {
     const cached = assets.get(name);
-    if (cached) return cached;
-    const found = files.find((file) => basename(file) === name || rel(file) === name);
-    if (!found) return undefined;
-    mkdirSync(assetOut, { recursive: true });
-    copyFileSync(found, join(assetOut, basename(found)));
-    const url = `/vault/${basename(found)}`;
+    if (cached) return { url: cached };
+    const byName = files.filter((file) => basename(file) === name);
+    const found = files.find((file) => rel(file) === name) ?? (byName.length === 1 ? byName[0] : undefined);
+    if (!found)
+        return {
+            error: byName.length
+                ? `embeds "${name}", which could mean ${byName.map(rel).join(' or ')}; embed it by path`
+                : `embeds "${name}", which is not in the vault`,
+        };
+    const path = rel(found);
+    mkdirSync(dirname(join(assetOut, path)), { recursive: true });
+    copyFileSync(found, join(assetOut, path));
+    const url = `/vault/${path.split('/').map(encodeURIComponent).join('/')}`;
     assets.set(name, url);
-    return url;
+    return { url };
 }
 
 /** Turn Obsidian syntax into plain Markdown the renderer already understands. */
@@ -163,22 +206,24 @@ function resolveLinks(note: Note, links: Set<string>): string {
 
     // ![[image.png]] and ![[image.png|alt]]
     body = body.replace(/!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (whole, target: string, alt?: string) => {
-        const url = assetUrl(target.trim());
-        if (!url) {
-            fail(note.path, `embeds "${target.trim()}", which is not in the vault`);
+        const asset = assetUrl(target.trim());
+        if ('error' in asset) {
+            fail(note.path, asset.error);
             return whole;
         }
-        return `![${(alt ?? target).trim()}](${url})`;
+        return `![${(alt ?? target).trim()}](${asset.url})`;
     });
 
-    // [[Note]], [[Note|label]], [[Note#Heading]] and [[#Heading]]
+    // [[Note]], [[Note|label]], [[Note#Heading]] and [[#Heading]]; an embed that failed above is left alone.
     body = body.replace(
-        /\[\[([^\]|#]*)(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]/g,
+        /(?<!!)\[\[([^\]|#]*)(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]/g,
         (_, target: string, heading?: string, label?: string) => {
             const anchor = heading ? `#${slugifyHeading(heading.trim())}` : '';
-            const text = (label ?? (target.trim() || heading || '')).trim();
+            // Like Obsidian, a path link shows only the note's name.
+            const text = (label ?? (basename(target.trim()) || heading || '')).trim();
             if (!target.trim()) return anchor ? `[${text}](${anchor})` : text;
-            const linked = byLinkName.get(svartzSegment(target.trim()));
+            const linked = resolveNote(note, target.trim());
+            if (linked === 'ambiguous') return text;
             if (!linked) {
                 // Private or unpublished notes, or notes outside mia.cx's sections: text, not a dead link.
                 warnings.push(`${note.path}: "${target.trim()}" is not on mia.cx, so it renders as text`);
