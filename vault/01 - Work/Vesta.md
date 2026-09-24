@@ -1,11 +1,10 @@
 ---
 tags:
   - work/code
-publish: true
 listed: true
 featured: true
-created: 2025-05-08T00:00
-summary: "An all-in-one platform for independent musicians, small labels and creative publishers."
+created_at: 2025-05-08T00:00
+description: "An all-in-one platform for independent musicians, small labels and creative publishers."
 status: In development
 stack:
   - TypeScript

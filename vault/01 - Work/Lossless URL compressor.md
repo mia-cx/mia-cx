@@ -1,10 +1,9 @@
 ---
 tags:
   - work/code
-publish: true
 listed: true
-created: 2026-05-28T00:00
-summary: "A stateless, deterministic, lossless URL compressor."
+created_at: 2026-05-28T00:00
+description: "A stateless, deterministic, lossless URL compressor."
 status: Work in progress
 stack:
   - TypeScript

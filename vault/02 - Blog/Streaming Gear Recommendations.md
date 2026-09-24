@@ -1,9 +1,8 @@
 ---
 tags:
   - post
-publish: true
-summary: Budget gear and the techniques that get the most out of the equipment you already own.
-created: "2023-10-28T00:00"
+description: Budget gear and the techniques that get the most out of the equipment you already own.
+created_at: "2023-10-28T00:00"
 source: "https://github.com/mia-riezebos/mia-riezebos/wiki/Blog:-Streaming-Gear-Recommendations"
 ---
 

@@ -1,10 +1,9 @@
 ---
 tags:
   - post
-publish: true
-summary: "A minimal approach, in four parts: spectral consistency, stereo imaging, dynamics and loudness."
-created: "2023-09-08T00:00"
-modified: "2025-05-18T00:00"
+description: "A minimal approach, in four parts: spectral consistency, stereo imaging, dynamics and loudness."
+created_at: "2023-09-08T00:00"
+updated_at: "2025-05-18T00:00"
 source: "https://github.com/mia-riezebos/mia-riezebos/wiki/Blog:-My-Approach-to-Mastering"
 ---
 

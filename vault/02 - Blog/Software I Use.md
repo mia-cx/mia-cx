@@ -1,9 +1,8 @@
 ---
 tags:
   - post
-publish: true
-summary: "The list, by platform and purpose."
-created: "2023-03-26T00:00"
+description: "The list, by platform and purpose."
+created_at: "2023-03-26T00:00"
 source: "https://github.com/mia-riezebos/mia-riezebos/wiki/Blog:-Software-I-Use"
 ---
 

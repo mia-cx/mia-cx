@@ -1,9 +1,8 @@
 ---
 tags:
   - work/code
-publish: true
-created: 2026-09-07T00:00
-summary: "A self-hosted media server written from scratch to be fast where Jellyfin is slow."
+created_at: 2026-09-07T00:00
+description: "A self-hosted media server written from scratch to be fast where Jellyfin is slow."
 status: In development
 stack:
   - TypeScript

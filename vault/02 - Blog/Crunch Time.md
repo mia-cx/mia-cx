@@ -1,10 +1,9 @@
 ---
 tags:
   - post
-publish: true
-summary: "A missed deadline, procrastination, and the first panic attack of my life."
-created: "2023-01-28T00:00"
-modified: "2024-05-30T00:00"
+description: "A missed deadline, procrastination, and the first panic attack of my life."
+created_at: "2023-01-28T00:00"
+updated_at: "2024-05-30T00:00"
 source: "https://github.com/mia-riezebos/mia-riezebos/wiki/Blog:-Crunch-Time"
 ---
 

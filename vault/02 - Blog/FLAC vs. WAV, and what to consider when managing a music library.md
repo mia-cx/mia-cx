@@ -1,11 +1,10 @@
 ---
 tags:
   - post
-publish: true
 slug: flac-vs-wav
-summary: "Lossless means lossless. What actually differs between the formats, and what to keep an archive in."
-created: "2023-10-27T00:00"
-modified: "2023-12-30T00:00"
+description: "Lossless means lossless. What actually differs between the formats, and what to keep an archive in."
+created_at: "2023-10-27T00:00"
+updated_at: "2023-12-30T00:00"
 source: "https://github.com/mia-riezebos/mia-riezebos/wiki/Blog:-FLAC-vs.-WAV,-and-Considerations-for-your-Music-Library"
 ---
 
