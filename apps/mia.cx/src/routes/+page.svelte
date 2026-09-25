@@ -47,8 +47,8 @@
             />
         </div>
         <!--
-            The same photo again, above the shader, faded out across the neck. The field still washes
-            over the shoulders and body, but never over the face. Same box, same source, so the two
+            The same photo again, above the shader, cut to a feathered ellipse around the face. The field
+            still washes around the head and over the body, but never over the face. Same box, same source, so the two
             layers line up to the pixel and the browser downloads the image once.
         -->
         <div class="portrait portrait-top" aria-hidden="true" data-enter style:--enter="0">
