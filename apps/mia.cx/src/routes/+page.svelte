@@ -47,8 +47,8 @@
             />
         </div>
         <!--
-            The same photo again, above the shader, faded out across the neck. The field still washes
-            over the shoulders and body, but never over the face. Same box, same source, so the two
+            The same photo again, above the shader, cut to a feathered ellipse around the face. The field
+            still washes around the head and over the body, but never over the face. Same box, same source, so the two
             layers line up to the pixel and the browser downloads the image once.
         -->
         <div class="portrait portrait-top" aria-hidden="true" data-enter style:--enter="0">
@@ -131,10 +131,15 @@
         /* Where the centre of the photo sits, as a share of the viewport width. The text column
            starts at 50vw, so this is stable at every zoom level and window size. */
         --face: 40vw;
-        /* Where the top layer crossfades back to the field, as a share of the photo's height: from
-           the top of the collar, just under the chin, to where the shoulders begin. */
-        --neck-start: 28%;
-        --neck-end: 34%;
+        /* The clean top layer is a feathered ellipse around the face, in shares of the photo: its
+           centre, its radii, and where inside it the feather starts. */
+        --head-x: 50%;
+        --head-y: 12%;
+        --head-rx: 34%;
+        --head-ry: 20%;
+        --head-solid: 55%;
+        /* Where the bottom fade starts, as a share of the portrait's height; it ends at the bottom. */
+        --fade-from: 30%;
         /* Spans the viewport rather than the grid column so the photo is placed in viewport terms. */
         position: absolute;
         top: calc(var(--header-height) + 24px);
@@ -159,7 +164,7 @@
         /* Gradient positions are in image height, so the fade ends exactly at the container's bottom. */
         mask-image: linear-gradient(
             to bottom,
-            #000 calc((50% - var(--drop)) / var(--zoom)),
+            #000 calc((var(--fade-from) - var(--drop)) / var(--zoom)),
             transparent calc((100% - var(--drop)) / var(--zoom))
         );
     }
@@ -172,13 +177,20 @@
         mask-image: linear-gradient(to right, #000 calc(50% - 48px), transparent 50%);
     }
     .portrait-top img {
-        mask-image: linear-gradient(to bottom, #000 var(--neck-start), transparent var(--neck-end));
+        mask-image: var(--head);
+    }
+    .portrait-top {
+        --head: radial-gradient(
+            ellipse var(--head-rx) var(--head-ry) at var(--head-x) var(--head-y),
+            #000 var(--head-solid),
+            transparent 100%
+        );
     }
     /*
      * Over the photo, the field reads as a flat purple wash, measured at about 14%: fitting renders
      * with and without the canvas gives out = 0.86 × photo + (31, 19, 32) per channel. The top layer
      * sits above the canvas and would miss it, so it gets the same wash, cut to the photo's outline
-     * and the neck fade. It halves as the hero scrolls away, as the field does.
+     * and the ellipse around the face. It halves as the hero scrolls away, as the field does.
      */
     .haze {
         position: absolute;
@@ -190,7 +202,7 @@
         background: rgb(221 138 231);
         /* Without scroll timelines, the field publishes its dim for this; with them, the animation below runs. */
         opacity: calc(0.14 * var(--atmosphere-dim, 1));
-        mask-image: var(--photo), linear-gradient(to bottom, #000 var(--neck-start), transparent var(--neck-end));
+        mask-image: var(--photo), var(--head);
         mask-size: 100% 100%;
         mask-composite: intersect;
         transition: opacity 600ms ease;
@@ -323,25 +335,36 @@
             align-self: center;
             padding-bottom: 24px;
         }
-        /* Full-bleed and flush with the bottom of the hero; the crop line sits on the page edge. */
+        /* Full-bleed and flush with the bottom of the hero, cropped at the waist so there is less of it
+           to scroll past. `--keep` is the share of the photo's height that shows. */
         .portrait {
             --zoom: 1;
             --drop: 0%;
+            --keep: 0.62;
             position: relative;
             top: auto;
             bottom: auto;
             left: auto;
             grid-column: 1;
             grid-row: 2;
-            height: auto;
+            height: calc(100vw * 3475 / 2105 * var(--keep));
             width: 100vw;
             margin-left: calc(50% - 50vw);
+            overflow: clip;
         }
         .portrait img {
             position: static;
             translate: none;
             width: 100%;
             height: auto;
+            mask-image: linear-gradient(
+                to bottom,
+                #000 calc(var(--keep) * var(--fade-from)),
+                transparent calc(var(--keep) * 100%)
+            );
+        }
+        .portrait-top img {
+            mask-image: var(--head);
         }
         .haze {
             top: 0;
