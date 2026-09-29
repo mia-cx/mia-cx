@@ -11,6 +11,7 @@
 
 <svelte:head>
     <title>{post.title} — {site.domain}</title>
+    <meta property="og:title" content="{post.title} — {site.domain}" />
     <meta name="description" content={post.summary} />
 </svelte:head>
 

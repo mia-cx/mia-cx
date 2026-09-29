@@ -7,6 +7,7 @@
 
 <svelte:head>
     <title>Blog — {site.domain}</title>
+    <meta property="og:title" content="Blog — {site.domain}" />
     <meta
         name="description"
         content={SECTIONS.blog.published ? `Writing by ${site.name}.` : `Writing by ${site.name}. Coming soon.`}

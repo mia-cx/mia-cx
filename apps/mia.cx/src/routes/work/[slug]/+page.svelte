@@ -9,6 +9,7 @@
 
 <svelte:head>
     <title>{note.title} — {site.domain}</title>
+    <meta property="og:title" content="{note.title} — {site.domain}" />
     <meta name="description" content={note.summary} />
 </svelte:head>
 
