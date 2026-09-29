@@ -1,6 +1,6 @@
 /**
  * Renders static/og.jpg, the image link previews show for mia.cx, by cropping the 1200×630 card out
- * of the /og route in a Chromium you already have open, over the DevTools protocol:
+ * of the /og route (1200×630) in a Chromium you already have open, over the DevTools protocol:
  *
  *   pnpm build && pnpm preview
  *   pnpm share-card [base-url] [devtools-url]
@@ -9,7 +9,7 @@
  * Start that Chromium with --remote-debugging-port=9222. A real browser draws the field with WebGPU
  * at full resolution; automation browsers and headless software renderers do not. The page keeps the
  * window's real size, since the field is a full-viewport canvas and a shrunken viewport changes how
- * it renders; the card sits centred on it and only the card is captured, at 2× pixel density. The
+ * it renders; the card sits centred on it and only the card is captured, at 1200×630. The
  * tab opens in front, since a background tab pauses the field, and closes when done.
  */
 import { writeFileSync } from 'node:fs';
@@ -93,8 +93,8 @@ try {
     const { data } = await run<{ data: string }>('Page.captureScreenshot', {
         format: 'jpeg',
         quality: 88,
-        // Captured at 2× whatever the display's own density is.
-        clip: { x, y, width, height, scale: 2 / dpr },
+        // At the card's CSS size, whatever the display's own density is.
+        clip: { x, y, width, height, scale: 1 / dpr },
     });
     writeFileSync(out, Buffer.from(data, 'base64'));
     console.log(`share card: ${out}`);
