@@ -1,7 +1,8 @@
 <script lang="ts">
     /**
-     * The link-preview card, laid out at 1200×630 over the live field. Not linked from anywhere;
-     * scripts/share-card.ts screenshots it into static/og.jpg.
+     * The link-preview card: a 1200×630 box centred on a full-size page, so the field renders at its
+     * real scale around it. Not linked from anywhere; scripts/share-card.ts crops the box into
+     * static/og.jpg.
      */
     import { site } from '$lib/content/site';
 </script>
@@ -11,16 +12,23 @@
     <meta name="robots" content="noindex" />
 </svelte:head>
 
-<main>
-    <p class="domain mono">{site.domain}</p>
-    <div class="words">
-        <p class="lead">I'm</p>
-        <h1>{site.name}</h1>
-        <p class="role">Designer, creative developer and music producer</p>
-    </div>
-</main>
+<div class="stage">
+    <main data-card>
+        <p class="domain mono">{site.domain}</p>
+        <div class="words">
+            <p class="lead">I'm</p>
+            <h1>{site.name}</h1>
+            <p class="role">Designer, creative developer and music producer</p>
+        </div>
+    </main>
+</div>
 
 <style>
+    .stage {
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+    }
     main {
         /* No z-index: the field passes over the name, as it does on the site. */
         display: grid;

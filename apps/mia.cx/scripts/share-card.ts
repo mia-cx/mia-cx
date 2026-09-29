@@ -1,13 +1,15 @@
 /**
- * Renders static/og.jpg, the image link previews show for mia.cx, by screenshotting the /og route
- * at 1200×630 (2× pixel density) in a Chromium you already have open, over the DevTools protocol:
+ * Renders static/og.jpg, the image link previews show for mia.cx, by cropping the 1200×630 card out
+ * of the /og route in a Chromium you already have open, over the DevTools protocol:
  *
  *   pnpm build && pnpm preview
  *   pnpm share-card [base-url] [devtools-url]
  *
  * Start that Chromium with --remote-debugging-port=9222. A real browser draws the field with WebGPU
- * at full resolution; automation browsers and headless software renderers do not. The tab opens in
- * front, since a background tab pauses the field, and closes when done.
+ * at full resolution; automation browsers and headless software renderers do not. The page keeps the
+ * window's real size, since the field is a full-viewport canvas and a shrunken viewport changes how
+ * it renders; the card sits centred on it and only the card is captured, at 2× pixel density. The
+ * tab opens in front, since a background tab pauses the field, and closes when done.
  */
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +50,6 @@ try {
     const run = <T = Record<string, unknown>>(method: string, params = {}) => send<T>(method, params, sessionId);
     await run('Page.enable');
     await run('Page.bringToFront');
-    await run('Emulation.setDeviceMetricsOverride', { width: 1200, height: 630, deviceScaleFactor: 2, mobile: false });
     await run('Page.navigate', { url: `${base}/og` });
 
     // Ready once the field has drawn its first frame and the entrance has finished.
@@ -64,7 +65,24 @@ try {
     }
     // Time for the adaptive resolution to settle at full scale.
     await sleep(6000);
-    const { data } = await run<{ data: string }>('Page.captureScreenshot', { format: 'jpeg', quality: 88 });
+    const { result: box } = await run<{
+        result: { value: { x: number; y: number; width: number; height: number; dpr: number; fits: boolean } };
+    }>('Runtime.evaluate', {
+        expression: `(() => {
+            const r = document.querySelector('[data-card]').getBoundingClientRect();
+            return { x: r.x, y: r.y, width: r.width, height: r.height, dpr: devicePixelRatio,
+                fits: r.x >= 0 && r.y >= 0 && r.right <= innerWidth && r.bottom <= innerHeight };
+        })()`,
+        returnByValue: true,
+    });
+    if (!box.value.fits) throw new Error('the window is smaller than 1200×630; make it bigger');
+    const { x, y, width, height, dpr } = box.value;
+    const { data } = await run<{ data: string }>('Page.captureScreenshot', {
+        format: 'jpeg',
+        quality: 88,
+        // Captured at 2× whatever the display's own density is.
+        clip: { x, y, width, height, scale: 2 / dpr },
+    });
     writeFileSync(out, Buffer.from(data, 'base64'));
     console.log(`share card: ${out}`);
 } finally {
