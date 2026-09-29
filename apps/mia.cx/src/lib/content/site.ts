@@ -8,6 +8,7 @@ export const site = {
     /** Rendered as two right-aligned lines. */
     nameLines: ['Mia', 'Riezebos'],
     domain: 'mia.cx',
+    url: 'https://mia.cx',
     role: 'Creative Developer',
     /** Stated by Mia on ffm.bio/patch. */
     pronouns: 'she/they/none',

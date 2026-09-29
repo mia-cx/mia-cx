@@ -5,11 +5,14 @@
     import ShaderCanvas from '@mia-cx/atmosphere/ShaderCanvas.svelte';
     import Header from '$lib/components/Header.svelte';
     import Footer from '$lib/components/Footer.svelte';
+    import { site } from '$lib/content/site';
 
     let { children }: { children: Snippet } = $props();
 
     /** Only the home page has a hero for the header's blur to key off. */
     const hasHero = $derived(page.url.pathname === '/');
+    /** The share card at /og is just the field and its own text: no header, footer or page chrome. */
+    const bare = $derived(page.url.pathname === '/og');
 
     /*
      * First load only: the page stays hidden while the shader compiles, then everything enters
@@ -35,17 +38,37 @@
     });
 </script>
 
-<ShaderCanvas dims={hasHero} opacity={hasHero ? 1 : 0.5} onsettle={reveal} />
+<!--
+    Link previews. Without an image of its own, a preview picks the largest picture on the page,
+    which is the portrait; static/og.jpg is rendered by scripts/share-card.ts instead.
+-->
+<svelte:head>
+    <meta property="og:site_name" content={site.domain} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="{site.url}{page.url.pathname}" />
+    <meta property="og:image" content="{site.url}/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="{site.name}, over a purple and pink field of light" />
+    <meta name="twitter:card" content="summary_large_image" />
+</svelte:head>
+
+<!-- Full strength behind the hero and on the share card; half behind reading pages. -->
+<ShaderCanvas dims={hasHero} opacity={hasHero || bare ? 1 : 0.5} onsettle={reveal} />
 
 <div class="boot" aria-hidden="true"><span></span></div>
 
-<Header {hasHero} />
-
-<div class="page">
+{#if bare}
     {@render children()}
-</div>
+{:else}
+    <Header {hasHero} />
 
-<Footer />
+    <div class="page">
+        {@render children()}
+    </div>
+
+    <Footer />
+{/if}
 
 <style>
     .page {
