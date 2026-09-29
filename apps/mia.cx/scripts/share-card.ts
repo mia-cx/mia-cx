@@ -4,6 +4,7 @@
  *
  *   pnpm build && pnpm preview
  *   pnpm share-card [base-url] [devtools-url]
+ *   pnpm share-card --tab [devtools-url]    capture the /og tab you already have open, as it is now
  *
  * Start that Chromium with --remote-debugging-port=9222. A real browser draws the field with WebGPU
  * at full resolution; automation browsers and headless software renderers do not. The page keeps the
@@ -14,8 +15,12 @@
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const base = process.argv[2] ?? 'http://localhost:4173';
-const devtools = process.argv[3] ?? 'http://127.0.0.1:9222';
+const args = process.argv.slice(2);
+// --tab captures an /og tab that is already open, without reloading it, so a frame picked by eye is kept.
+const current = args.includes('--tab');
+const positional = args.filter((arg) => arg !== '--tab');
+const base = current ? '' : (positional[0] ?? 'http://localhost:4173');
+const devtools = (current ? positional[0] : positional[1]) ?? 'http://127.0.0.1:9222';
 const out = fileURLToPath(new URL('../static/og.jpg', import.meta.url));
 
 const { webSocketDebuggerUrl } = (await (await fetch(`${devtools}/json/version`)).json()) as {
@@ -44,13 +49,21 @@ function send<T = Record<string, unknown>>(method: string, params = {}, sessionI
 }
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const { targetId } = await send<{ targetId: string }>('Target.createTarget', { url: 'about:blank', background: false });
+const open = current
+    ? ((await (await fetch(`${devtools}/json/list`)).json()) as { id: string; type: string; url: string }[]).find(
+          (target) => target.type === 'page' && new URL(target.url).pathname === '/og',
+      )
+    : undefined;
+if (current && !open) throw new Error('no open tab on /og');
+const { targetId } = open
+    ? { targetId: open.id }
+    : await send<{ targetId: string }>('Target.createTarget', { url: 'about:blank', background: false });
 try {
     const { sessionId } = await send<{ sessionId: string }>('Target.attachToTarget', { targetId, flatten: true });
     const run = <T = Record<string, unknown>>(method: string, params = {}) => send<T>(method, params, sessionId);
     await run('Page.enable');
     await run('Page.bringToFront');
-    await run('Page.navigate', { url: `${base}/og` });
+    if (!current) await run('Page.navigate', { url: `${base}/og` });
 
     // Ready once the field has drawn its first frame and the entrance has finished.
     const deadline = Date.now() + 60_000;
@@ -63,8 +76,8 @@ try {
         if (Date.now() > deadline) throw new Error('the field never drew; is the tab visible and WebGPU on?');
         await sleep(250);
     }
-    // Time for the adaptive resolution to settle at full scale.
-    await sleep(6000);
+    // Time for the adaptive resolution to settle at full scale; an open tab has had it.
+    if (!current) await sleep(6000);
     const { result: box } = await run<{
         result: { value: { x: number; y: number; width: number; height: number; dpr: number; fits: boolean } };
     }>('Runtime.evaluate', {
@@ -86,6 +99,6 @@ try {
     writeFileSync(out, Buffer.from(data, 'base64'));
     console.log(`share card: ${out}`);
 } finally {
-    await send('Target.closeTarget', { targetId });
+    if (!current) await send('Target.closeTarget', { targetId });
     socket.close();
 }
