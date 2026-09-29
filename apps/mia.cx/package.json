@@ -15,7 +15,8 @@
     "test": "npm run test:integration && npm run test:unit",
     "test:integration": "playwright test",
     "test:unit": "vitest run",
-    "generate:content": "tsx scripts/generate-content.ts"
+    "generate:content": "tsx scripts/generate-content.ts",
+    "share-card": "tsx scripts/share-card.ts"
   },
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.136",

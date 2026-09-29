@@ -6,6 +6,7 @@
 
 <svelte:head>
     <title>Work — {site.domain}</title>
+    <meta property="og:title" content="Work — {site.domain}" />
     <meta name="description" content="Code, audio and visual work by {site.name}." />
 </svelte:head>
 

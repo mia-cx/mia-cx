@@ -7,6 +7,7 @@
 
 <svelte:head>
     <title>About — {site.domain}</title>
+    <meta property="og:title" content="About — {site.domain}" />
     <meta name="description" content={about[0]} />
 </svelte:head>
 

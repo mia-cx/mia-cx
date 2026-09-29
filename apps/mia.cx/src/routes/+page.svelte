@@ -15,6 +15,8 @@
 <svelte:head>
     <title>{site.name} — {site.role}</title>
     <meta name="description" content={site.description} />
+    <meta property="og:title" content="{site.name} — {site.role}" />
+    <meta property="og:description" content={site.description} />
 </svelte:head>
 
 <main class="container">
