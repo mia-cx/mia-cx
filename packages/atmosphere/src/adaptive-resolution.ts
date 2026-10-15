@@ -41,10 +41,10 @@ export class AdaptiveResolutionController {
             initialScale: options.initialScale ?? ceiling,
             quantum: options.quantum ?? 0.025,
             maxWindowFrames: options.maxWindowFrames ?? 512,
-            targetMs: options.targetMs ?? 1000 / 30,
-            // Recover quality whenever processing remains safely above 30 FPS. The narrow gap to the
-            // 33.3 ms downscale threshold prevents one noisy sample from bouncing between scales.
-            headroomMs: options.headroomMs ?? 32,
+            targetMs: options.targetMs ?? 1000 / 60,
+            // Recover quality whenever processing remains safely above 60 FPS. The narrow gap to the
+            // 16.7 ms downscale threshold prevents one noisy sample from bouncing between scales.
+            headroomMs: options.headroomMs ?? 16,
             assumedFixedMs: options.assumedFixedMs ?? 1.5,
             maxDownRatio: options.maxDownRatio ?? 0.55,
             maxUpRatio: options.maxUpRatio ?? 1.3,
