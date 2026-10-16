@@ -43,3 +43,12 @@ declare const GPUColorWrite: {
 interface HTMLCanvasElement {
     getContext(contextId: 'webgpu', options?: unknown): GPUCanvasContext | null;
 }
+
+/** Measurement hook installed by ShaderCanvas when the page URL carries ?atmo-perf. */
+interface Window {
+    __atmospherePerf?: {
+        backend?: 'webgpu' | 'webgl2';
+        gpu: { t: number; totalMs: number; passes: { label: string; ms: number }[] }[];
+        stats: { t: number; fps: number; width: number; height: number; scale: number }[];
+    };
+}

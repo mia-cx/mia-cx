@@ -256,7 +256,7 @@ describe('WebGL2 parity backend', () => {
 
     it('renders one full-resolution frozen pause frame and restores adaptive rendering', () => {
         const implementation = WebGL2Renderer.toString();
-        expect(implementation).toContain('this.paused ? this.options.renderScale : this.adaptive.effectiveScale');
+        expect(implementation).toContain('this.pinnedScale ?? this.options.renderScale');
         expect(implementation).toContain('if (v === this.paused) return');
         expect(implementation).toContain('this.recreateTargets(v)');
         expect(implementation).toContain('if (!preserveHistory) this.historyValid = false');

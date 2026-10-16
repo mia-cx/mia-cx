@@ -9,6 +9,7 @@ import {
     octaveEffectIsActive,
     renderSize,
     scaledSize,
+    pinnedRenderScale,
     datamoshIsActive,
     type RenderOptions,
 } from './renderer';
@@ -296,6 +297,7 @@ export class WebGL2Renderer implements RenderBackend {
     private historyValid = false;
     private datamoshWasActive = false;
     private adaptive: AdaptiveResolutionController;
+    private pinnedScale?: number;
     private timerQuery?: TimerQueryExtension;
     private pendingTimerQueries: PendingTimerQuery[] = [];
     private lastTimerQueryEvidence = performance.now();
@@ -382,8 +384,10 @@ export class WebGL2Renderer implements RenderBackend {
         gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 2 * 4, 0);
         gl.vertexAttribDivisor(2, 0);
         this.recreateDensityTargets(1, 1);
-        this.adaptive = new AdaptiveResolutionController(options.renderScale, {
-            initialScale: Math.min(WEBGL2_STARTUP_SCALE, options.renderScale),
+        this.pinnedScale = pinnedRenderScale(options);
+        this.adaptive = new AdaptiveResolutionController(this.pinnedScale ?? options.renderScale, {
+            initialScale: this.pinnedScale ?? Math.min(WEBGL2_STARTUP_SCALE, options.renderScale),
+            minScale: this.pinnedScale,
             severeSamples: 1,
         });
         this.timerQuery = gl.getExtension('EXT_disjoint_timer_query_webgl2') ?? undefined;
@@ -604,7 +608,7 @@ export class WebGL2Renderer implements RenderBackend {
         }
         // Pausing uses full configured quality without teaching the adaptive controller that this should
         // become its continuous workload.  Its effective scale remains the resume scale.
-        const targetScale = this.paused ? this.options.renderScale : this.adaptive.effectiveScale;
+        const targetScale = this.paused ? (this.pinnedScale ?? this.options.renderScale) : this.adaptive.effectiveScale;
         const size = scaledSize(this.canvas.width, this.canvas.height, targetScale);
         this.baseTargets = [
             this.makeTarget('base', size.width, size.height),
@@ -1137,8 +1141,9 @@ export class WebGL2Renderer implements RenderBackend {
                 this.boundTextures.clear();
             }
         this.options = o;
+        this.pinnedScale = pinnedRenderScale(o);
 
-        if (scaleChanged) this.adaptive.setCeiling(o.renderScale, performance.now());
+        if (scaleChanged) this.adaptive.setCeiling(this.pinnedScale ?? o.renderScale, performance.now());
         this.datamoshWasActive = datamoshIsActive(o.parameters);
         if (resize) this.recreateTargets();
         else if (resetHistory) this.historyValid = false;

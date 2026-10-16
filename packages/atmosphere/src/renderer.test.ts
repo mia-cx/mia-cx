@@ -255,7 +255,7 @@ describe('field configuration', () => {
     });
     it('renders one full-resolution frozen pause frame and restores adaptive rendering', () => {
         const source = AtmosphereRenderer.toString();
-        expect(source).toContain('this.paused ? this.options.renderScale : this.adaptiveResolution.effectiveScale');
+        expect(source).toContain('this.pinnedScale ?? this.options.renderScale');
         expect(source).toContain('if (value === this.paused) return');
         expect(source).toContain('this.recreateTargets(value)');
         expect(source).toContain('if (!preserveHistory) this.historyTexture?.destroy()');

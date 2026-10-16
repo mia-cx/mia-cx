@@ -356,6 +356,8 @@ export interface RenderOptions {
     seed: number;
     dprCap: number;
     renderScale: number;
+    /** Pins the adaptive scale to a fixed value (clamped to [0.125, 1]); used by ?atmo-scale=. */
+    pinnedScale?: number;
     parameters: ShaderParameters;
     colour: ColourEffect[];
     post: PostEffect[];
@@ -364,6 +366,12 @@ export interface RenderOptions {
     bakedPostPlan?: ReturnType<typeof rendererStagePlan>;
     bakedPostParameters?: Float32Array;
     bakedLeadingAdjustments?: ReturnType<typeof leadingAdjustmentRegion>;
+}
+
+/** The effective adaptive-scale pin for ?atmo-scale=, clamped to the controller's own range. */
+export function pinnedRenderScale(options: Pick<RenderOptions, 'pinnedScale'>) {
+    const pin = options.pinnedScale;
+    return pin === undefined || !Number.isFinite(pin) ? undefined : Math.min(1, Math.max(0.125, pin));
 }
 
 export function renderSize(width: number, height: number, dpr: number, cap: number) {
@@ -1042,6 +1050,7 @@ export class AtmosphereRenderer {
     private statsFrames = 0;
     private frameTelemetry = new FrameTelemetry();
     private adaptiveResolution: AdaptiveResolutionController;
+    private pinnedScale?: number;
     private destroyed = false;
     private submissionsInFlight = 0;
     private invalid = true;
@@ -1096,9 +1105,11 @@ export class AtmosphereRenderer {
         private canvas: HTMLCanvasElement,
         public options: RenderOptions,
     ) {
-        this.adaptiveResolution = new AdaptiveResolutionController(options.renderScale, {
+        this.pinnedScale = pinnedRenderScale(options);
+        this.adaptiveResolution = new AdaptiveResolutionController(this.pinnedScale ?? options.renderScale, {
             // Avoid making a native-resolution, many-pass frame the first workload on an unknown GPU.
-            initialScale: Math.min(0.5, options.renderScale),
+            initialScale: this.pinnedScale ?? Math.min(0.5, options.renderScale),
+            minScale: this.pinnedScale,
         });
         this.observer = new ResizeObserver(() => {
             this.resize();
@@ -1291,7 +1302,9 @@ export class AtmosphereRenderer {
         // Scalar field, linear Colour/Octaves, and display-space Post ping-pong.
         // A paused redraw is deliberately a one-off quality pass.  Do not move the adaptive controller:
         // its effective scale is the scale to which we return when animation resumes.
-        const targetScale = this.paused ? this.options.renderScale : this.adaptiveResolution.effectiveScale;
+        const targetScale = this.paused
+            ? (this.pinnedScale ?? this.options.renderScale)
+            : this.adaptiveResolution.effectiveScale;
         const size = scaledSize(this.canvas.width, this.canvas.height, targetScale);
         this.textures = [
             ...Array.from({ length: 2 }, () =>
@@ -1339,8 +1352,9 @@ export class AtmosphereRenderer {
         const resetHistory =
             this.options.seed !== options.seed || (datamoshIsActive(options.parameters) && !this.datamoshWasActive);
         this.options = options;
+        this.pinnedScale = pinnedRenderScale(options);
         if (scaleChanged) {
-            this.adaptiveResolution.setCeiling(options.renderScale, performance.now());
+            this.adaptiveResolution.setCeiling(this.pinnedScale ?? options.renderScale, performance.now());
             this.adaptiveGeneration += 1;
         }
         this.datamoshWasActive = datamoshIsActive(options.parameters);

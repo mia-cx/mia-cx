@@ -9,6 +9,8 @@
     import { CursorState } from './cursor';
     import { CursorDensityField } from './cursor-density-field';
     import { CalmMask } from './calm-mask';
+    import { GpuTelemetry } from './telemetry';
+    import { atmoPerfEnabled, parseAtmoScale } from './perf-params';
 
     let {
         /** Ceiling for adaptive resolution, 1 is full. Lower it when most of the canvas is covered. */
@@ -48,13 +50,23 @@
     /** No usable graphics backend, or the device was lost: show the flat haze instead. */
     let failed = $state(false);
     let status = $state('Starting graphics…');
-    let fps = $state(0);
+    let fpsText = $state('');
     let fpsVisible = $state(false);
+    const gpuTelemetry = new GpuTelemetry();
     let options = BAKED_RENDER_OPTIONS;
+
+    /* `?atmo-perf` exposes window.__atmospherePerf for the GPU benchmark harness;
+     * `?atmo-scale=<n>` pins the adaptive resolution scale to a fixed value. */
+    const pageSearch = typeof location === 'undefined' ? '' : location.search;
+    const perfEnabled = atmoPerfEnabled(pageSearch);
+    const pinnedScale = parseAtmoScale(pageSearch);
+    if (perfEnabled) window.__atmospherePerf ??= { gpu: [], stats: [] };
     const cursorState = new CursorState();
     const cursorDensityField = new CursorDensityField();
     let densityPoints: { x: number; y: number; timeStamp: number }[] = [];
     let paused = false;
+    /** Refreshes the renderer's onGpuStats subscription when the overlay's visibility changes. */
+    let syncGpuSubscription: (() => void) | undefined;
 
     /*
      * Route changes hand the dim between the scroll animation and the base opacity. A browser will
@@ -177,29 +189,70 @@
         if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.key.toLowerCase() !== 'f') return;
         if (event.target instanceof HTMLElement && event.target.closest('input, textarea, [contenteditable]')) return;
         fpsVisible = !fpsVisible;
+        syncGpuSubscription?.();
     }
 
     onMount(() => {
         let disposed = false;
         const pageSeed = Math.random() * 1000;
-        options = { ...BAKED_RENDER_OPTIONS, seed: pageSeed, renderScale, dprCap };
+        options = { ...BAKED_RENDER_OPTIONS, seed: pageSeed, renderScale, dprCap, pinnedScale };
         paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
         const calmMask = new CalmMask();
         loadBakedRenderOptions()
             .then((loadedOptions) => {
-                options = { ...loadedOptions, seed: pageSeed, renderScale, dprCap };
+                options = { ...loadedOptions, seed: pageSeed, renderScale, dprCap, pinnedScale };
                 return selectRenderBackend(canvas, options);
             })
             .then(({ renderer: instance }) => {
                 if (disposed) return instance.destroy();
                 renderer = instance;
+                const perf = window.__atmospherePerf;
+                if (perf) perf.backend = instance.backend;
+                // Only record GPU samples while the overlay or the perf hook wants them.
+                const updateGpuStatsSubscription = () => {
+                    instance.onGpuStats =
+                        perfEnabled || fpsVisible
+                            ? (stats) => {
+                                  if (perf && stats) {
+                                      perf.gpu.push({
+                                          t: performance.now(),
+                                          totalMs: stats.totalMs,
+                                          passes: stats.passes,
+                                      });
+                                      if (perf.gpu.length > 5_000) perf.gpu.splice(0, perf.gpu.length - 5_000);
+                                  }
+                                  if (stats) gpuTelemetry.record(performance.now(), stats);
+                              }
+                            : undefined;
+                };
+                syncGpuSubscription = updateGpuStatsSubscription;
+                updateGpuStatsSubscription();
                 let lastFpsUpdate = 0;
-                instance.onStats = (nextFps) => {
+                instance.onStats = (nextFps, width, height, _rolling, renderScale) => {
+                    if (perf) {
+                        perf.stats.push({
+                            t: performance.now(),
+                            fps: nextFps,
+                            width,
+                            height,
+                            scale: renderScale ?? 0,
+                        });
+                        if (perf.stats.length > 5_000) perf.stats.splice(0, perf.stats.length - 5_000);
+                    }
                     if (!fpsVisible) return;
                     const now = performance.now();
                     if (now - lastFpsUpdate < 500) return;
                     lastFpsUpdate = now;
-                    fps = nextFps;
+                    const lines = [
+                        `${nextFps.toFixed(1)} FPS · ${instance.backend}`,
+                        `canvas ${width}×${height} · scale ${(renderScale ?? 1).toFixed(2)}`,
+                    ];
+                    const gpu = gpuTelemetry.summary(now);
+                    const totalMs = gpu.windows[5000]?.totalMs;
+                    if (totalMs !== undefined) lines.push(`GPU ${totalMs.toFixed(1)} ms`);
+                    for (const pass of [...gpu.perPass5s].sort((a, b) => b.ms - a.ms).slice(0, 5))
+                        lines.push(`${pass.label} ${pass.ms.toFixed(2)} ms`);
+                    fpsText = lines.join('\n');
                 };
                 instance.setCursorState(cursorState);
                 instance.setCalmMask(calmMask.canvas);
@@ -300,6 +353,7 @@
             window.removeEventListener('keydown', keyDown);
             cancelAnimationFrame(cursorFrame);
             calmMask.destroy();
+            syncGpuSubscription = undefined;
             renderer?.destroy();
         };
     });
@@ -321,7 +375,7 @@
 ></canvas>
 <!-- A layer of its own, so a lost device's last frame can never show over it. -->
 {#if failed}<div class="fallback" aria-hidden="true"></div>{/if}
-{#if ready && fpsVisible}<output class="fps" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
+{#if ready && fpsVisible}<output class="fps" aria-label="Frames per second">{fpsText}</output>{/if}
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
 
 <style>
@@ -396,6 +450,7 @@
         font:
             12px/1.2 ui-monospace,
             monospace;
+        white-space: pre-line;
         pointer-events: none;
     }
     @supports (-webkit-touch-callout: none) {
