@@ -1020,6 +1020,9 @@ export class AtmosphereRenderer {
     private historyTexture?: GPUTexture;
     private historyView?: GPUTextureView;
     private historyValid = false;
+    /** Stand-in for post pipelines whose history binding is declared but unsampled (no datamosh). */
+    private placeholderView?: GPUTextureView;
+    private placeholderTexture?: GPUTexture;
     private datamoshWasActive = false;
     private buffers: GPUBuffer[] = [];
     private cursorBuffer?: GPUBuffer;
@@ -1292,10 +1295,31 @@ export class AtmosphereRenderer {
             this.resetAdaptive(performance.now());
         }
     }
+    /** The post plan this frame would run; only datamosh reads the history texture. */
+    private postPlanHasDatamosh() {
+        return (this.options.bakedPostPlan ?? rendererStagePlan(this.options.post, this.options.parameters)).some(
+            (stage) => stage.kind === 'datamosh',
+        );
+    }
+    private historyPlaceholder() {
+        if (!this.placeholderTexture) {
+            this.placeholderTexture = this.device!.createTexture({
+                size: [1, 1],
+                format: POST_TEXTURE_FORMAT,
+                usage: GPUTextureUsage.TEXTURE_BINDING,
+            });
+            this.placeholderView = this.placeholderTexture.createView();
+        }
+        return this.placeholderView!;
+    }
     private recreateTargets(preserveHistory = this.paused) {
         if (!this.device) return;
         this.textures.forEach((texture) => texture.destroy());
-        if (!preserveHistory) this.historyTexture?.destroy();
+        if (!preserveHistory) {
+            this.historyTexture?.destroy();
+            this.historyTexture = undefined;
+            this.historyView = undefined;
+        }
         this.textureViews = [];
         this.bindGroups.clear();
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
@@ -1334,13 +1358,21 @@ export class AtmosphereRenderer {
             }),
         ];
         this.textureViews = this.textures.map((texture) => texture.createView());
-        if (!preserveHistory || !this.historyTexture) {
-            this.historyTexture = this.device.createTexture({
-                size: [size.width, size.height],
-                format: POST_TEXTURE_FORMAT,
-                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-            });
-            this.historyView = this.historyTexture.createView();
+        // History is only worth its VRAM and per-frame copy while the plan contains datamosh.
+        if (this.postPlanHasDatamosh()) {
+            if (!preserveHistory || !this.historyTexture) {
+                this.historyTexture = this.device.createTexture({
+                    size: [size.width, size.height],
+                    format: POST_TEXTURE_FORMAT,
+                    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+                });
+                this.historyView = this.historyTexture.createView();
+                this.historyValid = false;
+            }
+        } else if (this.historyTexture) {
+            this.historyTexture.destroy();
+            this.historyTexture = undefined;
+            this.historyView = undefined;
             this.historyValid = false;
         }
     }
@@ -1362,6 +1394,15 @@ export class AtmosphereRenderer {
         this.updateCubeLuts();
         if (changed) this.recreateTargets();
         else if (resetHistory) {
+            // Datamosh switched on while running: allocate its history at the current target size.
+            if (this.postPlanHasDatamosh() && !this.historyTexture && this.device && this.textures.length >= 6) {
+                this.historyTexture = this.device.createTexture({
+                    size: [this.textures[4].width, this.textures[4].height],
+                    format: POST_TEXTURE_FORMAT,
+                    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+                });
+                this.historyView = this.historyTexture.createView();
+            }
             this.historyValid = false;
             this.bindGroups.clear();
         }
@@ -1661,7 +1702,7 @@ export class AtmosphereRenderer {
                             binding: 3,
                             resource:
                                 auxiliaryTextureIndex === undefined
-                                    ? this.historyView!
+                                    ? (this.historyView ?? this.historyPlaceholder())
                                     : this.textureViews[auxiliaryTextureIndex],
                         });
                     } else if (pipelineIndex === 11 && lutId) {
@@ -2076,6 +2117,7 @@ export class AtmosphereRenderer {
         this.densityPaintParamsBuffer?.destroy();
         this.lutTextures.forEach(({ texture }) => texture.destroy());
         this.historyTexture?.destroy();
+        this.placeholderTexture?.destroy();
         this.textureViews = [];
         this.bindGroups.clear();
         this.buffers.forEach((buffer) => buffer.destroy());

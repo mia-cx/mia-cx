@@ -258,8 +258,9 @@ describe('field configuration', () => {
         expect(source).toContain('this.pinnedScale ?? this.options.renderScale');
         expect(source).toContain('if (value === this.paused) return');
         expect(source).toContain('this.recreateTargets(value)');
-        expect(source).toContain('if (!preserveHistory) this.historyTexture?.destroy()');
+        expect(source).toContain('this.historyTexture?.destroy()');
         expect(source).toContain('if (postRan && !this.paused && this.historyTexture)');
+        expect(source).toContain('postPlanHasDatamosh');
         expect(source).toContain('this.renderedFrames += 1');
         expect(source).toContain('const frameTimingSlot = this.paused ?');
         expect(source).toContain('!this.paused && this.querySet');

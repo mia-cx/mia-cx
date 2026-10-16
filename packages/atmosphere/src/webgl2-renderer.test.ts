@@ -215,7 +215,8 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).not.toContain('this.draw("DISPLAY", this.history');
         expect(shaders.COPY).toContain('texelFetch');
         expect(shaders.COPY).not.toContain('texture(');
-        expect(implementation).toContain('if (postRan && !this.paused)');
+        expect(implementation).toContain('if (postRan && !this.paused && this.history)');
+        expect(implementation).toContain('postPlanHasDatamosh');
     });
 
     it('adapts only from available, non-disjoint GPU elapsed queries with captured attribution', () => {
@@ -260,7 +261,7 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).toContain('if (v === this.paused) return');
         expect(implementation).toContain('this.recreateTargets(v)');
         expect(implementation).toContain('if (!preserveHistory) this.historyValid = false');
-        expect(implementation).toContain('if (postRan && !this.paused)');
+        expect(implementation).toContain('if (postRan && !this.paused && this.history)');
         expect(implementation).toContain('this.frame = (this.frame + 1)');
         expect(implementation).toContain('const timer = !ablationReady && !this.paused && this.timerQuery');
     });

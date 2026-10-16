@@ -600,12 +600,19 @@ export class WebGL2Renderer implements RenderBackend {
             ...(this.history ? [this.history] : []),
         ];
     }
+    /** The post plan this frame would run; only datamosh reads the history texture. */
+    private postPlanHasDatamosh() {
+        return (this.options.bakedPostPlan ?? rendererStagePlan(this.options.post, this.options.parameters)).some(
+            (e) => e.kind === 'datamosh',
+        );
+    }
     private recreateTargets(preserveHistory = this.paused) {
         const gl = this.gl;
         for (const x of this.allTargets().filter((target) => !preserveHistory || target !== this.history)) {
             gl.deleteTexture(x.texture);
             gl.deleteFramebuffer(x.framebuffer);
         }
+        if (!preserveHistory) this.history = undefined;
         // Pausing uses full configured quality without teaching the adaptive controller that this should
         // become its continuous workload.  Its effective scale remains the resume scale.
         const targetScale = this.paused ? (this.pinnedScale ?? this.options.renderScale) : this.adaptive.effectiveScale;
@@ -622,7 +629,15 @@ export class WebGL2Renderer implements RenderBackend {
             this.makeTarget('post', size.width, size.height),
             this.makeTarget('post', size.width, size.height),
         ];
-        if (!preserveHistory || !this.history) this.history = this.makeTarget('post', size.width, size.height);
+        // History is only worth its VRAM and per-frame copy while the plan contains datamosh.
+        if (this.postPlanHasDatamosh()) {
+            if (!preserveHistory || !this.history) this.history = this.makeTarget('post', size.width, size.height);
+        } else if (this.history) {
+            gl.deleteTexture(this.history.texture);
+            gl.deleteFramebuffer(this.history.framebuffer);
+            this.history = undefined;
+            this.boundTextures.clear();
+        }
         this.godRays = this.makeTarget(
             'god-rays',
             Math.max(1, Math.round(size.width * this.options.parameters.godRaysRenderScale)),
@@ -892,8 +907,8 @@ export class WebGL2Renderer implements RenderBackend {
             postIndex = 1 - postIndex;
             postRan = true;
         }
-        if (postRan && !this.paused) {
-            this.copy(source, this.history!, 'post:history-copy');
+        if (postRan && !this.paused && this.history) {
+            this.copy(source, this.history, 'post:history-copy');
             this.historyValid = true;
         }
         for (let i = 0; i < OCTAVE_COUNT; i++) {
@@ -1146,7 +1161,12 @@ export class WebGL2Renderer implements RenderBackend {
         if (scaleChanged) this.adaptive.setCeiling(this.pinnedScale ?? o.renderScale, performance.now());
         this.datamoshWasActive = datamoshIsActive(o.parameters);
         if (resize) this.recreateTargets();
-        else if (resetHistory) this.historyValid = false;
+        else if (resetHistory) {
+            // Datamosh switched on while running: allocate its history at the current target size.
+            if (!this.history && this.postPlanHasDatamosh() && this.postTargets.length)
+                this.history = this.makeTarget('post', this.postTargets[0].width, this.postTargets[0].height);
+            this.historyValid = false;
+        }
         this.invalidate();
     }
     private cursorState?: CursorSnapshot;
