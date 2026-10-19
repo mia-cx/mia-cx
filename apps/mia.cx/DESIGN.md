@@ -6,13 +6,15 @@ reserved for controls.
 
 ## Routes
 
-| Route          | What it is                                                                         |
-| -------------- | ---------------------------------------------------------------------------------- |
-| `/`            | Hero, featured work, contact                                                       |
-| `/work`        | The curated shortlist (`listed: true` in the vault), then a note linking to Svartz |
-| `/work/[slug]` | A write-up for any work note with a body; unlisted ones are reachable by URL only  |
-| `/about`       | Mia's approved biography, followed by contact                                      |
-| `/blog`        | Coming soon, linking to Svartz; post pages are parked in `parked/`                 |
+| Route              | What it is                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------- |
+| `/`                | Hero, featured work, contact                                                       |
+| `/work`            | The curated shortlist (`listed: true` in the vault), then a note linking to Svartz |
+| `/work/[slug]`     | A write-up for any work note with a body; unlisted ones are reachable by URL only  |
+| `/about`           | Mia's approved biography, followed by contact                                      |
+| `/blog`            | Coming soon, linking to Svartz; post pages are parked in `parked/`                 |
+| `/textile/terms`   | Terms for Textile and its hosted Discord MCP relay                                 |
+| `/textile/privacy` | Data handling, retention, and privacy rights for Textile                           |
 
 Everything prerenders to static files in `.svelte-kit/cloudflare/` through `adapter-cloudflare`, served as the assets of a Cloudflare Worker (see `wrangler.jsonc`).
 
@@ -68,6 +70,9 @@ Ported from `mia-cx/maal`, without the rounded corners.
 Wordmark, "Contribute to this website", socials with `+N`, email, copyright, and a Sitemap. Links use
 `ArrowLink` from `@mia-cx/ui`: internal links end in → which slides on hover, external ones in a still
 ↗ raised to cap height.
+
+Textile's terms and privacy policy appear in the footer sitemap. Both reuse the reading-page
+typography, with an effective date and direct links between policies. Policy links have 44px targets.
 
 ## Shared pieces
 
