@@ -85,6 +85,10 @@
         display: grid;
         gap: 8px;
     }
+    /* Keep policy destinations easy to tap without changing ArrowLink across the site. */
+    nav :global(.arrow-link) {
+        min-height: 44px;
+    }
     /* The email keeps its envelope on the baseline while its ↗ marker sits at cap height. */
     .reach :global(.email) {
         align-items: center;

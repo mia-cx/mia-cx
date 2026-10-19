@@ -53,9 +53,9 @@
     <p>
         A necessary, secure, HTTP-only login cookie binds the browser to the OAuth flow. It expires after ten minutes or
         is cleared when the flow completes. Encrypted login state also expires after ten minutes. One-time authorisation
-        codes expire after one minute. Used-code hashes remain in server memory only until that expiry. Dynamic client
-        registrations expire after thirty days and live in the client's encrypted registration credential, not a
-        registry database.
+        codes expire after one minute. The relay keeps hashes of used codes in server memory to prevent replay. It
+        removes expired hashes when another code is exchanged or the process restarts. Dynamic client registrations
+        expire after thirty days and live in the client's encrypted registration credential, not a registry database.
     </p>
     <p>
         Your MCP client decides how it stores its credentials. The optional command-line login helper saves the relay
