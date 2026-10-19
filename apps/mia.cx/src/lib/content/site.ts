@@ -71,6 +71,8 @@ export const sitemap = [
     { label: 'About', href: '/about' },
     { label: 'Contact', href: '/#contact' },
     { label: 'Music', href: 'https://ffm.bio/patch', external: true },
+    { label: 'Textile terms', href: '/textile/terms' },
+    { label: 'Textile privacy', href: '/textile/privacy' },
 ];
 
 /** Mia's approved short introduction for the home page. */

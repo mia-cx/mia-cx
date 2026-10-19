@@ -1,0 +1,22 @@
+<!-- @format -->
+
+# Direction
+
+mia.cx is Mia Riezebos's personal site, with work, writing, biography, and contact details. Keep its existing visual
+identity and shared reading-page typography when adding content.
+
+The active site lives in `apps/mia.cx` on `main`. The root checkout may still use the older `legacy` branch; start new
+work from `origin/main` in a separate worktree. Cloudflare Workers serves the prerendered site at `https://mia.cx`.
+
+## Textile policies
+
+Host Textile's public terms at `/textile/terms` and privacy policy at `/textile/privacy`. Keep both reachable from the
+site footer and linked to each other.
+
+These policies cover Textile's Discord application and the hosted Discord MCP relay. The implementation lives in
+`mia-cx/discord-mcp`, not this repository. Check that implementation and its deployed infrastructure before changing
+data-handling claims. Discord OAuth identifies the caller; each request's separate bot token determines Discord access.
+Do not describe OAuth as proof of bot ownership or personal server permissions.
+
+The policies name Mia Riezebos as operator and use the site's existing contact address. Keep their effective date
+current when materially changing the published terms.
