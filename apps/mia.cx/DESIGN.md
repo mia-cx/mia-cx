@@ -18,6 +18,14 @@ reserved for controls.
 
 Everything prerenders to static files in `.svelte-kit/cloudflare/` through `adapter-cloudflare`, served as the assets of a Cloudflare Worker (see `wrangler.jsonc`).
 
+## Markdown
+
+Every page has a Markdown twin one `.md` away (`/` is `/index.md`), and `/llms.txt` lists them. The
+twin is the page's own `<main>` converted by `src/hooks.server.ts`, so a new page gets one without any
+extra work; mark anything that should stay out with `data-markdown="skip"`. AI agents, matched by user
+agent, and anything sending `Accept: text/markdown` get the twin at the page's own URL from `worker.ts`.
+Below each page, "View as Markdown" opens the twin and "Copy as Markdown" copies it.
+
 ## Home
 
 The hero fills the viewport. The portrait sits in the left half and the text in the right: "I'm", the
