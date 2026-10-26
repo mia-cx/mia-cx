@@ -5,19 +5,11 @@
  */
 // @ts-expect-error written by adapter-cloudflare during `vite build`, before wrangler bundles this
 import sveltekit from './.svelte-kit/cloudflare/_worker.js';
-import { markdownPath } from './src/lib/markdown';
+import { markdownPath, wantsMarkdown } from './src/lib/markdown';
 
 interface Env {
     ASSETS: { fetch: typeof fetch };
 }
-
-/** User agents of crawlers and fetchers that read pages on behalf of language models. */
-const AGENTS =
-    /GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|Claude-SearchBot|anthropic-ai|PerplexityBot|Perplexity-User|Google-CloudVertexBot|Meta-ExternalAgent|Meta-ExternalFetcher|Amazonbot|Bytespider|CCBot|cohere-ai|DuckAssistBot|MistralAI-User|YouBot|AI2Bot|Diffbot/i;
-
-const wantsMarkdown = (request: Request) =>
-    (request.headers.get('accept') ?? '').includes('text/markdown') ||
-    AGENTS.test(request.headers.get('user-agent') ?? '');
 
 /** A path with an extension is a file, not a page. */
 const isPage = (pathname: string) => !/\.[^/]+$/.test(pathname);
@@ -28,7 +20,8 @@ export default {
         // Twins asked for by name get the same headers; assets alone would send no charset.
         const twin = url.pathname.endsWith('.md')
             ? url.pathname
-            : isPage(url.pathname) && wantsMarkdown(request)
+            : isPage(url.pathname) &&
+                wantsMarkdown(request.headers.get('accept') ?? '', request.headers.get('user-agent') ?? '')
               ? markdownPath(url.pathname)
               : undefined;
         if (twin) {
