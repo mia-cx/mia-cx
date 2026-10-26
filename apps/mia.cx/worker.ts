@@ -18,18 +18,23 @@ export default {
     async fetch(request: Request, env: Env, ctx: unknown): Promise<Response> {
         const url = new URL(request.url);
         // Twins asked for by name get the same headers; assets alone would send no charset.
-        const twin = url.pathname.endsWith('.md')
-            ? url.pathname
-            : isPage(url.pathname) &&
-                wantsMarkdown(request.headers.get('accept') ?? '', request.headers.get('user-agent') ?? '')
-              ? markdownPath(url.pathname)
-              : undefined;
+        const readable = request.method === 'GET' || request.method === 'HEAD';
+        const twin = !readable
+            ? undefined
+            : url.pathname.endsWith('.md')
+              ? url.pathname
+              : isPage(url.pathname) &&
+                  wantsMarkdown(request.headers.get('accept') ?? '', request.headers.get('user-agent') ?? '')
+                ? markdownPath(url.pathname)
+                : undefined;
         if (twin) {
-            const markdown = await env.ASSETS.fetch(new URL(twin, url));
-            if (markdown.ok) {
-                return new Response(markdown.body, {
-                    headers: { 'content-type': 'text/markdown; charset=utf-8', vary: 'Accept, User-Agent' },
-                });
+            // The original request carries its method and conditional headers, so HEAD and 304s still work.
+            const markdown = await env.ASSETS.fetch(new Request(new URL(twin, url), request));
+            if (markdown.ok || markdown.status === 304) {
+                const response = new Response(markdown.body, markdown);
+                response.headers.set('content-type', 'text/markdown; charset=utf-8');
+                response.headers.set('vary', 'Accept, User-Agent');
+                return response;
             }
         }
 
