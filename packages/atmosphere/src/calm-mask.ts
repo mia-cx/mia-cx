@@ -6,6 +6,8 @@ import { persistentAtom } from '@nanostores/persistent';
  * but never peaks behind it. The same canvas, scaled up, is the debug overlay.
  */
 export interface CalmSettings {
+    /** Off leaves the mask clear and skips measuring the page. */
+    enabled: boolean;
     /** CSS pixels past each line box or image at which the darkening is at half strength. */
     radius: number;
     /** Gaussian blur over that edge, in CSS pixels. */
@@ -16,7 +18,7 @@ export interface CalmSettings {
     strength: number;
 }
 
-export const CALM_DEFAULTS: CalmSettings = { radius: 16, feather: 24, exponent: 1, strength: 0.5 };
+export const CALM_DEFAULTS: CalmSettings = { enabled: true, radius: 16, feather: 24, exponent: 1, strength: 0.5 };
 
 /** The live settings, kept in this browser once tuned from the debug panel. */
 export const calmSettings = persistentAtom<CalmSettings>('atmosphere:calm:v1', CALM_DEFAULTS, {
@@ -109,7 +111,7 @@ export class CalmMask {
         const width = Math.max(1, Math.ceil(viewport.width / TEXEL)),
             height = Math.max(1, Math.ceil(viewport.height / TEXEL));
         const reach = settings.radius + settings.feather * 3;
-        const { boxes, cutouts } = this.measure(viewport, reach);
+        const { boxes, cutouts } = settings.enabled ? this.measure(viewport, reach) : { boxes: [], cutouts: [] };
         const shapes = cutouts.map(({ image, box, clip }) => `${image.currentSrc}:${box}:${clip}`);
         const signature = `${width}x${height}:${Object.values(settings)}:${boxes}:${shapes}`;
         if (signature === this.signature) return false;

@@ -409,6 +409,14 @@
 {/snippet}
 {#if calmDebug}
     <form class="calm-panel" data-atmosphere-calm="off" aria-label="Field debug">
+        <label>
+            <span>Calm</span>
+            <input
+                type="checkbox"
+                checked={$calmSettings.enabled}
+                onchange={(event) => calmSettings.set({ ...calmSettings.get(), enabled: event.currentTarget.checked })}
+            />
+        </label>
         {#each CALM_CONTROLS as control (control.key)}
             {@render slider(control, $calmSettings[control.key], (value) =>
                 calmSettings.set({ ...calmSettings.get(), [control.key]: value }),
