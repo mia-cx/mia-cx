@@ -36,8 +36,11 @@
             </div>
         </div>
 
-        <!-- Placed left of the text via grid; kept after it in source so the name reads first. -->
-        <div class="portrait" data-enter style:--enter="0">
+        <!--
+            Placed left of the text via grid; kept after it in source so the name reads first. Both portrait
+            layers opt out of the field's calm mask: the field is meant to wash over the photo.
+        -->
+        <div class="portrait" data-atmosphere-calm="off" data-enter style:--enter="0">
             <img
                 src={portrait800}
                 srcset={portraitSet}
@@ -53,7 +56,7 @@
             still washes around the head and over the body, but never over the face. Same box, same source, so the two
             layers line up to the pixel and the browser downloads the image once.
         -->
-        <div class="portrait portrait-top" aria-hidden="true" data-enter style:--enter="0">
+        <div class="portrait portrait-top" aria-hidden="true" data-atmosphere-calm="off" data-enter style:--enter="0">
             <img
                 src={portrait800}
                 srcset={portraitSet}

@@ -564,10 +564,13 @@ struct CursorUniform { parameters:array<vec4f,1> }
 @group(0) @binding(1) var<uniform> cursor:CursorUniform;
 @group(0) @binding(2) var densityField:texture_2d<f32>;
 @group(0) @binding(3) var densitySampler:sampler;
+// Feathered text and image regions from the page; alpha is the share of light taken away there.
+@group(0) @binding(6) var calmField:texture_2d<f32>;
 fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
+    let calm=textureSample(calmField,densitySampler,pos.xy/u.resolution).a;
     var cursorDensity=0.; var cursorDepth=0.;
     if(cp(0u)!=0. && cp(1u)!=0.) {
         let uv=pos.xy/u.resolution;
@@ -616,6 +619,7 @@ fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
         let center=1.-smoothstep(1.-centerFeather,1.+centerFeather,centerDistance);
         natural*=exp2(-center*u.centerDarkness*4.);
     }
+    natural*=1.-calm;
     // Bias against the complete pre-threshold field. At zero this is the legacy uniform contribution.
     let darkBias=cp(3u);
     let densityResponse=select(pow(max(1.-clamp(natural,0.,1.),1e-6),darkBias),1.,darkBias==0.);
@@ -1015,6 +1019,8 @@ export class AtmosphereRenderer {
     private densityViews: GPUTextureView[] = [];
     private densityActive = 0;
     private densitySampler?: GPUSampler;
+    private calmTexture?: GPUTexture;
+    private calmView?: GPUTextureView;
     private densityWidth = 1;
     private densityHeight = 1;
     private densityGeometry = new GpuDensityGeometry();
@@ -1229,6 +1235,7 @@ export class AtmosphereRenderer {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
         self.recreateDensityTextures(1, 1);
+        self.recreateCalmTexture(1, 1);
         self.adjustmentTexture = self.device.createTexture({
             dimension: '3d',
             size: [ADJUSTMENT_LUT_SIZE, ADJUSTMENT_LUT_SIZE, ADJUSTMENT_LUT_SIZE],
@@ -1422,6 +1429,27 @@ export class AtmosphereRenderer {
     }
     /** CPU snapshots are deliberately ignored by the WebGPU backend. */
     setCursorDensityField(_field: CursorDensityFieldSnapshot) {}
+    setCalmMask(source: HTMLCanvasElement) {
+        if (!this.device || !this.calmTexture) return;
+        if (source.width !== this.calmTexture.width || source.height !== this.calmTexture.height)
+            this.recreateCalmTexture(source.width, source.height);
+        this.device.queue.copyExternalImageToTexture({ source }, { texture: this.calmTexture }, [
+            source.width,
+            source.height,
+        ]);
+        this.invalidate();
+    }
+    /** Starts out clear, so the field is untouched until a page uploads a mask. */
+    private recreateCalmTexture(width: number, height: number) {
+        this.calmTexture?.destroy();
+        this.calmTexture = this.device!.createTexture({
+            size: [width, height],
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+        this.calmView = this.calmTexture.createView();
+        this.bindGroups.clear();
+    }
     private recreateDensityTextures(width: number, height: number) {
         if (!this.device) return;
         this.densityTextures.forEach((texture) => texture.destroy());
@@ -1619,6 +1647,7 @@ export class AtmosphereRenderer {
                         { binding: 1, resource: { buffer: this.cursorBuffer! } },
                         { binding: 2, resource: this.densityViews[this.densityActive] },
                         { binding: 3, resource: this.densitySampler! },
+                        { binding: 6, resource: this.calmView! },
                     );
                 if (sourceTextureIndex !== undefined) {
                     entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
@@ -2047,6 +2076,7 @@ export class AtmosphereRenderer {
         this.textures.forEach((texture) => texture.destroy());
         this.adjustmentTexture?.destroy();
         this.densityTextures.forEach((texture) => texture.destroy());
+        this.calmTexture?.destroy();
         this.densitySegmentBuffer?.destroy();
         this.densityParamsBuffer?.destroy();
         this.densityPaintParamsBuffer?.destroy();

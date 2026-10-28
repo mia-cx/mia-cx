@@ -268,6 +268,7 @@ export class WebGL2Renderer implements RenderBackend {
     private uniformBuffer: WebGLBuffer;
     private cursorBuffer: WebGLBuffer;
     private densityTargets: DensityTarget[] = [];
+    private calmTexture: WebGLTexture;
     private densityActive = 0;
     private densityWidth = 1;
     private densityHeight = 1;
@@ -342,9 +343,18 @@ export class WebGL2Renderer implements RenderBackend {
             vao = gl.createVertexArray(),
             densityVao = gl.createVertexArray(),
             densityBuffer = gl.createBuffer(),
-            densityCornerBuffer = gl.createBuffer();
-        if (!ubo || !cursorUbo || !vao || !densityVao || !densityBuffer || !densityCornerBuffer)
+            densityCornerBuffer = gl.createBuffer(),
+            calmTexture = gl.createTexture();
+        if (!ubo || !cursorUbo || !vao || !densityVao || !densityBuffer || !densityCornerBuffer || !calmTexture)
             throw new Error('WebGL2 resource allocation failed.');
+        // Starts out clear, so the field is untouched until a page uploads a mask.
+        gl.bindTexture(gl.TEXTURE_2D, calmTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        this.calmTexture = calmTexture;
         this.uniformBuffer = ubo;
         this.cursorBuffer = cursorUbo;
         this.vao = vao;
@@ -429,6 +439,7 @@ export class WebGL2Renderer implements RenderBackend {
             gl.getUniformLocation(p, '_group_0_binding_4_fs'),
             gl.getUniformLocation(p, '_present_resolution'),
             gl.getUniformLocation(p, '_group_0_binding_2_fs'),
+            gl.getUniformLocation(p, '_group_0_binding_6_fs'),
         ];
         this.samplerLocations.set(p, locations);
         gl.useProgram(p);
@@ -437,6 +448,7 @@ export class WebGL2Renderer implements RenderBackend {
         if (locations[1]) gl.uniform1i(locations[1], 1);
         if (locations[2]) gl.uniform1i(locations[2], 1);
         if (locations[4]) gl.uniform1i(locations[4], 2);
+        if (locations[5]) gl.uniform1i(locations[5], 3);
         return p;
     }
     private specialized(name: keyof typeof SELECTORS, index: number) {
@@ -667,7 +679,10 @@ export class WebGL2Renderer implements RenderBackend {
         bind(0, source);
         bind(1, aux);
         bind(1, cube, gl.TEXTURE_3D);
-        if (name === 'BASE') bind(2, this.densityTargets[this.densityActive].texture);
+        if (name === 'BASE') {
+            bind(2, this.densityTargets[this.densityActive].texture);
+            bind(3, this.calmTexture);
+        }
         gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     private uploadCube(data: Uint16Array, size: number) {
@@ -1136,6 +1151,13 @@ export class WebGL2Renderer implements RenderBackend {
     }
     /** CPU snapshots are ignored: this backend owns its R16F density field. */
     setCursorDensityField(_field: CursorDensityFieldSnapshot) {}
+    setCalmMask(source: HTMLCanvasElement) {
+        const gl = this.gl;
+        gl.bindTexture(gl.TEXTURE_2D, this.calmTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, source);
+        this.boundTextures.clear();
+        this.invalidate();
+    }
     resetCursorDensityStroke() {
         this.densityGeometry.reset();
     }
@@ -1200,6 +1222,7 @@ export class WebGL2Renderer implements RenderBackend {
             this.gl.deleteFramebuffer(x.framebuffer);
         }
         for (const t of this.lutTextures.values()) this.gl.deleteTexture(t);
+        this.gl.deleteTexture(this.calmTexture);
         this.gl.deleteBuffer(this.uniformBuffer);
         this.gl.deleteBuffer(this.cursorBuffer);
         this.gl.deleteBuffer(this.densitySegmentBuffer);

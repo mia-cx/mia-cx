@@ -22,6 +22,8 @@ export interface RenderBackend {
     setOptions(options: RenderOptions): void;
     setCursorState(state: CursorSnapshot): void;
     setCursorDensityField(field: CursorDensityFieldSnapshot): void;
+    /** Upload a calm mask (see `CalmMask`); its alpha takes that share of the field's light away. */
+    setCalmMask(source: HTMLCanvasElement): void;
     /** GPU-resident on WebGPU; WebGL2 callers retain setCursorDensityField. */
     queueCursorDensityUpdate?(update: CursorDensityUpdate): void;
     resetCursorDensityStroke?(): void;

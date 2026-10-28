@@ -8,6 +8,7 @@
     import { selectRenderBackend, type RenderBackend } from './render-backend';
     import { CursorState } from './cursor';
     import { CursorDensityField } from './cursor-density-field';
+    import { CALM_CONTROLS, CALM_DEFAULTS, CalmMask } from './calm-mask';
 
     let {
         /** Ceiling for adaptive resolution, 1 is full. Lower it when most of the canvas is covered. */
@@ -49,6 +50,10 @@
     let status = $state('Starting graphics…');
     let fps = $state(0);
     let fpsVisible = $state(false);
+    let calmCanvas: HTMLCanvasElement;
+    /** Shows the calm mask over the page, with sliders to tune it. Toggled with M. */
+    let calmDebug = $state(false);
+    const calm = $state({ ...CALM_DEFAULTS });
     let options = BAKED_RENDER_OPTIONS;
     const cursorState = new CursorState();
     const cursorDensityField = new CursorDensityField();
@@ -173,9 +178,11 @@
         sendCursor();
     }
     function keyDown(event: KeyboardEvent) {
-        if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.key.toLowerCase() !== 'f') return;
+        if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
         if (event.target instanceof HTMLElement && event.target.closest('input, textarea, [contenteditable]')) return;
-        fpsVisible = !fpsVisible;
+        const key = event.key.toLowerCase();
+        if (key === 'f') fpsVisible = !fpsVisible;
+        else if (key === 'm') calmDebug = !calmDebug;
     }
 
     onMount(() => {
@@ -183,6 +190,7 @@
         const pageSeed = Math.random() * 1000;
         options = { ...BAKED_RENDER_OPTIONS, seed: pageSeed, renderScale, dprCap };
         paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const calmMask = new CalmMask(calmCanvas);
         loadBakedRenderOptions()
             .then((loadedOptions) => {
                 options = { ...loadedOptions, seed: pageSeed, renderScale, dprCap };
@@ -200,6 +208,7 @@
                     fps = nextFps;
                 };
                 instance.setCursorState(cursorState);
+                instance.setCalmMask(calmCanvas);
                 const rect = canvas.getBoundingClientRect();
                 if (!instance.gpuCursorDensity) {
                     cursorDensityField.resize(rect.width, rect.height);
@@ -238,6 +247,7 @@
                 }
                 const rect = canvas.getBoundingClientRect();
                 resizeCursorDensity(rect);
+                if (calmMask.update(rect, calm)) renderer?.setCalmMask(calmCanvas);
                 const batch = densityPoints;
                 densityPoints = [];
                 const gpuPath = renderer?.gpuCursorDensity === true;
@@ -295,6 +305,7 @@
             window.removeEventListener('blur', pointerLeave);
             window.removeEventListener('keydown', keyDown);
             cancelAnimationFrame(cursorFrame);
+            calmMask.destroy();
             renderer?.destroy();
         };
     });
@@ -311,7 +322,20 @@
 ></canvas>
 <!-- A layer of its own, so a lost device's last frame can never show over it. -->
 {#if failed}<div class="fallback" aria-hidden="true"></div>{/if}
-{#if ready && fpsVisible}<output class="fps" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
+{#if ready && fpsVisible}<output class="fps" data-atmosphere-calm="off" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
+<!-- Drawn every frame and uploaded to the field; shown over the page only while debugging. -->
+<canvas class="calm" class:debug={calmDebug} bind:this={calmCanvas} aria-hidden="true"></canvas>
+{#if calmDebug}
+    <form class="calm-panel" data-atmosphere-calm="off" aria-label="Calm mask">
+        {#each CALM_CONTROLS as control (control.key)}
+            <label>
+                <span>{control.label}</span>
+                <input type="range" min={control.min} max={control.max} step={control.step} bind:value={calm[control.key]} />
+                <output>{calm[control.key]}</output>
+            </label>
+        {/each}
+    </form>
+{/if}
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
 
 <style>
@@ -385,6 +409,37 @@
             12px/1.2 ui-monospace,
             monospace;
         pointer-events: none;
+    }
+    .calm {
+        display: none;
+        z-index: 49;
+        opacity: 1;
+    }
+    .calm.debug {
+        display: block;
+    }
+    .calm-panel {
+        position: fixed;
+        bottom: max(0.5rem, env(safe-area-inset-bottom));
+        left: max(0.5rem, env(safe-area-inset-left));
+        z-index: 50;
+        display: grid;
+        gap: 0.25rem;
+        padding: 0.5rem 0.6rem;
+        color: #fff;
+        background: rgb(0 0 0 / 70%);
+        font:
+            12px/1.2 ui-monospace,
+            monospace;
+    }
+    .calm-panel label {
+        display: grid;
+        grid-template-columns: 5rem 10rem 3rem;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .calm-panel output {
+        text-align: end;
     }
     @supports (-webkit-touch-callout: none) {
         canvas {
