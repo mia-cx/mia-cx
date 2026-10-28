@@ -1,3 +1,5 @@
+import { persistentAtom } from '@nanostores/persistent';
+
 /**
  * A feathered map of where the page shows text and images, small enough to redraw every frame.
  * The field multiplies its light by one minus the mask's alpha, so it still moves over the copy
@@ -15,6 +17,17 @@ export interface CalmSettings {
 }
 
 export const CALM_DEFAULTS: CalmSettings = { radius: 16, feather: 24, exponent: 1, strength: 0.5 };
+
+/** The live settings, kept in this browser once tuned from the debug panel. */
+export const calmSettings = persistentAtom<CalmSettings>('atmosphere:calm:v1', CALM_DEFAULTS, {
+    encode: JSON.stringify,
+    decode: (value) => ({ ...CALM_DEFAULTS, ...JSON.parse(value) }),
+});
+/** Debug switch for the field's own centre ellipse, to judge the calm mask on its own. */
+export const centreEllipse = persistentAtom<boolean>('atmosphere:centre-ellipse:v1', true, {
+    encode: JSON.stringify,
+    decode: JSON.parse,
+});
 
 export const CALM_CONTROLS = [
     { key: 'radius', label: 'Radius', min: 0, max: 128, step: 1 },

@@ -8,7 +8,8 @@
     import { selectRenderBackend, type RenderBackend } from './render-backend';
     import { CursorState } from './cursor';
     import { CursorDensityField } from './cursor-density-field';
-    import { CALM_CONTROLS, CALM_DEFAULTS, CalmMask } from './calm-mask';
+    import { CALM_CONTROLS, CALM_DEFAULTS, CalmMask, calmSettings, centreEllipse } from './calm-mask';
+    import type { RenderOptions } from './renderer';
 
     let {
         /** Ceiling for adaptive resolution, 1 is full. Lower it when most of the canvas is covered. */
@@ -53,13 +54,12 @@
     let calmCanvas: HTMLCanvasElement;
     /** Shows the calm mask over the page, with sliders to tune it. Toggled with M. */
     let calmDebug = $state(false);
-    const calm = $state({ ...CALM_DEFAULTS });
-    /** Debug switch for the field's own centre ellipse, to judge the calm mask on its own. */
-    let ellipse = $state(true);
-    function applyEllipse() {
-        const centerDarkness = ellipse ? BAKED_RENDER_OPTIONS.parameters.centerDarkness : 0;
-        options = { ...options, parameters: { ...options.parameters, centerDarkness } };
-        renderer?.setOptions(options);
+    /** What the renderer gets: the page's options, minus the centre ellipse when it is switched off. */
+    const centred = (value: RenderOptions, ellipse: boolean) =>
+        ellipse ? value : { ...value, parameters: { ...value.parameters, centerDarkness: 0 } };
+    function resetCalm() {
+        calmSettings.set(CALM_DEFAULTS);
+        centreEllipse.set(true);
     }
     let options = BAKED_RENDER_OPTIONS;
     const cursorState = new CursorState();
@@ -198,10 +198,11 @@
         options = { ...BAKED_RENDER_OPTIONS, seed: pageSeed, renderScale, dprCap };
         paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
         const calmMask = new CalmMask(calmCanvas);
+        const unlistenEllipse = centreEllipse.listen((ellipse) => renderer?.setOptions(centred(options, ellipse)));
         loadBakedRenderOptions()
             .then((loadedOptions) => {
                 options = { ...loadedOptions, seed: pageSeed, renderScale, dprCap };
-                return selectRenderBackend(canvas, options);
+                return selectRenderBackend(canvas, centred(options, centreEllipse.get()));
             })
             .then(({ renderer: instance }) => {
                 if (disposed) return instance.destroy();
@@ -254,7 +255,7 @@
                 }
                 const rect = canvas.getBoundingClientRect();
                 resizeCursorDensity(rect);
-                if (calmMask.update(rect, calm)) renderer?.setCalmMask(calmCanvas);
+                if (calmMask.update(rect, calmSettings.get())) renderer?.setCalmMask(calmCanvas);
                 const batch = densityPoints;
                 densityPoints = [];
                 const gpuPath = renderer?.gpuCursorDensity === true;
@@ -313,6 +314,7 @@
             window.removeEventListener('keydown', keyDown);
             cancelAnimationFrame(cursorFrame);
             calmMask.destroy();
+            unlistenEllipse();
             renderer?.destroy();
         };
     });
@@ -329,7 +331,9 @@
 ></canvas>
 <!-- A layer of its own, so a lost device's last frame can never show over it. -->
 {#if failed}<div class="fallback" aria-hidden="true"></div>{/if}
-{#if ready && fpsVisible}<output class="fps" data-atmosphere-calm="off" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
+{#if ready && fpsVisible}<output class="fps" data-atmosphere-calm="off" aria-label="Frames per second"
+        >{fps.toFixed(1)} FPS</output
+    >{/if}
 <!-- Drawn every frame and uploaded to the field; shown over the page only while debugging. -->
 <canvas class="calm" class:debug={calmDebug} bind:this={calmCanvas} aria-hidden="true"></canvas>
 {#if calmDebug}
@@ -337,14 +341,27 @@
         {#each CALM_CONTROLS as control (control.key)}
             <label>
                 <span>{control.label}</span>
-                <input type="range" min={control.min} max={control.max} step={control.step} bind:value={calm[control.key]} />
-                <output>{calm[control.key]}</output>
+                <input
+                    type="range"
+                    min={control.min}
+                    max={control.max}
+                    step={control.step}
+                    value={$calmSettings[control.key]}
+                    oninput={(event) =>
+                        calmSettings.set({ ...calmSettings.get(), [control.key]: event.currentTarget.valueAsNumber })}
+                />
+                <output>{$calmSettings[control.key]}</output>
             </label>
         {/each}
         <label>
             <span>Ellipse</span>
-            <input type="checkbox" bind:checked={ellipse} onchange={applyEllipse} />
+            <input
+                type="checkbox"
+                checked={$centreEllipse}
+                onchange={(event) => centreEllipse.set(event.currentTarget.checked)}
+            />
         </label>
+        <button type="button" onclick={resetCalm}>Reset</button>
     </form>
 {/if}
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
@@ -449,7 +466,8 @@
         align-items: center;
         gap: 0.5rem;
     }
-    .calm-panel input[type='checkbox'] {
+    .calm-panel input[type='checkbox'],
+    .calm-panel button {
         justify-self: start;
     }
     .calm-panel output {
