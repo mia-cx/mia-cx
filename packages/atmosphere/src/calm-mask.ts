@@ -1,5 +1,3 @@
-import { persistentAtom } from '@nanostores/persistent';
-
 /**
  * A feathered map of where the page shows text and images, small enough to redraw every frame.
  * The field multiplies its light by one minus the mask's alpha, so it still moves over the copy
@@ -20,21 +18,8 @@ export interface CalmSettings {
 
 export const CALM_DEFAULTS: CalmSettings = { enabled: true, radius: 16, feather: 24, exponent: 1, strength: 0.5 };
 
-/** The live settings, kept in this browser once tuned from the debug panel. */
-export const calmSettings = persistentAtom<CalmSettings>('atmosphere:calm:v1', CALM_DEFAULTS, {
-    encode: JSON.stringify,
-    decode: (value) => ({ ...CALM_DEFAULTS, ...JSON.parse(value) }),
-});
-
-export const CALM_CONTROLS = [
-    { key: 'radius', label: 'Radius', min: 0, max: 128, step: 1 },
-    { key: 'feather', label: 'Feather', min: 0, max: 128, step: 1 },
-    { key: 'exponent', label: 'Exponent', min: 0.1, max: 6, step: 0.05 },
-    { key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.01 },
-] as const satisfies readonly { key: keyof CalmSettings; label: string; min: number; max: number; step: number }[];
-
 /** CSS pixels per mask texel. The mask is all soft edges, so a coarse grid loses nothing. */
-const TEXEL = 8;
+export const TEXEL = 8;
 /** Elements whose content never calms the field: opted out by the page, or not drawn at all. */
 const SKIP = '[data-atmosphere-calm="off"], canvas, script, style, template, noscript';
 const MEDIA = 'img, video, svg';

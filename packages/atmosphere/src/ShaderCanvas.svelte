@@ -1,51 +1,25 @@
-<script lang="ts" module>
-    import { persistentAtom } from '@nanostores/persistent';
-    import { BAKED_RENDER_OPTIONS, loadBakedRenderOptions } from './baked-settings';
-
-    /**
-     * The field's built-in centre darkening, a superellipse, tuned from the debug panel. Ranges match
-     * FIELD_PARAMETER_SCHEMA, restated so the renderer module stays lazily loaded.
-     */
-    const CENTRE_CONTROLS = [
-        { key: 'centerDarkness', label: 'Darkness', min: 0, max: 1.5, step: 0.01 },
-        { key: 'centerWidth', label: 'Width', min: 0.1, max: 2.5, step: 0.01 },
-        { key: 'centerHeight', label: 'Height', min: 0.1, max: 2.5, step: 0.01 },
-        { key: 'centerRoundness', label: 'Roundness', min: 2, max: 12, step: 0.1 },
-        { key: 'centerSoftness', label: 'Softness', min: 0.01, max: 1.5, step: 0.01 },
-    ] as const;
-    type CentreSettings = Record<(typeof CENTRE_CONTROLS)[number]['key'], number>;
-    const CENTRE_DEFAULTS = Object.fromEntries(
-        CENTRE_CONTROLS.map(({ key }) => [key, BAKED_RENDER_OPTIONS.parameters[key]]),
-    ) as CentreSettings;
-    const centreSettings = persistentAtom<CentreSettings>('atmosphere:centre:v1', CENTRE_DEFAULTS, {
-        encode: JSON.stringify,
-        decode: (value) => ({ ...CENTRE_DEFAULTS, ...JSON.parse(value) }),
-    });
-    /** Switches the centre darkening off, to judge the calm mask on its own. */
-    const centreEnabled = persistentAtom<boolean>('atmosphere:centre-enabled:v1', true, {
-        encode: JSON.stringify,
-        decode: JSON.parse,
-    });
-
-    /** A field paused from the debug panel: its seed and clock, so the same frame comes back on reload. */
-    const frozenField = persistentAtom<{ seed: number; time: number } | undefined>('atmosphere:frozen:v1', undefined, {
-        encode: JSON.stringify,
-        decode: JSON.parse,
-        // Another tab pausing has its own seed; this one keeps running.
-        listen: false,
-    });
-</script>
-
 <script lang="ts">
     /**
      * Fixed, full-viewport, transparent shader layer. Copied from the shaderdemo page and turned
      * into a component so each site direction can place content over it.
      */
     import { onMount, untrack } from 'svelte';
+    import { BAKED_RENDER_OPTIONS, loadBakedRenderOptions } from './baked-settings';
     import { selectRenderBackend, type RenderBackend } from './render-backend';
     import { CursorState } from './cursor';
     import { CursorDensityField } from './cursor-density-field';
-    import { CALM_CONTROLS, CALM_DEFAULTS, CalmMask, calmSettings } from './calm-mask';
+    import { CalmMask } from './calm-mask';
+    import {
+        CALM_CONTROLS,
+        CENTRE_CONTROLS,
+        calmSettings,
+        centreEnabled,
+        centreSettings,
+        drawCentreMask,
+        frozenField,
+        overlays,
+        resetFieldDebug,
+    } from './field-debug';
     import type { RenderOptions } from './renderer';
 
     let {
@@ -89,22 +63,15 @@
     let fps = $state(0);
     let fpsVisible = $state(false);
     let calmCanvas: HTMLCanvasElement;
-    /** Shows the calm mask over the page, with sliders to tune it. Toggled with M. */
+    let centreCanvas: HTMLCanvasElement;
+    /** Shows the debug panel and its darkening overlays. Toggled with M. */
     let calmDebug = $state(false);
-    /** What the renderer gets: the page's options with the tuned centre darkening, or none when it is off. */
+    /** The centre darkening the field actually gets: the tuned shape, at no strength when it is off. */
+    const centre = () => ({ ...centreSettings.get(), ...(centreEnabled.get() ? {} : { centerDarkness: 0 }) });
     const centred = (value: RenderOptions): RenderOptions => ({
         ...value,
-        parameters: {
-            ...value.parameters,
-            ...centreSettings.get(),
-            ...(centreEnabled.get() ? {} : { centerDarkness: 0 }),
-        },
+        parameters: { ...value.parameters, ...centre() },
     });
-    function resetDebug() {
-        calmSettings.set(CALM_DEFAULTS);
-        centreSettings.set(CENTRE_DEFAULTS);
-        centreEnabled.set(true);
-    }
     let options = BAKED_RENDER_OPTIONS;
     const cursorState = new CursorState();
     const cursorDensityField = new CursorDensityField();
@@ -309,6 +276,7 @@
                 const rect = canvas.getBoundingClientRect();
                 resizeCursorDensity(rect);
                 if (calmMask.update(rect, calmSettings.get())) renderer?.setCalmMask(calmCanvas);
+                if (calmDebug && overlays.get().centre) drawCentreMask(centreCanvas, rect.width, rect.height, centre());
                 const batch = densityPoints;
                 densityPoints = [];
                 const gpuPath = renderer?.gpuCursorDensity === true;
@@ -388,7 +356,9 @@
         >{fps.toFixed(1)} FPS</output
     >{/if}
 <!-- Drawn every frame and uploaded to the field; shown over the page only while debugging. -->
-<canvas class="calm" class:debug={calmDebug} bind:this={calmCanvas} aria-hidden="true"></canvas>
+<canvas class="overlay" class:visible={calmDebug && $overlays.calm} bind:this={calmCanvas} aria-hidden="true"></canvas>
+<canvas class="overlay" class:visible={calmDebug && $overlays.centre} bind:this={centreCanvas} aria-hidden="true"
+></canvas>
 {#snippet slider(
     control: { label: string; min: number; max: number; step: number },
     value: number,
@@ -407,36 +377,32 @@
         <output>{value}</output>
     </label>
 {/snippet}
+{#snippet toggle(label: string, checked: boolean, set: (checked: boolean) => void)}
+    <label>
+        <span>{label}</span>
+        <input type="checkbox" {checked} onchange={(event) => set(event.currentTarget.checked)} />
+    </label>
+{/snippet}
 {#if calmDebug}
     <form class="calm-panel" data-atmosphere-calm="off" aria-label="Field debug">
-        <label>
-            <span>Calm</span>
-            <input
-                type="checkbox"
-                checked={$calmSettings.enabled}
-                onchange={(event) => calmSettings.set({ ...calmSettings.get(), enabled: event.currentTarget.checked })}
-            />
-        </label>
+        {@render toggle('Calm', $calmSettings.enabled, (enabled) =>
+            calmSettings.set({ ...calmSettings.get(), enabled }),
+        )}
+        {@render toggle('Show calm', $overlays.calm, (calm) => overlays.set({ ...overlays.get(), calm }))}
         {#each CALM_CONTROLS as control (control.key)}
             {@render slider(control, $calmSettings[control.key], (value) =>
                 calmSettings.set({ ...calmSettings.get(), [control.key]: value }),
             )}
         {/each}
-        <label>
-            <span>Centre</span>
-            <input
-                type="checkbox"
-                checked={$centreEnabled}
-                onchange={(event) => centreEnabled.set(event.currentTarget.checked)}
-            />
-        </label>
+        {@render toggle('Centre', $centreEnabled, (enabled) => centreEnabled.set(enabled))}
+        {@render toggle('Show centre', $overlays.centre, (centre) => overlays.set({ ...overlays.get(), centre }))}
         {#each CENTRE_CONTROLS as control (control.key)}
             {@render slider(control, $centreSettings[control.key], (value) =>
                 centreSettings.set({ ...centreSettings.get(), [control.key]: value }),
             )}
         {/each}
         <div class="actions">
-            <button type="button" onclick={resetDebug}>Reset</button>
+            <button type="button" onclick={resetFieldDebug}>Reset</button>
             <button type="button" onclick={togglePause}>{$frozenField ? 'Play' : 'Pause'}</button>
             {#if $frozenField}
                 <output>seed {$frozenField.seed.toFixed(2)} · t {$frozenField.time.toFixed(2)}</output>
@@ -518,12 +484,12 @@
             monospace;
         pointer-events: none;
     }
-    .calm {
+    .overlay {
         display: none;
         z-index: 49;
         opacity: 1;
     }
-    .calm.debug {
+    .overlay.visible {
         display: block;
     }
     .calm-panel {
@@ -542,7 +508,7 @@
     }
     .calm-panel label {
         display: grid;
-        grid-template-columns: 5rem 10rem 3rem;
+        grid-template-columns: 6rem 10rem 3rem;
         align-items: center;
         gap: 0.5rem;
     }
