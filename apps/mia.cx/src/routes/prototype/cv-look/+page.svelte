@@ -11,6 +11,9 @@
 
     type Theme = 'colour' | 'print';
     let theme = $state<Theme>('colour');
+    /** How the field meets white paper: its flares over the page, or as ink multiplied into it. */
+    let light = $state<'flares' | 'ink'>('ink');
+    const ink = $state({ falloff: 2.4, saturate: 1.4 });
 
     /** Page 1 has its own still; page 2 stands for every page after it. */
     const field = $state([
@@ -93,7 +96,7 @@
         });
     });
 
-    const values = $derived(JSON.stringify({ pages: field, portrait: p }));
+    const values = $derived(JSON.stringify({ pages: field, portrait: p, light, ink }));
 
     // The timeline: ln(1 + k·(now − t)), k = 2, ending at the present with a dashed tail.
     const START = 2012, K = 2, H = 92, T = 7, W = 182, X0 = W / 2;
@@ -165,15 +168,31 @@
     <filter id="flares" color-interpolation-filters="sRGB">
         <feComponentTransfer><feFuncA type="linear" slope="1.8" intercept="-0.6" /></feComponentTransfer>
     </filter>
+    <!-- Ink: the faint haze falls away on a power curve, so paper stays white between the lobes. -->
+    <filter id="ink" color-interpolation-filters="sRGB">
+        <feComponentTransfer><feFuncA type="gamma" amplitude="1" exponent={ink.falloff} offset="0" /></feComponentTransfer>
+        <feColorMatrix type="saturate" values={String(ink.saturate)} />
+    </filter>
 </svg>
 
-<div class="proto" data-theme={theme}>
+<div class="proto" data-theme={theme} data-light={light}>
     <aside>
         <h1>PROTOTYPE · CV look</h1>
         <fieldset>
             <legend>Theme</legend>
             <label><input type="radio" bind:group={theme} value="colour" /> Colour</label>
             <label><input type="radio" bind:group={theme} value="print" /> Print-friendly</label>
+        </fieldset>
+        <fieldset>
+            <legend>On white</legend>
+            <label><input type="radio" bind:group={light} value="flares" /> Flares</label>
+            <label><input type="radio" bind:group={light} value="ink" /> Ink</label>
+            {#if light === 'ink'}
+                <label>Falloff <output>{ink.falloff}</output></label>
+                <input type="range" min="1" max="5" step="0.1" bind:value={ink.falloff} />
+                <label>Saturation <output>{ink.saturate}</output></label>
+                <input type="range" min="0.5" max="3" step="0.05" bind:value={ink.saturate} />
+            {/if}
         </fieldset>
         {#each field as page, i (i)}
             <fieldset>
@@ -306,7 +325,7 @@
     aside h1 { font-size: 14px; margin: 0 0 12px; }
     fieldset { border: 1px solid #2a2228; margin: 0 0 12px; padding: 8px 10px; }
     legend { color: #8f8b85; }
-    aside fieldset:first-of-type label { justify-content: flex-start; }
+    aside label:has(input[type='radio']) { justify-content: flex-start; }
     aside label { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; }
     aside input[type='range'] { width: 100%; accent-color: #ff3d8a; }
     aside input[type='number'] { width: 90px; background: none; color: inherit; border: 1px solid #2a2228; }
@@ -329,7 +348,9 @@
     .field canvas { width: 100%; height: 100%; display: block; }
     [data-theme='colour'] .field canvas { mask-image: linear-gradient(to bottom, #000 22%, rgb(0 0 0 / 0.5) 55%); }
     [data-theme='colour'] .rows .field canvas { mask-image: none; opacity: 0.5; }
-    [data-theme='print'] .field canvas { filter: url(#flares); mask-image: linear-gradient(to bottom, #000 30%, rgb(0 0 0 / 0.25) 60%); }
+    [data-theme='print'][data-light='ink'] .field { mix-blend-mode: multiply; }
+    [data-theme='print'][data-light='ink'] .field canvas { filter: url(#ink); mask-image: linear-gradient(to bottom, #000 30%, rgb(0 0 0 / 0.25) 60%); }
+    [data-theme='print'][data-light='flares'] .field canvas { filter: url(#flares); mask-image: linear-gradient(to bottom, #000 30%, rgb(0 0 0 / 0.25) 60%); }
     [data-theme='print'] .rows .field canvas { opacity: 0.6; }
 
     .sheet > .portrait { position: absolute; }
