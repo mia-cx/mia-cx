@@ -12,7 +12,9 @@
     /** Only the home page has a hero for the header's blur to key off. */
     const hasHero = $derived(page.url.pathname === '/');
     /** The share card at /og is just the field and its own text: no header, footer or page chrome. */
-    const bare = $derived(page.url.pathname === '/og');
+    /** PROTOTYPE: throwaway routes under /prototype bring their own field and chrome. */
+    const prototype = $derived(page.url.pathname.startsWith('/prototype'));
+    const bare = $derived(page.url.pathname === '/og' || prototype);
 
     /*
      * First load only: the page stays hidden while the shader compiles, then everything enters
@@ -33,6 +35,7 @@
     onMount(() => {
         // Tells the shell's own failsafe in app.html that the app is running and owns the reveal.
         document.documentElement.dataset.hydrated = '';
+        if (prototype) reveal();
         const timer = setTimeout(reveal, MAX_WAIT_MS);
         return () => clearTimeout(timer);
     });
@@ -54,7 +57,9 @@
 </svelte:head>
 
 <!-- Full strength behind the hero and on the share card; half behind reading pages. -->
-<ShaderCanvas dims={hasHero} opacity={hasHero || bare ? 1 : 0.5} onsettle={reveal} />
+{#if !prototype}
+    <ShaderCanvas dims={hasHero} opacity={hasHero || bare ? 1 : 0.5} onsettle={reveal} />
+{/if}
 
 <div class="boot" aria-hidden="true"><span></span></div>
 
