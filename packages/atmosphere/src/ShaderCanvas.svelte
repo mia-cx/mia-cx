@@ -1,5 +1,31 @@
 <script lang="ts" module>
     import { persistentAtom } from '@nanostores/persistent';
+    import { BAKED_RENDER_OPTIONS, loadBakedRenderOptions } from './baked-settings';
+
+    /**
+     * The field's built-in centre darkening, a superellipse, tuned from the debug panel. Ranges match
+     * FIELD_PARAMETER_SCHEMA, restated so the renderer module stays lazily loaded.
+     */
+    const CENTRE_CONTROLS = [
+        { key: 'centerDarkness', label: 'Darkness', min: 0, max: 1.5, step: 0.01 },
+        { key: 'centerWidth', label: 'Width', min: 0.1, max: 2.5, step: 0.01 },
+        { key: 'centerHeight', label: 'Height', min: 0.1, max: 2.5, step: 0.01 },
+        { key: 'centerRoundness', label: 'Roundness', min: 2, max: 12, step: 0.1 },
+        { key: 'centerSoftness', label: 'Softness', min: 0.01, max: 1.5, step: 0.01 },
+    ] as const;
+    type CentreSettings = Record<(typeof CENTRE_CONTROLS)[number]['key'], number>;
+    const CENTRE_DEFAULTS = Object.fromEntries(
+        CENTRE_CONTROLS.map(({ key }) => [key, BAKED_RENDER_OPTIONS.parameters[key]]),
+    ) as CentreSettings;
+    const centreSettings = persistentAtom<CentreSettings>('atmosphere:centre:v1', CENTRE_DEFAULTS, {
+        encode: JSON.stringify,
+        decode: (value) => ({ ...CENTRE_DEFAULTS, ...JSON.parse(value) }),
+    });
+    /** Switches the centre darkening off, to judge the calm mask on its own. */
+    const centreEnabled = persistentAtom<boolean>('atmosphere:centre-enabled:v1', true, {
+        encode: JSON.stringify,
+        decode: JSON.parse,
+    });
 
     /** A field paused from the debug panel: its seed and clock, so the same frame comes back on reload. */
     const frozenField = persistentAtom<{ seed: number; time: number } | undefined>('atmosphere:frozen:v1', undefined, {
@@ -16,11 +42,10 @@
      * into a component so each site direction can place content over it.
      */
     import { onMount, untrack } from 'svelte';
-    import { BAKED_RENDER_OPTIONS, loadBakedRenderOptions } from './baked-settings';
     import { selectRenderBackend, type RenderBackend } from './render-backend';
     import { CursorState } from './cursor';
     import { CursorDensityField } from './cursor-density-field';
-    import { CALM_CONTROLS, CALM_DEFAULTS, CalmMask, calmSettings, centreEllipse } from './calm-mask';
+    import { CALM_CONTROLS, CALM_DEFAULTS, CalmMask, calmSettings } from './calm-mask';
     import type { RenderOptions } from './renderer';
 
     let {
@@ -66,12 +91,19 @@
     let calmCanvas: HTMLCanvasElement;
     /** Shows the calm mask over the page, with sliders to tune it. Toggled with M. */
     let calmDebug = $state(false);
-    /** What the renderer gets: the page's options, minus the centre ellipse when it is switched off. */
-    const centred = (value: RenderOptions, ellipse: boolean) =>
-        ellipse ? value : { ...value, parameters: { ...value.parameters, centerDarkness: 0 } };
-    function resetCalm() {
+    /** What the renderer gets: the page's options with the tuned centre darkening, or none when it is off. */
+    const centred = (value: RenderOptions): RenderOptions => ({
+        ...value,
+        parameters: {
+            ...value.parameters,
+            ...centreSettings.get(),
+            ...(centreEnabled.get() ? {} : { centerDarkness: 0 }),
+        },
+    });
+    function resetDebug() {
         calmSettings.set(CALM_DEFAULTS);
-        centreEllipse.set(true);
+        centreSettings.set(CENTRE_DEFAULTS);
+        centreEnabled.set(true);
     }
     let options = BAKED_RENDER_OPTIONS;
     const cursorState = new CursorState();
@@ -217,11 +249,12 @@
         options = { ...BAKED_RENDER_OPTIONS, seed: pageSeed, renderScale, dprCap };
         reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
         const calmMask = new CalmMask(calmCanvas);
-        const unlistenEllipse = centreEllipse.listen((ellipse) => renderer?.setOptions(centred(options, ellipse)));
+        const applyCentre = () => renderer?.setOptions(centred(options));
+        const unlistenCentre = [centreSettings.listen(applyCentre), centreEnabled.listen(applyCentre)];
         loadBakedRenderOptions()
             .then((loadedOptions) => {
                 options = { ...loadedOptions, seed: pageSeed, renderScale, dprCap };
-                return selectRenderBackend(canvas, centred(options, centreEllipse.get()));
+                return selectRenderBackend(canvas, centred(options));
             })
             .then(({ renderer: instance }) => {
                 if (disposed) return instance.destroy();
@@ -334,7 +367,7 @@
             window.removeEventListener('keydown', keyDown);
             cancelAnimationFrame(cursorFrame);
             calmMask.destroy();
-            unlistenEllipse();
+            unlistenCentre.forEach((unlisten) => unlisten());
             renderer?.destroy();
         };
     });
@@ -356,33 +389,46 @@
     >{/if}
 <!-- Drawn every frame and uploaded to the field; shown over the page only while debugging. -->
 <canvas class="calm" class:debug={calmDebug} bind:this={calmCanvas} aria-hidden="true"></canvas>
+{#snippet slider(
+    control: { label: string; min: number; max: number; step: number },
+    value: number,
+    set: (value: number) => void,
+)}
+    <label>
+        <span>{control.label}</span>
+        <input
+            type="range"
+            min={control.min}
+            max={control.max}
+            step={control.step}
+            {value}
+            oninput={(event) => set(event.currentTarget.valueAsNumber)}
+        />
+        <output>{value}</output>
+    </label>
+{/snippet}
 {#if calmDebug}
-    <form class="calm-panel" data-atmosphere-calm="off" aria-label="Calm mask">
+    <form class="calm-panel" data-atmosphere-calm="off" aria-label="Field debug">
         {#each CALM_CONTROLS as control (control.key)}
-            <label>
-                <span>{control.label}</span>
-                <input
-                    type="range"
-                    min={control.min}
-                    max={control.max}
-                    step={control.step}
-                    value={$calmSettings[control.key]}
-                    oninput={(event) =>
-                        calmSettings.set({ ...calmSettings.get(), [control.key]: event.currentTarget.valueAsNumber })}
-                />
-                <output>{$calmSettings[control.key]}</output>
-            </label>
+            {@render slider(control, $calmSettings[control.key], (value) =>
+                calmSettings.set({ ...calmSettings.get(), [control.key]: value }),
+            )}
         {/each}
         <label>
-            <span>Ellipse</span>
+            <span>Centre</span>
             <input
                 type="checkbox"
-                checked={$centreEllipse}
-                onchange={(event) => centreEllipse.set(event.currentTarget.checked)}
+                checked={$centreEnabled}
+                onchange={(event) => centreEnabled.set(event.currentTarget.checked)}
             />
         </label>
+        {#each CENTRE_CONTROLS as control (control.key)}
+            {@render slider(control, $centreSettings[control.key], (value) =>
+                centreSettings.set({ ...centreSettings.get(), [control.key]: value }),
+            )}
+        {/each}
         <div class="actions">
-            <button type="button" onclick={resetCalm}>Reset</button>
+            <button type="button" onclick={resetDebug}>Reset</button>
             <button type="button" onclick={togglePause}>{$frozenField ? 'Play' : 'Pause'}</button>
             {#if $frozenField}
                 <output>seed {$frozenField.seed.toFixed(2)} · t {$frozenField.time.toFixed(2)}</output>

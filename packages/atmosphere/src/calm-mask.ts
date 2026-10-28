@@ -23,11 +23,6 @@ export const calmSettings = persistentAtom<CalmSettings>('atmosphere:calm:v1', C
     encode: JSON.stringify,
     decode: (value) => ({ ...CALM_DEFAULTS, ...JSON.parse(value) }),
 });
-/** Debug switch for the field's own centre ellipse, to judge the calm mask on its own. */
-export const centreEllipse = persistentAtom<boolean>('atmosphere:centre-ellipse:v1', true, {
-    encode: JSON.stringify,
-    decode: JSON.parse,
-});
 
 export const CALM_CONTROLS = [
     { key: 'radius', label: 'Radius', min: 0, max: 128, step: 1 },
