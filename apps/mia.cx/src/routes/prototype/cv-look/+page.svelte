@@ -13,11 +13,11 @@
     let theme = $state<Theme>('colour');
     /** How the field meets white paper: its flares over the page, or as ink multiplied into it. */
     let light = $state<'flares' | 'ink'>('ink');
-    const ink = $state({ falloff: 2.4, saturate: 1.4 });
+    const ink = $state({ falloff: 1, saturate: 1 });
 
     /** Page 1 has its own still; page 2 stands for every page after it. */
     const field = $state([
-        { seed: 6.1, time: 54.55 },
+        { seed: 93.8, time: 56.25 },
         { seed: 91.3, time: 32.65 },
     ]);
     const canvases: HTMLCanvasElement[] = [];
