@@ -1,45 +1,52 @@
 <!doctype html>
-<!-- PROTOTYPE, throwaway. Answers "CV look on paper" (https://github.com/mia-cx/mia-cx/issues/80). Washes stand in for shader stills. -->
-<html lang="en" data-edition="colour">
+<!-- PROTOTYPE, throwaway. Answers "CV look on paper" (https://github.com/mia-cx/mia-cx/issues/80). Random live captures stand in for the seeded stills. -->
+<html lang="en" data-theme="colour">
 <head>
 <meta charset="utf-8" />
 <title>PROTOTYPE · CV look</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" />
 <style>
 * { box-sizing: border-box; }
-:root { --ink: #1c161a; --dim: #6e6862; --line: #dcd8d3; --accent: #ff3d8a; --violet: #5b4ddc; }
 body { margin: 0; font-family: 'Archivo', system-ui, sans-serif; }
 .bar { display: flex; gap: 8px; margin-bottom: 12px; font: 13px system-ui, sans-serif; }
 .bar button { font: inherit; padding: 6px 12px; border: 1px solid var(--border, #444); background: none; color: var(--foreground, #eee); border-radius: 0; cursor: pointer; }
-.bar button[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
+.bar button[aria-pressed='true'] { border-color: #ff3d8a; color: #ff3d8a; }
 .sheets { zoom: var(--z, 1); display: grid; gap: 10mm; }
-.sheet { position: relative; width: 210mm; height: 297mm; padding: 14mm 14mm 12mm; background: #fff; color: var(--ink); overflow: hidden; font-size: 8.6pt; line-height: 1.45; }
-.sheet > :not(.wash) { position: relative; }
+@media screen { [data-page='1'] .sheet:nth-child(2), [data-page='2'] .sheet:nth-child(1) { display: none; } }
 
-/* Shader stand-ins: the field's bright lobes, as they would sit on white paper. */
-.wash { position: absolute; border-radius: 50%; filter: blur(9mm); mix-blend-mode: multiply; pointer-events: none; }
-[data-edition='print'] .wash { display: none; }
-@media screen { [data-page="1"] .sheet:nth-child(2), [data-page="2"] .sheet:nth-child(1) { display: none; } }
+.sheet { --accent: #ff3d8a; position: relative; width: 210mm; height: 297mm; padding: 14mm 14mm 12mm; overflow: hidden; font-size: 8.6pt; line-height: 1.45; background: var(--paper); color: var(--ink); }
+[data-theme='colour'] .sheet { --paper: #221820; --ink: #e9e5dd; --dim: #8f8b85; --line: rgb(233 229 221 / 0.14); }
+[data-theme='print'] .sheet { --paper: #fff; --ink: #1c161a; --dim: #6e6862; --line: #dcd8d3; }
+.sheet > :not(.field) { position: relative; }
 
-header { display: grid; grid-template-columns: 1fr 62mm; height: 74mm; }
-.who { align-self: end; padding-bottom: 6mm; }
+/* The field, from seeded stills. Colour: the still, full at the top, dimmed below. Print: only its flares. */
+.field { position: absolute; inset: 0; pointer-events: none; }
+.field img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+[data-theme='colour'] .flares, [data-theme='print'] .still { display: none; }
+[data-theme='colour'] .field::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 22%, rgb(34 24 32 / 0.6) 55%); }
+[data-theme='colour'] .rows .field::after { background: rgb(34 24 32 / 0.6); }
+.flares { filter: url(#flares); mask-image: linear-gradient(to bottom, #000 30%, rgb(0 0 0 / 0.25) 60%); }
+.rows .flares { opacity: 0.6; }
+
+header { display: grid; grid-template-columns: 1fr 64mm; height: 70mm; }
+.who { align-self: end; padding-bottom: 5mm; }
 h1 { margin: 0; font-size: 44pt; line-height: 0.88; font-weight: 660; font-stretch: 70%; letter-spacing: -0.03em; }
 .role { margin: 3mm 0 4mm; font-size: 14pt; font-weight: 500; font-stretch: 76%; color: var(--dim); }
 .contact { display: flex; flex-wrap: wrap; gap: 1mm 5mm; margin: 0; padding: 0; list-style: none; font-size: 8.4pt; }
 .portrait { position: relative; margin: -14mm -14mm 0 0; overflow: hidden; }
-.portrait img { position: absolute; left: 4mm; top: 6mm; width: 68mm; mask-image: linear-gradient(to bottom, #000 38%, transparent 66%); }
+.portrait img { position: absolute; left: -4mm; top: 4mm; width: 92mm; mask-image: linear-gradient(to bottom, #000 30%, transparent 46%); }
 
 h2 { margin: 0 0 2.5mm; font-size: 12pt; font-weight: 650; font-stretch: 76%; letter-spacing: -0.01em; }
 section { border-top: 0.25mm solid var(--line); padding-top: 3mm; margin-top: 4mm; }
 p { margin: 0 0 2mm; }
-.profile p { max-width: 128mm; font-size: 9.6pt; line-height: 1.45; }
+.profile p { max-width: 128mm; font-size: 9.6pt; }
 
 .timeline svg { display: block; width: 100%; height: auto; }
-.tl-tick { stroke: var(--ink); }
+.tl-axis { stroke: var(--ink); }
 .tl-year { font-size: 2.3px; fill: var(--dim); font-family: inherit; }
 .tl-bar { stroke: var(--ink); stroke-width: 0.45; }
 .tl-tail { stroke: var(--ink); stroke-width: 0.45; stroke-dasharray: 0.8 0.8; }
-[data-edition='colour'] .tl-tail { stroke: var(--accent); }
+[data-theme='colour'] .tl-tail { stroke: var(--accent); }
 .tl-dot { fill: var(--ink); }
 .tl-t { font-size: 3px; font-weight: 650; font-stretch: 85%; fill: var(--ink); font-family: inherit; }
 .tl-s { font-size: 2.2px; fill: var(--dim); font-family: inherit; }
@@ -65,24 +72,26 @@ p { margin: 0 0 2mm; }
   .bar { display: none; }
   .sheets { zoom: 1; gap: 0; }
   .sheet { break-after: page; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  html:not([data-print='colour']) .wash { display: none; }
-  html:not([data-print='colour']) .tl-tail { stroke: var(--ink); }
 }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute">
+  <!-- Alpha from luminance, like the site's presentation pass: the dark haze drops out, the lobes stay. -->
+  <filter id="flares" color-interpolation-filters="sRGB">
+    <feComponentTransfer><feFuncA type="linear" slope="1.8" intercept="-0.6" /></feComponentTransfer>
+  </filter>
+</svg>
 <div class="bar">
-  <button data-set="colour">Colour</button>
-  <button data-set="print">Print-friendly</button>
+  <button data-theme-set="colour">Colour</button>
+  <button data-theme-set="print">Print-friendly</button>
   <span style="flex:1"></span>
-  <button data-page="1">Page 1</button>
-  <button data-page="2">Page 2</button>
+  <button data-page-set="1">Page 1</button>
+  <button data-page-set="2">Page 2</button>
 </div>
 <div class="sheets">
   <article class="sheet">
-    <div class="wash" style="width:120mm;height:52mm;right:-34mm;top:16mm;rotate:-24deg;background:var(--violet);opacity:.42"></div>
-    <div class="wash" style="width:86mm;height:30mm;right:-22mm;top:46mm;rotate:-18deg;background:var(--accent);opacity:.5"></div>
-    <div class="wash" style="width:110mm;height:26mm;left:-52mm;bottom:22mm;rotate:12deg;background:var(--accent);opacity:.32"></div>
+    <div class="field"><img class="still" src="stills/p1-colour.webp" alt="" /><img class="flares" src="stills/p1-flares.webp" alt="" /></div>
     <header>
       <div class="who">
         <h1>Mia<br />Riezebos</h1>
@@ -120,8 +129,7 @@ p { margin: 0 0 2mm; }
   </article>
 
   <article class="sheet rows">
-    <div class="wash" style="width:130mm;height:34mm;right:-60mm;top:-8mm;rotate:-14deg;background:var(--violet);opacity:.34"></div>
-    <div class="wash" style="width:120mm;height:30mm;right:-30mm;bottom:-6mm;rotate:-8deg;background:var(--accent);opacity:.38"></div>
+    <div class="field"><img class="still" src="stills/p2-colour.webp" alt="" /><img class="flares" src="stills/p2-flares.webp" alt="" /></div>
     <section style="border-top:0;margin-top:0;padding-top:0">
       <h2>About</h2>
       <div>
@@ -161,22 +169,21 @@ p { margin: 0 0 2mm; }
   </article>
 </div>
 <script>
+const root = document.documentElement;
 const params = new URLSearchParams(location.search);
-if (params.get('edition') === 'colour') document.documentElement.dataset.print = 'colour';
-const setEdition = (e) => {
-  document.documentElement.dataset.edition = e;
-  document.querySelectorAll(".bar button[data-set]").forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.set === e)));
+const pick = (attr, value) => {
+  root.dataset[attr] = value;
+  document.querySelectorAll(`[data-${attr}-set]`).forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute(`data-${attr}-set`) === value)));
 };
-document.querySelectorAll(".bar button[data-set]").forEach((b) => b.addEventListener("click", () => setEdition(b.dataset.set)));
-setEdition(params.get('edition') === 'print' ? 'print' : 'colour');
-const setPage = (p) => {
-  document.documentElement.dataset.page = p;
-  document.querySelectorAll(".bar button[data-page]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.page === p)));
-};
-document.querySelectorAll(".bar button[data-page]").forEach((b) => b.addEventListener("click", () => setPage(b.dataset.page)));
-setPage("1");
+document.querySelectorAll('[data-theme-set]').forEach((b) => b.addEventListener('click', () => pick('theme', b.dataset.themeSet)));
+document.querySelectorAll('[data-page-set]').forEach((b) => b.addEventListener('click', () => pick('page', b.dataset.pageSet)));
+pick('theme', params.get('theme') === 'print' ? 'print' : 'colour');
+pick('page', '1');
+// Cmd+P prints the Print theme unless the URL asks for colour.
+addEventListener('beforeprint', () => { if (params.get('theme') !== 'colour') root.dataset.screenTheme = root.dataset.theme, root.dataset.theme = 'print'; });
+addEventListener('afterprint', () => { if (root.dataset.screenTheme) root.dataset.theme = root.dataset.screenTheme; });
 
-const fit = () => { const mm = 210 * 96 / 25.4; document.documentElement.style.setProperty('--z', Math.min(1, document.body.clientWidth / mm)); };
+const fit = () => root.style.setProperty('--z', Math.min(1, document.body.clientWidth / (210 * 96 / 25.4)));
 addEventListener('resize', fit); fit();
 
 // The timeline: ln(1 + k·(now − t)), k = 2, axis ends at present with a dashed tail.
@@ -188,7 +195,7 @@ const sides = {
   left: [
     ['VWO', 'Dorenweerd College · Sep 2012 – Jul 2019', ym(2012, 9), ym(2019, 7)],
     ['Grocery Clerk', 'Albert Heijn · Sep 2016 – Mar 2020', ym(2016, 9), ym(2020, 3)],
-    ['Music & Technology', 'HKU · Sep 2020 – Jul 2023', ym(2020, 9), ym(2023, 7)],
+    ['Music &amp; Technology', 'HKU · Sep 2020 – Jul 2023', ym(2020, 9), ym(2023, 7)],
     ['Call Agent', 'GGD Coronalijn · Feb – Jul 2022', ym(2022, 2), ym(2022, 7)],
     ['Customer Care Agent', 'ABN AMRO · Nov 2023 – Jul 2025', ym(2023, 11), ym(2025, 7)],
     ['Junior Support Consultant', 'Humaris · Sep 2026 – present', ym(2026, 9), null],
@@ -196,30 +203,29 @@ const sides = {
   right: [
     ['Music', 'Apr 2012', ym(2012, 4), null],
     ['Sound engineering', 'Nov 2016', ym(2016, 11), null],
-    ['Design & development', 'May 2018', ym(2018, 5), null],
+    ['Design &amp; development', 'May 2018', ym(2018, 5), null],
     ['Founder, mia.cx', 'Jul 2021', ym(2021, 7), null],
   ],
 };
 let out = `<text class="tl-head" x="${X0 - 9}" y="2" text-anchor="end">Work &amp; education</text><text class="tl-head" x="${X0 + 9}" y="2">Creative</text>`;
-out += `<line class="tl-tick" x1="${X0}" x2="${X0}" y1="${y(START)}" y2="${y(NOW)}" stroke-width="0.3"/><line class="tl-tail" x1="${X0}" x2="${X0}" y1="${y(NOW)}" y2="${y(NOW) + T}" stroke-width="0.3"/>`;
+out += `<line class="tl-axis" x1="${X0}" x2="${X0}" y1="${y(START)}" y2="${y(NOW)}" stroke-width="0.3"/><line class="tl-tail" x1="${X0}" x2="${X0}" y1="${y(NOW)}" y2="${y(NOW) + T}" stroke-width="0.3"/>`;
 let last = -Infinity;
 for (let yr = START; yr <= Math.floor(NOW); yr++) {
   const yy = y(yr);
-  out += `<line class="tl-tick" x1="${X0 - 0.9}" x2="${X0 + 0.9}" y1="${yy}" y2="${yy}" stroke-width="0.2"/>`;
+  out += `<line class="tl-axis" x1="${X0 - 0.9}" x2="${X0 + 0.9}" y1="${yy}" y2="${yy}" stroke-width="0.2"/>`;
   if (yr === START || (yy - last >= 3.5 && y(NOW) - yy >= 3)) { out += `<text class="tl-year" x="${X0 - 1.6}" y="${yy + 0.8}" text-anchor="end">${yr}</text>`; last = yy; }
 }
 for (const [side, list] of Object.entries(sides)) {
   const dir = side === 'left' ? -1 : 1, ends = [], lanes = [];
   for (const e of list) { let i = ends.findIndex((x) => x <= e[2]); if (i < 0) i = ends.length; ends[i] = e[3] ?? NOW; lanes.push(i); }
-  const lx = X0 + dir * (9 + (Math.max(...lanes) + 1) * 2 + 2);
+  const lx = X0 + dir * (9 + (Math.max(...lanes) + 1) * 2 + 2), anchor = dir < 0 ? 'end' : 'start';
   let floor = -Infinity;
   list.forEach(([t, s, a, b], i) => {
     const x = X0 + dir * (9 + lanes[i] * 2), ya = y(a), yb = y(b ?? NOW);
     out += `<line class="tl-bar" x1="${x}" x2="${x}" y1="${ya}" y2="${yb}"/><circle class="tl-dot" cx="${x}" cy="${ya}" r="0.6"/>`;
     out += b ? `<circle class="tl-dot" cx="${x}" cy="${yb}" r="0.4"/>` : `<line class="tl-tail" x1="${x}" x2="${x}" y1="${yb}" y2="${yb + T}"/>`;
     const ly = Math.max(ya, floor); floor = ly + 6.6;
-    const anchor = dir < 0 ? 'end' : 'start';
-    out += `<text class="tl-t" x="${lx}" y="${ly + 2.4}" text-anchor="${anchor}">${t.replace('&', '&amp;')}</text><text class="tl-s" x="${lx}" y="${ly + 5}" text-anchor="${anchor}">${s}</text>`;
+    out += `<text class="tl-t" x="${lx}" y="${ly + 2.4}" text-anchor="${anchor}">${t}</text><text class="tl-s" x="${lx}" y="${ly + 5}" text-anchor="${anchor}">${s}</text>`;
   });
 }
 const tl = document.getElementById('tl');
