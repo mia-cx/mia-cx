@@ -49,6 +49,8 @@
     }
     .brand {
         display: grid;
+        /* The sitemap sets the row height; without this the brand's rows stretch to match it. */
+        align-content: start;
         justify-items: start;
         gap: 6px;
     }
@@ -83,11 +85,16 @@
     }
     nav ul {
         display: grid;
-        gap: 8px;
     }
-    /* Keep policy destinations easy to tap without changing ArrowLink across the site. */
+    /* Padding, not min-height, so external links keep their label on the same line as the rest. */
     nav :global(.arrow-link) {
-        min-height: 44px;
+        padding-block: 4px;
+    }
+    /* 44px tap targets whenever a touch screen is present, including touch laptops. */
+    @media (any-pointer: coarse) {
+        nav :global(.arrow-link) {
+            padding-block: 10px;
+        }
     }
     /* The email keeps its envelope on the baseline while its ↗ marker sits at cap height. */
     .reach :global(.email) {

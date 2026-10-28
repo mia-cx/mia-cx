@@ -1,7 +1,7 @@
 <script lang="ts">
     /**
      * A link that ends in an arrow. Internal links get → which slides on hover; anything with a
-     * scheme gets ↗, still, raised to cap height and tucked against the last letter, the way the
+     * scheme gets ↗, still, raised to cap height and set just past the last letter, the way the
      * live mia.cx marks external links. Size follows the link's font size.
      */
     import type { Snippet } from 'svelte';
@@ -55,13 +55,13 @@
     a:not(.external):hover :global(.arrow) {
         transform: translateX(4px);
     }
-    /* External: still, raised, tucked in. */
+    /* External: still and raised. */
     a.external {
         align-items: flex-start;
         gap: 0;
     }
     a.external :global(.arrow) {
-        margin-left: -0.15em;
+        margin-left: 0.05em;
         margin-top: -0.1em;
     }
 </style>
