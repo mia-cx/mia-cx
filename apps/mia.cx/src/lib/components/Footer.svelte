@@ -90,8 +90,8 @@
     nav :global(.arrow-link) {
         padding-block: 4px;
     }
-    /* 44px tap targets on touch screens. */
-    @media (pointer: coarse) {
+    /* 44px tap targets whenever a touch screen is present, including touch laptops. */
+    @media (any-pointer: coarse) {
         nav :global(.arrow-link) {
             padding-block: 10px;
         }
