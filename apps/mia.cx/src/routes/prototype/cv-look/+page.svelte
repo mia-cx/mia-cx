@@ -14,14 +14,18 @@
 
     /** Page 1 has its own still; page 2 stands for every page after it. */
     const field = $state([
-        { seed: 137, time: 0 },
-        { seed: 512, time: 0 },
+        { seed: 6.1, time: 54.55 },
+        { seed: 91.3, time: 32.65 },
     ]);
     const canvases: HTMLCanvasElement[] = [];
     let renderers = $state<(RenderBackend | undefined)[]>([undefined, undefined]);
     let base = BAKED_RENDER_OPTIONS;
 
-    const p = $state({ right: 6, top: 10, width: 66, rx: 38, ry: 30, cx: 50, cy: 21, start: 0.35, curve: 2.4 });
+    const p = $state({
+        ...{ right: 5, top: 20.5, width: 78, rx: 58, ry: 34, cx: 50, cy: 16, start: 0.45, curve: 2.8 },
+        // The face, kept clear of the field as on the home hero: a feathered ellipse, in shares of the photo.
+        ...{ faceX: 50, faceY: 12, faceRx: 34, faceRy: 20, faceSolid: 55 },
+    });
 
     /** An elliptical mask whose fade starts flat and eases out, (1 − u²)^curve, so it has no hard edge. */
     const mask = $derived.by(() => {
@@ -33,6 +37,9 @@
         });
         return `radial-gradient(ellipse ${p.rx}% ${p.ry}% at ${p.cx}% ${p.cy}%, ${stops.join(', ')})`;
     });
+    const face = $derived(
+        `radial-gradient(ellipse ${p.faceRx}% ${p.faceRy}% at ${p.faceX}% ${p.faceY}%, #000 ${p.faceSolid}%, transparent 100%)`,
+    );
 
     const portraitControls: [keyof typeof p, string, number, number, number][] = [
         ['right', 'From right (mm)', -20, 40, 0.5],
@@ -44,6 +51,13 @@
         ['cy', 'Centre y (%)', 5, 60, 0.5],
         ['start', 'Fade starts', 0, 0.9, 0.01],
         ['curve', 'Fade curve', 0.5, 6, 0.1],
+    ];
+    const faceControls: typeof portraitControls = [
+        ['faceX', 'Centre x (%)', 20, 80, 0.5],
+        ['faceY', 'Centre y (%)', 0, 50, 0.5],
+        ['faceRx', 'Width (%)', 10, 60, 0.5],
+        ['faceRy', 'Height (%)', 5, 50, 0.5],
+        ['faceSolid', 'Feather starts (%)', 0, 95, 1],
     ];
 
     let zoom = $state(1);
@@ -178,6 +192,13 @@
             {/each}
         </fieldset>
         <fieldset>
+            <legend>Face, clear of the field</legend>
+            {#each faceControls as [key, label, min, max, step] (key)}
+                <label>{label} <output>{p[key]}</output></label>
+                <input type="range" {min} {max} {step} bind:value={p[key]} />
+            {/each}
+        </fieldset>
+        <fieldset>
             <legend>Values</legend>
             <code>{values}</code>
             <button onclick={() => navigator.clipboard.writeText(values)}>Copy values</button>
@@ -189,6 +210,11 @@
             <div class="field"><canvas bind:this={canvases[0]}></canvas></div>
             <div class="portrait" style:right="{p.right}mm" style:top="{p.top}mm" style:width="{p.width}mm">
                 <img src={portrait} alt="Portrait of Mia Riezebos" style:mask-image={mask} />
+            </div>
+            <!-- The same photo above the field, cut to the face, with the field's haze but not its light. -->
+            <div class="portrait face" aria-hidden="true" style:right="{p.right}mm" style:top="{p.top}mm" style:width="{p.width}mm">
+                <img src={portrait} alt="" style:mask-image="{mask}, {face}" />
+                <div class="haze" style:mask-image="url({portrait}), {mask}, {face}"></div>
             </div>
             <header>
                 <h1>Mia<br />Riezebos</h1>
@@ -294,16 +320,25 @@
     [data-theme='print'] .sheet { --paper: #fff; --ink: #1c161a; --dim: #6e6862; --line: #dcd8d3; }
     .sheet > :not(.field) { position: relative; }
 
-    /* Colour: the field on the haze, full at the top and dimmed below. Print: only its flares, on white. */
-    .field { position: absolute; inset: 0; }
+    /*
+     * The field floats over the text and the photo, as on the site: its alpha comes from luminance, so only
+     * the bright lobes wash over. Colour: full at the top, easing to half below, like the home page as the
+     * hero scrolls away; later pages sit at half. Print: only its flares, on white.
+     */
+    .field { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
     .field canvas { width: 100%; height: 100%; display: block; }
-    [data-theme='colour'] .field::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 22%, rgb(34 24 32 / 0.6) 55%); }
-    [data-theme='colour'] .rows .field::after { background: rgb(34 24 32 / 0.6); }
+    [data-theme='colour'] .field canvas { mask-image: linear-gradient(to bottom, #000 22%, rgb(0 0 0 / 0.5) 55%); }
+    [data-theme='colour'] .rows .field canvas { mask-image: none; opacity: 0.5; }
     [data-theme='print'] .field canvas { filter: url(#flares); mask-image: linear-gradient(to bottom, #000 30%, rgb(0 0 0 / 0.25) 60%); }
     [data-theme='print'] .rows .field canvas { opacity: 0.6; }
 
     .sheet > .portrait { position: absolute; }
     .portrait img { display: block; width: 100%; }
+    .sheet > .face { z-index: 3; }
+    .face img { mask-composite: intersect; }
+    /* Over the photo the field reads as a flat purple wash of about 14%, measured on the home hero. */
+    .haze { position: absolute; inset: 0; background: rgb(221 138 231); opacity: 0.14; mask-size: 100% 100%; mask-composite: intersect; }
+    [data-theme='print'] .haze { display: none; }
 
     header { height: 70mm; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 5mm; }
     header h1 { margin: 0; font-size: 44pt; line-height: 0.88; font-weight: 660; font-stretch: 70%; letter-spacing: -0.03em; }
