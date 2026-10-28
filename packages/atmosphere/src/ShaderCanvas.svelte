@@ -54,6 +54,13 @@
     /** Shows the calm mask over the page, with sliders to tune it. Toggled with M. */
     let calmDebug = $state(false);
     const calm = $state({ ...CALM_DEFAULTS });
+    /** Debug switch for the field's own centre ellipse, to judge the calm mask on its own. */
+    let ellipse = $state(true);
+    function applyEllipse() {
+        const centerDarkness = ellipse ? BAKED_RENDER_OPTIONS.parameters.centerDarkness : 0;
+        options = { ...options, parameters: { ...options.parameters, centerDarkness } };
+        renderer?.setOptions(options);
+    }
     let options = BAKED_RENDER_OPTIONS;
     const cursorState = new CursorState();
     const cursorDensityField = new CursorDensityField();
@@ -334,6 +341,10 @@
                 <output>{calm[control.key]}</output>
             </label>
         {/each}
+        <label>
+            <span>Ellipse</span>
+            <input type="checkbox" bind:checked={ellipse} onchange={applyEllipse} />
+        </label>
     </form>
 {/if}
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
@@ -437,6 +448,9 @@
         grid-template-columns: 5rem 10rem 3rem;
         align-items: center;
         gap: 0.5rem;
+    }
+    .calm-panel input[type='checkbox'] {
+        justify-self: start;
     }
     .calm-panel output {
         text-align: end;
