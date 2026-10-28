@@ -12,6 +12,10 @@ _Avoid_: Post, content page
 Mia's curriculum vitae, printed by every page that is not an Article.
 _Avoid_: Résumé, profile
 
+**Theme**:
+How the CV is rendered: **Colour** puts the field on dark paper, **Print** multiplies it into white paper like ink. Cmd+P always prints the Print theme.
+_Avoid_: Mode, version, light/dark
+
 **Appendix**:
 Pages printed after the CV on an index page, listing that index's items with their taglines.
 _Avoid_: Addendum, annex, listing
