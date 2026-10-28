@@ -8,6 +8,9 @@
     import { BAKED_RENDER_OPTIONS, loadBakedRenderOptions } from '@mia-cx/atmosphere/baked-settings';
     import { selectRenderBackend, type RenderBackend } from '@mia-cx/atmosphere/render-backend';
     import portrait from '$lib/assets/portrait-800.webp';
+    import { encode } from 'uqr';
+    import { listedWork } from '$lib/content/vault';
+    import { site } from '$lib/content/site';
 
     type Theme = 'colour' | 'print';
     let theme = $state<Theme>('colour');
@@ -21,7 +24,7 @@
         { seed: 91.3, time: 32.65 },
     ]);
     const canvases: HTMLCanvasElement[] = [];
-    let renderers = $state<(RenderBackend | undefined)[]>([undefined, undefined]);
+    let renderers = $state<(RenderBackend | undefined)[]>([]);
     let base = BAKED_RENDER_OPTIONS;
 
     const p = $state({
@@ -63,6 +66,22 @@
         ['faceSolid', 'Feather starts (%)', 0, 95, 1],
     ];
 
+    /** Sheets after page 2 (the Appendix) share its still. */
+    const still = (i: number) => field[Math.min(i, field.length - 1)];
+
+    /** The Appendix /work would print: each listed item with its tagline, printed URL and a QR code. */
+    const appendix = listedWork.map((item) => {
+        const url = item.markdown ? `${site.url}/work/${item.slug}` : (item.live ?? item.source ?? site.url);
+        const { data, size } = encode(url, { border: 0 });
+        const path = data.flatMap((row, y) => row.flatMap((on, x) => (on ? [`M${x} ${y}h1v1h-1z`] : []))).join('');
+        return { title: item.title, tagline: item.summary, url: url.replace(/^https?:\/\//, ''), qr: { size, path } };
+    });
+    // PROTOTYPE: a fixed count per sheet stands in for real page breaks.
+    const PER_SHEET = 12;
+    const appendixSheets = Array.from({ length: Math.ceil(appendix.length / PER_SHEET) }, (_, i) =>
+        appendix.slice(i * PER_SHEET, (i + 1) * PER_SHEET),
+    );
+
     let zoom = $state(1);
     const fit = () => (zoom = Math.min(1, (innerWidth - 340) / (2 * 794 + 40)));
 
@@ -72,7 +91,7 @@
         loadBakedRenderOptions().then((loaded) => {
             base = { ...loaded, renderScale: 1, dprCap: 2 };
             canvases.forEach((canvas, i) =>
-                selectRenderBackend(canvas, { ...base, seed: field[i].seed }).then(({ renderer }) => {
+                selectRenderBackend(canvas, { ...base, seed: still(i).seed }).then(({ renderer }) => {
                     if (disposed) return renderer.destroy();
                     renderer.setPaused(true);
                     renderers[i] = renderer;
@@ -88,7 +107,7 @@
     $effect(() => {
         renderers.forEach((renderer, i) => {
             if (!renderer) return;
-            const { seed, time } = field[i];
+            const { seed, time } = still(i);
             renderer.setOptions({ ...base, seed });
             // PROTOTYPE: the renderers keep simulation time private; scrubbing it is the whole point here.
             (renderer as unknown as { simTime: number }).simTime = time;
@@ -316,6 +335,28 @@
                 </div>
             </section>
         </article>
+
+        <!-- The Appendix, as /work would print it after the CV. -->
+        {#each appendixSheets as items, sheet (sheet)}
+        <article class="sheet rows appendix">
+            <div class="field"><canvas bind:this={canvases[2 + sheet]}></canvas></div>
+            <section class="first">
+                <h2>{sheet === 0 ? 'Work' : ''}</h2>
+                <ul>
+                    {#each items as item (item.url)}
+                        <li>
+                            <div>
+                                <h3>{item.title}</h3>
+                                <p>{item.tagline}</p>
+                                <p class="url">{item.url}</p>
+                            </div>
+                            <svg class="qr" viewBox="0 0 {item.qr.size} {item.qr.size}" aria-hidden="true"><path d={item.qr.path} /></svg>
+                        </li>
+                    {/each}
+                </ul>
+            </section>
+        </article>
+        {/each}
     </div>
 </div>
 
@@ -333,7 +374,7 @@
     code { display: block; font-size: 11px; word-break: break-all; color: #8f8b85; margin-bottom: 8px; }
     button { font: inherit; padding: 6px 12px; border: 1px solid #ff3d8a; background: none; color: #ff3d8a; cursor: pointer; }
 
-    .sheets { display: flex; gap: 40px; padding: 24px; align-items: flex-start; }
+    .sheets { display: flex; flex-wrap: wrap; gap: 40px; width: calc(2 * 210mm + 40px + 48px); padding: 24px; align-items: flex-start; }
     .sheet { --accent: #ff3d8a; position: relative; flex: none; width: 210mm; height: 297mm; padding: 14mm 14mm 12mm; overflow: hidden; font-size: 8.6pt; line-height: 1.45; background: var(--paper); color: var(--ink); }
     [data-theme='colour'] .sheet { --paper: #221820; --ink: #e9e5dd; --dim: #8f8b85; --line: rgb(233 229 221 / 0.14); }
     [data-theme='print'] .sheet { --paper: #fff; --ink: #1c161a; --dim: #6e6862; --line: #dcd8d3; }
@@ -397,4 +438,15 @@
     .work li { margin-bottom: 1mm; }
     .work b { font-weight: 650; }
     .work .url { color: var(--dim); }
+
+    .appendix ul { margin: 0; padding: 0; list-style: none; }
+    .appendix li { display: grid; grid-template-columns: 1fr 15mm; gap: 6mm; align-items: start; padding: 2.6mm 0; border-top: 0.25mm solid var(--line); }
+    .appendix li:first-child { border-top: 0; padding-top: 0; }
+    .appendix h3 { margin: 0 0 0.6mm; font-size: 9.4pt; font-weight: 650; }
+    .appendix p { margin: 0 0 0.6mm; }
+    .appendix .url { color: var(--dim); }
+    /* Above the field, like the face, so its light never lowers the code's contrast. */
+    .qr { position: relative; z-index: 3; display: block; box-sizing: border-box; width: 15mm; height: 15mm; fill: #1c161a; shape-rendering: crispEdges; }
+    /* Many scanners can't read light-on-dark codes, so on dark paper the code sits on a light tile. */
+    [data-theme='colour'] .qr { background: #e9e5dd; padding: 1.2mm; }
 </style>
