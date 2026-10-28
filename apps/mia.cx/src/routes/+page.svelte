@@ -36,11 +36,8 @@
             </div>
         </div>
 
-        <!--
-            Placed left of the text via grid; kept after it in source so the name reads first. Both portrait
-            layers opt out of the field's calm mask: the field is meant to wash over the photo.
-        -->
-        <div class="portrait" data-atmosphere-calm="off" data-enter style:--enter="0">
+        <!-- Placed left of the text via grid; kept after it in source so the name reads first. -->
+        <div class="portrait" data-enter style:--enter="0">
             <img
                 src={portrait800}
                 srcset={portraitSet}
@@ -54,7 +51,8 @@
         <!--
             The same photo again, above the shader, cut to a feathered ellipse around the face. The field
             still washes around the head and over the body, but never over the face. Same box, same source, so the two
-            layers line up to the pixel and the browser downloads the image once.
+            layers line up to the pixel and the browser downloads the image once. It opts out of the field's
+            calm mask, since the photo below already traces the same outline into it.
         -->
         <div class="portrait portrait-top" aria-hidden="true" data-atmosphere-calm="off" data-enter style:--enter="0">
             <img
