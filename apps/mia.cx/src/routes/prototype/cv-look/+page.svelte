@@ -9,6 +9,8 @@
     import { selectRenderBackend, type RenderBackend } from '@mia-cx/atmosphere/render-backend';
     import portrait from '$lib/assets/portrait-800.webp';
     import { encode } from 'uqr';
+    import FileText from '~icons/lucide/file-text';
+    import Printer from '~icons/lucide/printer';
     import { listedWork } from '$lib/content/vault';
     import { site } from '$lib/content/site';
 
@@ -197,6 +199,14 @@
 <div class="proto" data-theme={theme} data-light={light}>
     <aside>
         <h1>PROTOTYPE · CV look</h1>
+        <!-- The CV buttons for home and the footer: Colour with a label, Print as an icon with an instant tooltip. -->
+        <div class="cv-buttons">
+            <a href="/cv.pdf?theme=colour" download>Download CV <FileText aria-hidden="true" /></a>
+            <a href="/cv.pdf?theme=print" download aria-label="Download print-friendly CV" class="icon">
+                <span class="doc" aria-hidden="true"><FileText /><span class="badge"><Printer /></span></span>
+                <span class="tip" aria-hidden="true">Print-friendly</span>
+            </a>
+        </div>
         <fieldset>
             <legend>Theme</legend>
             <label><input type="radio" bind:group={theme} value="colour" /> Colour</label>
@@ -446,6 +456,21 @@
     .appendix p { margin: 0 0 0.6mm; }
     .appendix .url { color: var(--dim); }
     /* Above the field, like the face, so its light never lowers the code's contrast. */
+    /* Joined like a split button: the second half shares the first's border. */
+    .cv-buttons { display: flex; margin-bottom: 16px; }
+    .cv-buttons a { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 1px solid var(--panel-line); background: var(--control); color: var(--ink); font-size: 15px; text-decoration: none; transition: border-color 140ms ease, color 140ms ease; }
+    .cv-buttons a + a { margin-left: -1px; }
+    .cv-buttons a:hover, .cv-buttons a:focus-visible { position: relative; z-index: 1; border-color: var(--accent); color: var(--accent); }
+    .cv-buttons :global(svg) { font-size: 18px; }
+    .cv-buttons .icon { position: relative; justify-content: center; width: 40px; padding: 0; }
+    .doc { position: relative; display: grid; }
+    /* The printer sits on the document's corner, cut out of it by the button's own background. */
+    .badge { position: absolute; right: -5px; bottom: -4px; display: grid; padding: 1px; background: var(--panel); font-size: 0.62em; line-height: 0; }
+    .badge :global(svg) { font-size: 11px; }
+    /* Instant: no delay, unlike a title tooltip. */
+    .tip { position: absolute; top: calc(100% + 6px); left: 50%; translate: -50% 0; padding: 4px 8px; border: 1px solid var(--panel-line); background: var(--panel); color: var(--ink); font-size: 13px; white-space: nowrap; pointer-events: none; opacity: 0; }
+    .icon:hover .tip, .icon:focus-visible .tip { opacity: 1; }
+
     .qr { position: relative; z-index: 3; display: block; box-sizing: border-box; width: 15mm; height: 15mm; fill: #1c161a; shape-rendering: crispEdges; }
     /* Many scanners can't read light-on-dark codes, so on dark paper the code sits on a light tile. */
     [data-theme='colour'] .qr { background: #e9e5dd; padding: 1.2mm; }
