@@ -1,0 +1,230 @@
+<!doctype html>
+<!-- PROTOTYPE, throwaway. Answers "CV look on paper" (https://github.com/mia-cx/mia-cx/issues/80). Washes stand in for shader stills. -->
+<html lang="en" data-edition="colour">
+<head>
+<meta charset="utf-8" />
+<title>PROTOTYPE · CV look</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" />
+<style>
+* { box-sizing: border-box; }
+:root { --ink: #1c161a; --dim: #6e6862; --line: #dcd8d3; --accent: #ff3d8a; --violet: #5b4ddc; }
+body { margin: 0; font-family: 'Archivo', system-ui, sans-serif; }
+.bar { display: flex; gap: 8px; margin-bottom: 12px; font: 13px system-ui, sans-serif; }
+.bar button { font: inherit; padding: 6px 12px; border: 1px solid var(--border, #444); background: none; color: var(--foreground, #eee); border-radius: 0; cursor: pointer; }
+.bar button[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
+.sheets { zoom: var(--z, 1); display: grid; gap: 10mm; }
+.sheet { position: relative; width: 210mm; height: 297mm; padding: 14mm 14mm 12mm; background: #fff; color: var(--ink); overflow: hidden; font-size: 8.6pt; line-height: 1.45; }
+.sheet > :not(.wash) { position: relative; }
+
+/* Shader stand-ins: the field's bright lobes, as they would sit on white paper. */
+.wash { position: absolute; border-radius: 50%; filter: blur(9mm); mix-blend-mode: multiply; pointer-events: none; }
+[data-edition='print'] .wash { display: none; }
+@media screen { [data-page="1"] .sheet:nth-child(2), [data-page="2"] .sheet:nth-child(1) { display: none; } }
+
+header { display: grid; grid-template-columns: 1fr 62mm; height: 74mm; }
+.who { align-self: end; padding-bottom: 6mm; }
+h1 { margin: 0; font-size: 44pt; line-height: 0.88; font-weight: 660; font-stretch: 70%; letter-spacing: -0.03em; }
+.role { margin: 3mm 0 4mm; font-size: 14pt; font-weight: 500; font-stretch: 76%; color: var(--dim); }
+.contact { display: flex; flex-wrap: wrap; gap: 1mm 5mm; margin: 0; padding: 0; list-style: none; font-size: 8.4pt; }
+.portrait { position: relative; margin: -14mm -14mm 0 0; overflow: hidden; }
+.portrait img { position: absolute; left: 4mm; top: 6mm; width: 68mm; mask-image: linear-gradient(to bottom, #000 38%, transparent 66%); }
+
+h2 { margin: 0 0 2.5mm; font-size: 12pt; font-weight: 650; font-stretch: 76%; letter-spacing: -0.01em; }
+section { border-top: 0.25mm solid var(--line); padding-top: 3mm; margin-top: 4mm; }
+p { margin: 0 0 2mm; }
+.profile p { max-width: 128mm; font-size: 9.6pt; line-height: 1.45; }
+
+.timeline svg { display: block; width: 100%; height: auto; }
+.tl-tick { stroke: var(--ink); }
+.tl-year { font-size: 2.3px; fill: var(--dim); font-family: inherit; }
+.tl-bar { stroke: var(--ink); stroke-width: 0.45; }
+.tl-tail { stroke: var(--ink); stroke-width: 0.45; stroke-dasharray: 0.8 0.8; }
+[data-edition='colour'] .tl-tail { stroke: var(--accent); }
+.tl-dot { fill: var(--ink); }
+.tl-t { font-size: 3px; font-weight: 650; font-stretch: 85%; fill: var(--ink); font-family: inherit; }
+.tl-s { font-size: 2.2px; fill: var(--dim); font-family: inherit; }
+.tl-head { font-size: 3px; font-weight: 650; fill: var(--dim); font-family: inherit; }
+
+.pair { display: grid; grid-template-columns: 1fr 52mm; gap: 8mm; }
+.skills { display: grid; grid-template-columns: max-content 1fr; gap: 1mm 4mm; margin: 0; }
+.skills dt { color: var(--dim); }
+.skills dd { margin: 0; }
+
+.rows section { display: grid; grid-template-columns: 30mm 1fr; gap: 0 6mm; }
+.rows section h2 { margin: 0; }
+.entry { margin-bottom: 2.6mm; }
+.entry h3 { margin: 0 0 0.6mm; font-size: 9.4pt; font-weight: 650; }
+.entry h3 span { font-weight: 400; color: var(--dim); }
+.work { margin: 0; padding: 0; list-style: none; }
+.work li { margin-bottom: 1mm; }
+.work b { font-weight: 650; }
+.work .url { color: var(--dim); }
+
+@page { size: A4; margin: 0; }
+@media print {
+  .bar { display: none; }
+  .sheets { zoom: 1; gap: 0; }
+  .sheet { break-after: page; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  html:not([data-print='colour']) .wash { display: none; }
+  html:not([data-print='colour']) .tl-tail { stroke: var(--ink); }
+}
+</style>
+</head>
+<body>
+<div class="bar">
+  <button data-set="colour">Colour</button>
+  <button data-set="print">Print-friendly</button>
+  <span style="flex:1"></span>
+  <button data-page="1">Page 1</button>
+  <button data-page="2">Page 2</button>
+</div>
+<div class="sheets">
+  <article class="sheet">
+    <div class="wash" style="width:120mm;height:52mm;right:-34mm;top:16mm;rotate:-24deg;background:var(--violet);opacity:.42"></div>
+    <div class="wash" style="width:86mm;height:30mm;right:-22mm;top:46mm;rotate:-18deg;background:var(--accent);opacity:.5"></div>
+    <div class="wash" style="width:110mm;height:26mm;left:-52mm;bottom:22mm;rotate:12deg;background:var(--accent);opacity:.32"></div>
+    <header>
+      <div class="who">
+        <h1>Mia<br />Riezebos</h1>
+        <p class="role">Product Engineer &amp; Founder</p>
+        <ul class="contact">
+          <li>hello@mia.cx</li><li>mia.cx</li><li>linkedin.com/in/miariezebos</li><li>Netherlands</li>
+        </ul>
+      </div>
+      <div class="portrait"><img src="../assets/portrait-800.webp" alt="Portrait of Mia Riezebos" /></div>
+    </header>
+    <section class="profile">
+      <h2>Profile</h2>
+      <p>I'm a product engineer with roots in customer support. I like to understand how things work, from the big picture down to the details, and I love helping people figure out what they need. Through mia.cx I design, build and run my own products. In support, I learned to find the problem behind the question.</p>
+    </section>
+    <section class="timeline">
+      <h2>Experience</h2>
+      <svg id="tl"></svg>
+    </section>
+    <section class="pair">
+      <div>
+        <h2>Skills</h2>
+        <dl class="skills">
+          <dt>Product</dt><dd>Product discovery, UX and accessibility, technical specs</dd>
+          <dt>Engineering</dt><dd>TypeScript, Svelte/SvelteKit, Cloudflare Workers (D1, R2), WebGPU/WGSL, Swift/SwiftUI</dd>
+          <dt>Infrastructure</dt><dd>Docker, Kubernetes, GitOps</dd>
+          <dt>Support and data</dt><dd>TopDesk, Excel (Power Pivot), Power BI</dd>
+          <dt>Design</dt><dd>Affinity, Adobe Illustrator, Adobe After Effects</dd>
+        </dl>
+      </div>
+      <div>
+        <h2>Languages</h2>
+        <dl class="skills"><dt>Dutch</dt><dd>Native</dd><dt>English</dt><dd>Fluent</dd></dl>
+      </div>
+    </section>
+  </article>
+
+  <article class="sheet rows">
+    <div class="wash" style="width:130mm;height:34mm;right:-60mm;top:-8mm;rotate:-14deg;background:var(--violet);opacity:.34"></div>
+    <div class="wash" style="width:120mm;height:30mm;right:-30mm;bottom:-6mm;rotate:-8deg;background:var(--accent);opacity:.38"></div>
+    <section style="border-top:0;margin-top:0;padding-top:0">
+      <h2>About</h2>
+      <div>
+        <p>I care about making things easier to understand and better to use. Complexity should be rare, and where it's needed, it should get the space it needs to be understood.</p>
+        <p>I've worked on both sides of a product: building it, and supporting the people who use it. Support taught me to keep asking until I find the real problem, and to leave people calm and heard, not just helped. Freelancing taught me to speak both languages, turning what a client needs into technical specs and explaining technical constraints back in plain words.</p>
+        <p>I've also handled the people side of projects. For a music collective, I've led several collaborative compilation releases, covering quality assurance, catalogue management, distribution, artist relations and revenue splits, all on tight deadlines.</p>
+        <p>I'm almost entirely self-taught. I studied Music &amp; Technology at HKU and found that formal education doesn't suit me. I learn best through a project I want to build. Because of my ADHD, once I have one, nothing can stop me.</p>
+      </div>
+    </section>
+    <section>
+      <h2>Experience</h2>
+      <div>
+        <div class="entry"><h3>Junior Support Consultant <span>· Humaris · Sep 2026 – present</span></h3><p>I help advisors, customers of ParaDIGMA groep and their employees use ParaDIGMA's online absenteeism platform, working in TopDesk, Excel and the platform itself.</p></div>
+        <div class="entry"><h3>Founder <span>· mia.cx · Jul 2021 – present</span></h3><p>mia.cx is the umbrella for my products and my freelance design and development work. It started with logos, album covers and motion design for artists and start-ups, and grew into web design and development. In 2023 I launched the hypertrance.eu webshop for nuphory on Shopify and Cloudflare.</p></div>
+        <div class="entry"><h3>Customer Care Agent <span>· ABN AMRO · Nov 2023 – Jul 2025</span></h3><p>I helped clients with their banking every day: about half needed guidance in the mobile app, and the rest ranged from financial questions to complex disputes. After about four months I moved to International Clients, where I worked with clients in English and tracked the team's KPIs. When a slow Power BI dashboard was costing colleagues time, I raised it with my team lead and built a faster version in Excel with Power Pivot, documented so the team could keep using it after I left. I also submitted 44 improvement proposals in two months through an internal feedback channel, each with a problem analysis and a proposed solution.</p></div>
+        <div class="entry"><h3>Call Agent <span>· Teleperformance, for GGD Coronalijn · Feb 2022 – Jul 2022</span></h3><p>I booked COVID test appointments by phone during a period of high call volumes, often for stressed or worried callers, and handled their personal data with care.</p></div>
+        <div class="entry"><h3>Grocery Clerk <span>· Albert Heijn Renkum · Sep 2016 – Mar 2020</span></h3><p>I stocked shelves, received freight from the distribution centres before opening hours, and later worked in the bakery, helping customers on the shop floor along the way. I also earned a company emergency response (BHV) certificate.</p></div>
+      </div>
+    </section>
+    <section>
+      <h2>Selected work</h2>
+      <ul class="work">
+        <li><b>Caelestis</b>: a template overlay and shared server for groups painting together on wplace.live. <span class="url">caelestis.mia.cx</span></li>
+        <li><b>Discord Wrapped</b>: turns a Discord data package into a report with shareable stories. <span class="url">discordwrapped.app</span></li>
+        <li><b>Vesta</b>: an all-in-one platform for independent musicians, small labels and creative publishers. In development.</li>
+        <li><b>Maal</b>: meal planning for people with ADHD.</li>
+        <li><b>Logitland</b>: a Discord server where only AI agents talk. People watch, and owners adopt agents for an XP bonus. In development.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Education</h2>
+      <div>
+        <div class="entry"><h3>Music &amp; Technology <span>· HKU University of the Arts Utrecht · Sep 2020 – Jul 2023 · Discontinued</span></h3></div>
+        <div class="entry"><h3>VWO (pre-university secondary education) <span>· Dorenweerd College · Sep 2012 – Jul 2019</span></h3></div>
+      </div>
+    </section>
+  </article>
+</div>
+<script>
+const params = new URLSearchParams(location.search);
+if (params.get('edition') === 'colour') document.documentElement.dataset.print = 'colour';
+const setEdition = (e) => {
+  document.documentElement.dataset.edition = e;
+  document.querySelectorAll(".bar button[data-set]").forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.set === e)));
+};
+document.querySelectorAll(".bar button[data-set]").forEach((b) => b.addEventListener("click", () => setEdition(b.dataset.set)));
+setEdition(params.get('edition') === 'print' ? 'print' : 'colour');
+const setPage = (p) => {
+  document.documentElement.dataset.page = p;
+  document.querySelectorAll(".bar button[data-page]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.page === p)));
+};
+document.querySelectorAll(".bar button[data-page]").forEach((b) => b.addEventListener("click", () => setPage(b.dataset.page)));
+setPage("1");
+
+const fit = () => { const mm = 210 * 96 / 25.4; document.documentElement.style.setProperty('--z', Math.min(1, document.body.clientWidth / mm)); };
+addEventListener('resize', fit); fit();
+
+// The timeline: ln(1 + k·(now − t)), k = 2, axis ends at present with a dashed tail.
+const START = 2012, K = 2, H = 92, T = 7, W = 182, X0 = W / 2;
+const d = new Date(), NOW = d.getFullYear() + (d.getMonth() + d.getDate() / 31) / 12;
+const ym = (y, m) => y + (m - 1) / 12;
+const f = (x) => Math.log1p(K * x), y = (t) => 6 + H * (1 - f(NOW - t) / f(NOW - START));
+const sides = {
+  left: [
+    ['VWO', 'Dorenweerd College · Sep 2012 – Jul 2019', ym(2012, 9), ym(2019, 7)],
+    ['Grocery Clerk', 'Albert Heijn · Sep 2016 – Mar 2020', ym(2016, 9), ym(2020, 3)],
+    ['Music & Technology', 'HKU · Sep 2020 – Jul 2023', ym(2020, 9), ym(2023, 7)],
+    ['Call Agent', 'GGD Coronalijn · Feb – Jul 2022', ym(2022, 2), ym(2022, 7)],
+    ['Customer Care Agent', 'ABN AMRO · Nov 2023 – Jul 2025', ym(2023, 11), ym(2025, 7)],
+    ['Junior Support Consultant', 'Humaris · Sep 2026 – present', ym(2026, 9), null],
+  ],
+  right: [
+    ['Music', 'Apr 2012', ym(2012, 4), null],
+    ['Sound engineering', 'Nov 2016', ym(2016, 11), null],
+    ['Design & development', 'May 2018', ym(2018, 5), null],
+    ['Founder, mia.cx', 'Jul 2021', ym(2021, 7), null],
+  ],
+};
+let out = `<text class="tl-head" x="${X0 - 9}" y="2" text-anchor="end">Work &amp; education</text><text class="tl-head" x="${X0 + 9}" y="2">Creative</text>`;
+out += `<line class="tl-tick" x1="${X0}" x2="${X0}" y1="${y(START)}" y2="${y(NOW)}" stroke-width="0.3"/><line class="tl-tail" x1="${X0}" x2="${X0}" y1="${y(NOW)}" y2="${y(NOW) + T}" stroke-width="0.3"/>`;
+let last = -Infinity;
+for (let yr = START; yr <= Math.floor(NOW); yr++) {
+  const yy = y(yr);
+  out += `<line class="tl-tick" x1="${X0 - 0.9}" x2="${X0 + 0.9}" y1="${yy}" y2="${yy}" stroke-width="0.2"/>`;
+  if (yr === START || (yy - last >= 3.5 && y(NOW) - yy >= 3)) { out += `<text class="tl-year" x="${X0 - 1.6}" y="${yy + 0.8}" text-anchor="end">${yr}</text>`; last = yy; }
+}
+for (const [side, list] of Object.entries(sides)) {
+  const dir = side === 'left' ? -1 : 1, ends = [], lanes = [];
+  for (const e of list) { let i = ends.findIndex((x) => x <= e[2]); if (i < 0) i = ends.length; ends[i] = e[3] ?? NOW; lanes.push(i); }
+  const lx = X0 + dir * (9 + (Math.max(...lanes) + 1) * 2 + 2);
+  let floor = -Infinity;
+  list.forEach(([t, s, a, b], i) => {
+    const x = X0 + dir * (9 + lanes[i] * 2), ya = y(a), yb = y(b ?? NOW);
+    out += `<line class="tl-bar" x1="${x}" x2="${x}" y1="${ya}" y2="${yb}"/><circle class="tl-dot" cx="${x}" cy="${ya}" r="0.6"/>`;
+    out += b ? `<circle class="tl-dot" cx="${x}" cy="${yb}" r="0.4"/>` : `<line class="tl-tail" x1="${x}" x2="${x}" y1="${yb}" y2="${yb + T}"/>`;
+    const ly = Math.max(ya, floor); floor = ly + 6.6;
+    const anchor = dir < 0 ? 'end' : 'start';
+    out += `<text class="tl-t" x="${lx}" y="${ly + 2.4}" text-anchor="${anchor}">${t.replace('&', '&amp;')}</text><text class="tl-s" x="${lx}" y="${ly + 5}" text-anchor="${anchor}">${s}</text>`;
+  });
+}
+const tl = document.getElementById('tl');
+tl.setAttribute('viewBox', `0 -1 ${W} ${y(NOW) + T + 2}`);
+tl.innerHTML = out;
+</script>
+</body>
+</html>
