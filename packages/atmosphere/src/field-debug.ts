@@ -44,7 +44,8 @@ export const centreEnabled = persistentAtom<boolean>('atmosphere:centre-enabled:
 });
 
 /** Which darkening masks the panel draws over the page. */
-export const overlays = stored('atmosphere:overlays:v1', { calm: true, centre: true });
+const OVERLAY_DEFAULTS = { calm: false, centre: false };
+export const overlays = stored('atmosphere:overlays:v1', OVERLAY_DEFAULTS);
 
 /** A field paused from the panel: its seed and clock, so the same frame comes back on reload. */
 export const frozenField = persistentAtom<{ seed: number; time: number } | undefined>(
@@ -63,7 +64,7 @@ export function resetFieldDebug() {
     calmSettings.set(CALM_DEFAULTS);
     centreSettings.set(CENTRE_DEFAULTS);
     centreEnabled.set(true);
-    overlays.set({ calm: true, centre: true });
+    overlays.set(OVERLAY_DEFAULTS);
 }
 
 /** Overlay colour for the centre darkening, apart from the calm mask's green. */
