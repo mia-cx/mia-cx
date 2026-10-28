@@ -31,7 +31,6 @@
             svg { display: block; overflow: visible; }
             .tick { stroke: #111; }
             .ticklabel { font-size: 2.47px; fill: #111; }
-            .now { stroke: #ff3d8a; stroke-dasharray: 1 1; }
             .bar-line { stroke: #111; stroke-width: 0.5; }
             .bar-tail { stroke: #111; stroke-width: 0.5; stroke-dasharray: 1 1; }
             .dot { fill: #111; }
@@ -47,8 +46,8 @@
             <fieldset>
                 <legend>Scale</legend>
                 <label><input type="radio" name="mode" value="linear" /> Linear</label>
-                <label><input type="radio" name="mode" value="log" checked /> Log: ln(1 + k·(2027 − t))</label>
-                <label><input type="radio" name="mode" value="power" /> Power: (2027 − t)<sup>p</sup></label>
+                <label><input type="radio" name="mode" value="log" checked /> Log: ln(1 + k·(now − t))</label>
+                <label><input type="radio" name="mode" value="power" /> Power: (now − t)<sup>p</sup></label>
                 <label>k <output id="kOut"></output><input id="k" type="range" min="0" max="100" value="55" /></label>
                 <label>p <output id="pOut"></output><input id="p" type="range" min="20" max="100" value="55" /></label>
             </fieldset>
@@ -56,7 +55,7 @@
                 <legend>Page</legend>
                 <label>Axis height (mm) <output id="hOut"></output><input id="h" type="range" min="80" max="200" value="130" /></label>
                 <label>Min gap between year labels (mm) <output id="gOut"></output><input id="g" type="range" min="2" max="10" step="0.5" value="4" /></label>
-                <label><input id="now" type="checkbox" checked /> Mark today (Oct 2026)</label>
+                <label>Future tail (mm) <output id="tOut"></output><input id="tail" type="range" min="0" max="30" value="10" /></label>
             </fieldset>
             <fieldset>
                 <legend>State</legend>
@@ -73,7 +72,9 @@
             </div>
         </main>
         <script>
-            const START = 2012, END = 2027, NOW = 2026 + 9 / 12;
+            const START = 2012;
+            const today = new Date();
+            const NOW = today.getFullYear() + (today.getMonth() + today.getDate() / 31) / 12; // the axis ends at present
             const ym = (y, m) => y + (m - 1) / 12;
             const entries = {
                 left: [
@@ -99,8 +100,8 @@
             function scale(H) {
                 const m = mode(), k = kOf(), p = pOf();
                 const f = m === 'linear' ? (d) => d : m === 'log' ? (d) => Math.log1p(k * d) : (d) => Math.pow(d, p);
-                const total = f(END - START);
-                return (t) => H * (1 - f(END - t) / total);
+                const total = f(NOW - START);
+                return (t) => H * (1 - f(NOW - t) / total);
             }
 
             const LABEL_H = 8.5; // mm, title + subtitle
@@ -109,7 +110,7 @@
             function lanes(list) {
                 const ends = [];
                 return list.map((e) => {
-                    const end = e.b ?? END;
+                    const end = e.b ?? NOW;
                     let i = ends.findIndex((x) => x <= e.a);
                     if (i < 0) i = ends.length;
                     ends[i] = end;
@@ -121,26 +122,27 @@
                 $('kOut').textContent = kOf().toFixed(2);
                 $('pOut').textContent = pOf().toFixed(2);
                 $('hOut').textContent = $('h').value;
-                $('gOut').textContent = $('g').value;
-                const H = +$('h').value, y = scale(H), gap = +$('g').value;
+                $("gOut").textContent = $("g").value;
+                $("tOut").textContent = $("tail").value;
+                const H = +$("h").value, y = scale(H), gap = +$("g").value, T = +$("tail").value;
                 const svg = $('tl');
-                svg.setAttribute('viewBox', `0 0 182 ${H + 10}`);
+                svg.setAttribute('viewBox', `0 0 182 ${H + T + 4}`);
                 svg.style.width = '182mm';
-                svg.style.height = `${H + 10}mm`;
+                svg.style.height = `${H + T + 4}mm`;
                 let out = '';
                 // axis
                 out += `<line class="tick" x1="${X0}" x2="${X0}" y1="0" y2="${H}" stroke-width="0.4"/>`;
+                out += `<line class="bar-tail" x1="${X0}" x2="${X0}" y1="${H}" y2="${H + T}" stroke-width="0.4"/>`;
                 let lastLabel = -Infinity;
-                for (let yr = START; yr <= END; yr++) {
+                for (let yr = START; yr <= Math.floor(NOW); yr++) {
                     const yy = y(yr);
                     out += `<line class="tick" x1="${X0 - 1.2}" x2="${X0 + 1.2}" y1="${yy}" y2="${yy}" stroke-width="0.25"/>`;
-                    const must = yr === START || yr === END;
+                    const must = yr === START;
                     if (must || (yy - lastLabel >= gap && H - yy >= gap)) {
                         out += `<text class="ticklabel" x="${X0 + 1.8}" y="${yy + 1}">${yr}</text>`;
                         lastLabel = yy;
                     }
                 }
-                if ($('now').checked) out += `<line class="now" x1="${X0 - 6}" x2="${X0 + 6}" y1="${y(NOW)}" y2="${y(NOW)}" stroke-width="0.4"/>`;
 
                 let pushes = 0;
                 for (const side of ['left', 'right']) {
@@ -150,7 +152,7 @@
                         const x = X0 + dir * (AXIS_GAP + 6 + (dir > 0 ? RIGHT_PAD : 0) + ln[i] * LANE_W);
                         const ya = y(e.a), yb = y(e.b ?? NOW);
                         out += `<line class="bar-line" x1="${x}" x2="${x}" y1="${ya}" y2="${yb}"/>`;
-                        if (e.b === null) out += `<line class="bar-tail" x1="${x}" x2="${x}" y1="${yb}" y2="${H}"/>`;
+                        if (e.b === null) out += `<line class="bar-tail" x1="${x}" x2="${x}" y1="${yb}" y2="${H + T}"/>`;
                         out += `<circle class="dot" cx="${x}" cy="${ya}" r="0.7"/>`;
                         if (e.b) out += `<circle class="dot" cx="${x}" cy="${yb}" r="0.5"/>`;
                         let ly = ya;
@@ -165,10 +167,10 @@
                 }
                 svg.innerHTML = out;
 
-                const h = (yr) => y(yr + 1) - y(yr);
-                $('stats').innerHTML = `Label pushes: <b>${pushes}</b><br>2026 is <b>${(h(2026) / h(2012)).toFixed(1)}×</b> the height of 2012`;
-                const max = h(END - 1);
-                $('years').innerHTML = Array.from({ length: END - START }, (_, i) => START + i)
+                const h = (yr) => y(Math.min(yr + 1, NOW)) - y(yr);
+                $('stats').innerHTML = `Label pushes: <b>${pushes}</b><br>2025 is <b>${(h(2025) / h(2012)).toFixed(1)}×</b> the height of 2012`;
+                const last = Math.floor(NOW), max = Math.max(...Array.from({ length: last - START + 1 }, (_, i) => h(START + i)));
+                $('years').innerHTML = Array.from({ length: last - START + 1 }, (_, i) => START + i)
                     .map((yr) => `<tr><td>${yr}</td><td><span class="bar" style="width:${(h(yr) / max) * 120}px"></span></td><td>${h(yr).toFixed(1)} mm</td></tr>`)
                     .join('');
             }
