@@ -458,10 +458,12 @@
     /* Above the field, like the face, so its light never lowers the code's contrast. */
     /* Joined like a split button: the second half shares the first's border. */
     .cv-buttons { display: flex; margin-bottom: 16px; }
-    .cv-buttons a { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 1px solid var(--panel-line); background: var(--control); color: var(--ink); font-size: 15px; text-decoration: none; transition: border-color 140ms ease, color 140ms ease; }
+    .cv-buttons a { display: inline-flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border: 1px solid var(--panel-line); background: var(--control); color: var(--ink); font-size: 15px; text-decoration: none; transition: border-color 140ms ease, color 140ms ease; }
     .cv-buttons a + a { margin-left: -1px; }
     .cv-buttons a:hover, .cv-buttons a:focus-visible { position: relative; z-index: 1; border-color: var(--accent); color: var(--accent); }
     .cv-buttons :global(svg) { font-size: 18px; }
+    /* Lucide draws at 2; 1.5 matches the weight of the button text. */
+    .cv-buttons :global(svg *) { stroke-width: 1.5; }
     .cv-buttons .icon { position: relative; justify-content: center; width: 40px; padding: 0; }
     .doc { position: relative; display: grid; }
     /* The printer sits on the document's corner, cut out of it by the button's own background. */
@@ -471,7 +473,6 @@
     .tip { position: absolute; top: calc(100% + 6px); left: 50%; translate: -50% 0; padding: 4px 8px; border: 1px solid var(--panel-line); background: var(--panel); color: var(--ink); font-size: 13px; white-space: nowrap; pointer-events: none; opacity: 0; }
     .icon:hover .tip, .icon:focus-visible .tip { opacity: 1; }
 
-    .qr { position: relative; z-index: 3; display: block; box-sizing: border-box; width: 15mm; height: 15mm; fill: #1c161a; shape-rendering: crispEdges; }
-    /* Many scanners can't read light-on-dark codes, so on dark paper the code sits on a light tile. */
-    [data-theme='colour'] .qr { background: #e9e5dd; padding: 1.2mm; }
+    /* Ink-coloured modules on bare paper: on dark paper they're light, and the paper is the quiet zone. */
+    .qr { position: relative; z-index: 3; display: block; width: 15mm; height: 15mm; fill: var(--ink); shape-rendering: crispEdges; }
 </style>
