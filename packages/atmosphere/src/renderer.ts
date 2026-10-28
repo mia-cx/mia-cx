@@ -1036,6 +1036,13 @@ export class AtmosphereRenderer {
     private observer: ResizeObserver;
     private rafId = 0;
     private simTime = 0;
+    get time() {
+        return this.simTime;
+    }
+    set time(value: number) {
+        this.simTime = value;
+        this.invalidate();
+    }
     private frameIndex = 0;
     private lastTime = performance.now();
     private statsStartedAt = this.lastTime;

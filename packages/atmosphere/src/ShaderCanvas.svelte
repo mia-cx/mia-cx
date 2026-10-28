@@ -1,3 +1,15 @@
+<script lang="ts" module>
+    import { persistentAtom } from '@nanostores/persistent';
+
+    /** A field paused from the debug panel: its seed and clock, so the same frame comes back on reload. */
+    const frozenField = persistentAtom<{ seed: number; time: number } | undefined>('atmosphere:frozen:v1', undefined, {
+        encode: JSON.stringify,
+        decode: JSON.parse,
+        // Another tab pausing has its own seed; this one keeps running.
+        listen: false,
+    });
+</script>
+
 <script lang="ts">
     /**
      * Fixed, full-viewport, transparent shader layer. Copied from the shaderdemo page and turned
@@ -65,7 +77,13 @@
     const cursorState = new CursorState();
     const cursorDensityField = new CursorDensityField();
     let densityPoints: { x: number; y: number; timeStamp: number }[] = [];
-    let paused = false;
+    let reducedMotion = false;
+    const halted = () => reducedMotion || frozenField.get() !== undefined;
+    function togglePause() {
+        if (!renderer) return;
+        frozenField.set(frozenField.get() ? undefined : { seed: options.seed, time: renderer.time });
+        renderer.setPaused(halted());
+    }
 
     /*
      * Route changes hand the dim between the scroll animation and the base opacity. A browser will
@@ -194,9 +212,10 @@
 
     onMount(() => {
         let disposed = false;
-        const pageSeed = Math.random() * 1000;
+        const frozen = frozenField.get();
+        const pageSeed = frozen?.seed ?? Math.random() * 1000;
         options = { ...BAKED_RENDER_OPTIONS, seed: pageSeed, renderScale, dprCap };
-        paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
         const calmMask = new CalmMask(calmCanvas);
         const unlistenEllipse = centreEllipse.listen((ellipse) => renderer?.setOptions(centred(options, ellipse)));
         loadBakedRenderOptions()
@@ -222,7 +241,8 @@
                     cursorDensityField.resize(rect.width, rect.height);
                     instance.setCursorDensityField(cursorDensityField.snapshot());
                 }
-                instance.setPaused(paused);
+                if (frozen) instance.time = frozen.time;
+                instance.setPaused(halted());
                 instance.onLost = (message) => {
                     ready = false;
                     failed = true;
@@ -249,7 +269,7 @@
         const animateCursor = (now: number) => {
             if (!document.hidden) {
                 const dt = Math.max(0, (now - cursorTime) / 1000);
-                if (!paused) {
+                if (!halted()) {
                     cursorState.tick(dt);
                     sendCursor();
                 }
@@ -287,7 +307,7 @@
         };
         cursorFrame = requestAnimationFrame(animateCursor);
         const visibility = () => {
-            renderer?.setPaused(document.hidden || paused);
+            renderer?.setPaused(document.hidden || halted());
             if (document.hidden) pointerLeave();
             cursorTime = performance.now();
         };
@@ -361,7 +381,13 @@
                 onchange={(event) => centreEllipse.set(event.currentTarget.checked)}
             />
         </label>
-        <button type="button" onclick={resetCalm}>Reset</button>
+        <div class="actions">
+            <button type="button" onclick={resetCalm}>Reset</button>
+            <button type="button" onclick={togglePause}>{$frozenField ? 'Play' : 'Pause'}</button>
+            {#if $frozenField}
+                <output>seed {$frozenField.seed.toFixed(2)} · t {$frozenField.time.toFixed(2)}</output>
+            {/if}
+        </div>
     </form>
 {/if}
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
@@ -466,9 +492,13 @@
         align-items: center;
         gap: 0.5rem;
     }
-    .calm-panel input[type='checkbox'],
-    .calm-panel button {
+    .calm-panel input[type='checkbox'] {
         justify-self: start;
+    }
+    .calm-panel .actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
     }
     .calm-panel output {
         text-align: end;
