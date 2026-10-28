@@ -348,10 +348,10 @@
 
         <!-- The Appendix, as /work would print it after the CV. -->
         {#each appendixSheets as items, sheet (sheet)}
-        <article class="sheet rows appendix">
+        <article class="sheet appendix">
             <div class="field"><canvas bind:this={canvases[2 + sheet]}></canvas></div>
             <section class="first">
-                <h2>{sheet === 0 ? 'Work' : ''}</h2>
+                {#if sheet === 0}<h2>Work</h2>{/if}
                 <ul>
                     {#each items as item (item.url)}
                         <li>
@@ -461,14 +461,15 @@
     .cv-buttons a { display: inline-flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border: 1px solid var(--panel-line); background: var(--control); color: var(--ink); font-size: 15px; text-decoration: none; transition: border-color 140ms ease, color 140ms ease; }
     .cv-buttons a + a { margin-left: -1px; }
     .cv-buttons a:hover, .cv-buttons a:focus-visible { position: relative; z-index: 1; border-color: var(--accent); color: var(--accent); }
-    .cv-buttons :global(svg) { font-size: 18px; }
+    /* Lucide draws in 20 of its 24 units, so a 1.2cap box makes the glyph itself 1cap tall. */
+    .cv-buttons :global(svg) { width: 1.2cap; height: 1.2cap; }
     /* Lucide draws at 2; 1.5 matches the weight of the button text. */
     .cv-buttons :global(svg *) { stroke-width: 1.5; }
     .cv-buttons .icon { position: relative; justify-content: center; width: 40px; padding: 0; }
     .doc { position: relative; display: grid; }
     /* The printer sits on the document's corner, cut out of it by the button's own background. */
-    .badge { position: absolute; right: -5px; bottom: -4px; display: grid; padding: 1px; background: var(--panel); font-size: 0.62em; line-height: 0; }
-    .badge :global(svg) { font-size: 11px; }
+    .badge { position: absolute; right: -0.3cap; bottom: -0.25cap; display: grid; padding: 1px; background: var(--panel); line-height: 0; }
+    .badge :global(svg) { width: 0.75cap; height: 0.75cap; }
     /* Instant: no delay, unlike a title tooltip. */
     .tip { position: absolute; top: calc(100% + 6px); left: 50%; translate: -50% 0; padding: 4px 8px; border: 1px solid var(--panel-line); background: var(--panel); color: var(--ink); font-size: 13px; white-space: nowrap; pointer-events: none; opacity: 0; }
     .icon:hover .tip, .icon:focus-visible .tip { opacity: 1; }
