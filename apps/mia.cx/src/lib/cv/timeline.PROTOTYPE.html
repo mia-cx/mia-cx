@@ -1,181 +1,156 @@
 <!doctype html>
-<!--
-    PROTOTYPE, throwaway. Answers one question for "Log-scale experience timeline"
-    (https://github.com/mia-cx/mia-cx/issues/81): how should the CV timeline map years to space?
-    Double-click to open. The look is not the question here; that is "CV look on paper".
--->
+<!-- PROTOTYPE, throwaway. Answers "Log-scale experience timeline" (https://github.com/mia-cx/mia-cx/issues/81): how should the CV timeline map years to space? -->
 <html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <title>PROTOTYPE · CV timeline scale</title>
-        <style>
-            * { box-sizing: border-box; }
-            body { margin: 0; display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; font: 13px/1.4 system-ui, sans-serif; background: #2a2a2e; color: #eee; }
-            aside { padding: 16px; border-right: 1px solid #444; position: sticky; top: 0; height: 100vh; overflow: auto; }
-            aside h1 { font-size: 14px; margin: 0 0 12px; }
-            fieldset { border: 1px solid #444; margin: 0 0 12px; padding: 8px 10px; }
-            legend { color: #aaa; }
-            label { display: block; margin: 4px 0; }
-            input[type='range'] { width: 100%; }
-            output { float: right; font-variant-numeric: tabular-nums; color: #ff3d8a; }
-            table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-            td { padding: 1px 4px; border-bottom: 1px solid #383838; }
-            td:last-child { text-align: right; }
-            .bar { display: inline-block; height: 8px; background: #ff3d8a; vertical-align: middle; }
-            main { padding: 24px; overflow: auto; }
-            .paper { width: 210mm; background: #fff; color: #111; padding: 12mm 14mm; margin: 0 auto; box-shadow: 0 4px 30px #0008; }
-            .paper h2 { font-size: 20pt; margin: 0 0 6mm; }
-            .heads { display: grid; grid-template-columns: 1fr 1fr; font-weight: 700; font-size: 12pt; margin-bottom: 3mm; }
-            .heads span:first-child { text-align: right; padding-right: 14mm; }
-            .heads span:last-child { padding-left: 14mm; }
-            svg { display: block; overflow: visible; }
-            .tick { stroke: #111; }
-            .ticklabel { font-size: 2.47px; fill: #111; }
-            .bar-line { stroke: #111; stroke-width: 0.5; }
-            .bar-tail { stroke: #111; stroke-width: 0.5; stroke-dasharray: 1 1; }
-            .dot { fill: #111; }
-            .t { font-size: 3.2px; font-weight: 700; fill: #111; }
-            .s { font-size: 2.3px; fill: #444; }
-            .leader { stroke: #999; stroke-width: 0.2; }
-            .note { color: #aaa; font-size: 12px; }
-        </style>
-    </head>
-    <body>
-        <aside>
-            <h1>PROTOTYPE · timeline scale</h1>
-            <fieldset>
-                <legend>Scale</legend>
-                <label><input type="radio" name="mode" value="linear" /> Linear</label>
-                <label><input type="radio" name="mode" value="log" checked /> Log: ln(1 + k·(now − t))</label>
-                <label><input type="radio" name="mode" value="power" /> Power: (now − t)<sup>p</sup></label>
-                <label>k <output id="kOut"></output><input id="k" type="range" min="0" max="100" value="55" /></label>
-                <label>p <output id="pOut"></output><input id="p" type="range" min="20" max="100" value="55" /></label>
-            </fieldset>
-            <fieldset>
-                <legend>Page</legend>
-                <label>Axis height (mm) <output id="hOut"></output><input id="h" type="range" min="80" max="200" value="130" /></label>
-                <label>Min gap between year labels (mm) <output id="gOut"></output><input id="g" type="range" min="2" max="10" step="0.5" value="4" /></label>
-                <label>Future tail (mm) <output id="tOut"></output><input id="tail" type="range" min="0" max="30" value="10" /></label>
-            </fieldset>
-            <fieldset>
-                <legend>State</legend>
-                <div id="stats"></div>
-                <table id="years"></table>
-            </fieldset>
-            <p class="note">Labels that would overlap get pushed down and joined to their start with a grey leader line. Fewer pushes means the scale gives crowded years enough room.</p>
-        </aside>
-        <main>
-            <div class="paper">
-                <h2>Experience</h2>
-                <div class="heads"><span>Work &amp; education</span><span>Creative</span></div>
-                <svg id="tl"></svg>
-            </div>
-        </main>
-        <script>
-            const START = 2012;
-            const today = new Date();
-            const NOW = today.getFullYear() + (today.getMonth() + today.getDate() / 31) / 12; // the axis ends at present
-            const ym = (y, m) => y + (m - 1) / 12;
-            const entries = {
-                left: [
-                    { t: 'VWO', s: 'Dorenweerd College · Sep 2012 – Jul 2019', a: ym(2012, 9), b: ym(2019, 7) },
-                    { t: 'Grocery Clerk', s: 'Albert Heijn · Sep 2016 – Mar 2020', a: ym(2016, 9), b: ym(2020, 3) },
-                    { t: 'Music & Technology', s: 'HKU · Sep 2020 – Jul 2023', a: ym(2020, 9), b: ym(2023, 7) },
-                    { t: 'Call Agent', s: 'GGD Coronalijn · Feb – Jul 2022', a: ym(2022, 2), b: ym(2022, 7) },
-                    { t: 'Customer Care Agent', s: 'ABN AMRO · Nov 2023 – Jul 2025', a: ym(2023, 11), b: ym(2025, 7) },
-                    { t: 'Junior Support Consultant', s: 'Humaris · Sep 2026 – present', a: ym(2026, 9), b: null },
-                ],
-                right: [
-                    { t: 'Music', s: 'Apr 2012', a: ym(2012, 4), b: null },
-                    { t: 'Sound engineering', s: 'Nov 2016', a: ym(2016, 11), b: null },
-                    { t: 'Design & development', s: 'May 2018', a: ym(2018, 5), b: null },
-                    { t: 'Founder, mia.cx', s: 'Jul 2021', a: ym(2021, 7), b: null },
-                ],
-            };
-            const $ = (id) => document.getElementById(id);
-            const kOf = () => 0.02 * Math.pow(250, $('k').value / 100); // 0.02 … 5
-            const pOf = () => $('p').value / 100;
-            const mode = () => document.querySelector('input[name=mode]:checked').value;
+<head>
+<meta charset="utf-8" />
+<title>PROTOTYPE · CV timeline scale</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font: 13px/1.4 var(--font-sans, system-ui, sans-serif); }
+.controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 16px; margin-bottom: 12px; }
+.controls label { display: block; }
+.controls .radios { grid-column: 1 / -1; display: flex; gap: 16px; }
+.controls .radios label { display: inline-flex; gap: 4px; align-items: center; }
+input[type='range'] { width: 100%; }
+output { float: right; font-variant-numeric: tabular-nums; color: var(--primary, #ff3d8a); }
+.stats { margin-bottom: 8px; color: var(--muted-foreground, #aaa); }
+.stats b { color: var(--foreground, #eee); }
+.years { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px 12px; font-variant-numeric: tabular-nums; font-size: 11px; margin-bottom: 12px; color: var(--muted-foreground, #aaa); }
+.paper { background: #fff; color: #111; padding: 16px; border-radius: var(--radius, 6px); }
+.paper h2 { font-size: 20px; margin: 0 0 10px; color: #111; }
+.heads { display: grid; grid-template-columns: 1fr 1fr; font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+.heads span:first-child { text-align: right; padding-right: 9%; }
+.heads span:last-child { padding-left: 9%; }
+svg { display: block; width: 100%; height: auto; }
+.tick { stroke: #111; }
+.ticklabel { font-size: 2.47px; fill: #111; }
+.bar-line { stroke: #111; stroke-width: 0.5; }
+.bar-tail { stroke: #111; stroke-width: 0.5; stroke-dasharray: 1 1; }
+.dot { fill: #111; }
+.t { font-size: 3.2px; font-weight: 700; fill: #111; }
+.s { font-size: 2.3px; fill: #444; }
+.leader { stroke: #999; stroke-width: 0.2; }
+</style>
+</head>
+<body>
+<div class="controls">
+  <div class="radios">
+    <label><input type="radio" name="mode" value="linear" /> Linear</label>
+    <label><input type="radio" name="mode" value="log" checked /> Log: ln(1 + k·(now − t))</label>
+    <label><input type="radio" name="mode" value="power" /> Power: (now − t)<sup>p</sup></label>
+  </div>
+  <label>k <output id="kOut"></output><input id="k" type="range" min="0" max="100" value="55" /></label>
+  <label>p <output id="pOut"></output><input id="p" type="range" min="20" max="100" value="55" /></label>
+  <label>Axis height (mm) <output id="hOut"></output><input id="h" type="range" min="80" max="200" value="130" /></label>
+  <label>Year label gap (mm) <output id="gOut"></output><input id="g" type="range" min="2" max="10" step="0.5" value="4" /></label>
+  <label>Future tail (mm) <output id="tOut"></output><input id="tail" type="range" min="0" max="30" value="10" /></label>
+</div>
+<div class="stats" id="stats"></div>
+<div class="years" id="years"></div>
+<div class="paper">
+  <h2>Experience</h2>
+  <div class="heads"><span>Work &amp; education</span><span>Creative</span></div>
+  <svg id="tl"></svg>
+</div>
+<script>
+const START = 2012;
+const today = new Date();
+const NOW = today.getFullYear() + (today.getMonth() + today.getDate() / 31) / 12; // the axis ends at present
+const ym = (y, m) => y + (m - 1) / 12;
+const entries = {
+  left: [
+    { t: 'VWO', s: 'Dorenweerd College · Sep 2012 – Jul 2019', a: ym(2012, 9), b: ym(2019, 7) },
+    { t: 'Grocery Clerk', s: 'Albert Heijn · Sep 2016 – Mar 2020', a: ym(2016, 9), b: ym(2020, 3) },
+    { t: 'Music & Technology', s: 'HKU · Sep 2020 – Jul 2023', a: ym(2020, 9), b: ym(2023, 7) },
+    { t: 'Call Agent', s: 'GGD Coronalijn · Feb – Jul 2022', a: ym(2022, 2), b: ym(2022, 7) },
+    { t: 'Customer Care Agent', s: 'ABN AMRO · Nov 2023 – Jul 2025', a: ym(2023, 11), b: ym(2025, 7) },
+    { t: 'Junior Support Consultant', s: 'Humaris · Sep 2026 – present', a: ym(2026, 9), b: null },
+  ],
+  right: [
+    { t: 'Music', s: 'Apr 2012', a: ym(2012, 4), b: null },
+    { t: 'Sound engineering', s: 'Nov 2016', a: ym(2016, 11), b: null },
+    { t: 'Design & development', s: 'May 2018', a: ym(2018, 5), b: null },
+    { t: 'Founder, mia.cx', s: 'Jul 2021', a: ym(2021, 7), b: null },
+  ],
+};
+const $ = (id) => document.getElementById(id);
+const kOf = () => 0.02 * Math.pow(250, $('k').value / 100); // 0.02 … 5
+const pOf = () => $('p').value / 100;
+const mode = () => document.querySelector('input[name=mode]:checked').value;
 
-            function scale(H) {
-                const m = mode(), k = kOf(), p = pOf();
-                const f = m === 'linear' ? (d) => d : m === 'log' ? (d) => Math.log1p(k * d) : (d) => Math.pow(d, p);
-                const total = f(NOW - START);
-                return (t) => H * (1 - f(NOW - t) / total);
-            }
+function scale(H) {
+  const m = mode(), k = kOf(), p = pOf();
+  const f = m === 'linear' ? (d) => d : m === 'log' ? (d) => Math.log1p(k * d) : (d) => Math.pow(d, p);
+  const total = f(NOW - START);
+  return (t) => H * (1 - f(NOW - t) / total);
+}
 
-            const LABEL_H = 8.5; // mm, title + subtitle
-            const AXIS_GAP = 3, RIGHT_PAD = 7, LANE_W = 2.2, X0 = 105 - 14; // centre of the 182mm content box
+const LABEL_H = 8.5; // mm, title + subtitle
+const AXIS_GAP = 3, RIGHT_PAD = 7, LANE_W = 2.2, X0 = 91; // centre of the 182mm content box
 
-            function lanes(list) {
-                const ends = [];
-                return list.map((e) => {
-                    const end = e.b ?? NOW;
-                    let i = ends.findIndex((x) => x <= e.a);
-                    if (i < 0) i = ends.length;
-                    ends[i] = end;
-                    return i;
-                });
-            }
+function lanes(list) {
+  const ends = [];
+  return list.map((e) => {
+    const end = e.b ?? NOW;
+    let i = ends.findIndex((x) => x <= e.a);
+    if (i < 0) i = ends.length;
+    ends[i] = end;
+    return i;
+  });
+}
 
-            function render() {
-                $('kOut').textContent = kOf().toFixed(2);
-                $('pOut').textContent = pOf().toFixed(2);
-                $('hOut').textContent = $('h').value;
-                $("gOut").textContent = $("g").value;
-                $("tOut").textContent = $("tail").value;
-                const H = +$("h").value, y = scale(H), gap = +$("g").value, T = +$("tail").value;
-                const svg = $('tl');
-                svg.setAttribute('viewBox', `0 0 182 ${H + T + 4}`);
-                svg.style.width = '182mm';
-                svg.style.height = `${H + T + 4}mm`;
-                let out = '';
-                // axis
-                out += `<line class="tick" x1="${X0}" x2="${X0}" y1="0" y2="${H}" stroke-width="0.4"/>`;
-                out += `<line class="bar-tail" x1="${X0}" x2="${X0}" y1="${H}" y2="${H + T}" stroke-width="0.4"/>`;
-                let lastLabel = -Infinity;
-                for (let yr = START; yr <= Math.floor(NOW); yr++) {
-                    const yy = y(yr);
-                    out += `<line class="tick" x1="${X0 - 1.2}" x2="${X0 + 1.2}" y1="${yy}" y2="${yy}" stroke-width="0.25"/>`;
-                    const must = yr === START;
-                    if (must || (yy - lastLabel >= gap && H - yy >= gap)) {
-                        out += `<text class="ticklabel" x="${X0 + 1.8}" y="${yy + 1}">${yr}</text>`;
-                        lastLabel = yy;
-                    }
-                }
+function render() {
+  $('kOut').textContent = kOf().toFixed(2);
+  $('pOut').textContent = pOf().toFixed(2);
+  $('hOut').textContent = $('h').value;
+  $('gOut').textContent = $('g').value;
+  $('tOut').textContent = $('tail').value;
+  const H = +$('h').value, y = scale(H), gap = +$('g').value, T = +$('tail').value;
+  $('tl').setAttribute('viewBox', `0 -3 182 ${H + T + 7}`);
+  let out = `<line class="tick" x1="${X0}" x2="${X0}" y1="0" y2="${H}" stroke-width="0.4"/>`;
+  out += `<line class="bar-tail" x1="${X0}" x2="${X0}" y1="${H}" y2="${H + T}" stroke-width="0.4"/>`;
+  let lastLabel = -Infinity;
+  for (let yr = START; yr <= Math.floor(NOW); yr++) {
+    const yy = y(yr);
+    out += `<line class="tick" x1="${X0 - 1.2}" x2="${X0 + 1.2}" y1="${yy}" y2="${yy}" stroke-width="0.25"/>`;
+    if (yr === START || (yy - lastLabel >= gap && H - yy >= gap)) {
+      out += `<text class="ticklabel" x="${X0 + 1.8}" y="${yy + 1}">${yr}</text>`;
+      lastLabel = yy;
+    }
+  }
+  let pushes = 0;
+  for (const side of ['left', 'right']) {
+    const list = entries[side], ln = lanes(list), dir = side === 'left' ? -1 : 1;
+    const base = AXIS_GAP + 6 + (dir > 0 ? RIGHT_PAD : 0);
+    let floor = -Infinity;
+    list.forEach((e, i) => {
+      const x = X0 + dir * (base + ln[i] * LANE_W);
+      const ya = y(e.a), yb = y(e.b ?? NOW);
+      out += `<line class="bar-line" x1="${x}" x2="${x}" y1="${ya}" y2="${yb}"/>`;
+      if (e.b === null) out += `<line class="bar-tail" x1="${x}" x2="${x}" y1="${yb}" y2="${H + T}"/>`;
+      out += `<circle class="dot" cx="${x}" cy="${ya}" r="0.7"/>`;
+      if (e.b) out += `<circle class="dot" cx="${x}" cy="${yb}" r="0.5"/>`;
+      let ly = ya;
+      if (ly < floor) { ly = floor; pushes++; }
+      floor = ly + LABEL_H;
+      const lx = X0 + dir * (base + (Math.max(...ln) + 1) * LANE_W + 2);
+      const anchor = side === 'left' ? 'end' : 'start';
+      if (ly !== ya) out += `<line class="leader" x1="${x}" x2="${lx}" y1="${ya}" y2="${ly + 2.5}"/>`;
+      out += `<text class="t" x="${lx}" y="${ly + 3}" text-anchor="${anchor}">${e.t}</text>`;
+      out += `<text class="s" x="${lx}" y="${ly + 6.2}" text-anchor="${anchor}">${e.s}</text>`;
+    });
+  }
+  $('tl').innerHTML = out;
 
-                let pushes = 0;
-                for (const side of ['left', 'right']) {
-                    const list = entries[side], ln = lanes(list), dir = side === 'left' ? -1 : 1;
-                    let floor = -Infinity;
-                    list.forEach((e, i) => {
-                        const x = X0 + dir * (AXIS_GAP + 6 + (dir > 0 ? RIGHT_PAD : 0) + ln[i] * LANE_W);
-                        const ya = y(e.a), yb = y(e.b ?? NOW);
-                        out += `<line class="bar-line" x1="${x}" x2="${x}" y1="${ya}" y2="${yb}"/>`;
-                        if (e.b === null) out += `<line class="bar-tail" x1="${x}" x2="${x}" y1="${yb}" y2="${H + T}"/>`;
-                        out += `<circle class="dot" cx="${x}" cy="${ya}" r="0.7"/>`;
-                        if (e.b) out += `<circle class="dot" cx="${x}" cy="${yb}" r="0.5"/>`;
-                        let ly = ya;
-                        if (ly < floor) { ly = floor; pushes++; }
-                        floor = ly + LABEL_H;
-                        const lx = X0 + dir * (AXIS_GAP + 6 + (dir > 0 ? RIGHT_PAD : 0) + (Math.max(...ln) + 1) * LANE_W + 2);
-                        const anchor = side === 'left' ? 'end' : 'start';
-                        if (ly !== ya) out += `<line class="leader" x1="${x}" x2="${lx}" y1="${ya}" y2="${ly + 2.5}"/>`;
-                        out += `<text class="t" x="${lx}" y="${ly + 3}" text-anchor="${anchor}">${e.t}</text>`;
-                        out += `<text class="s" x="${lx}" y="${ly + 6.2}" text-anchor="${anchor}">${e.s}</text>`;
-                    });
-                }
-                svg.innerHTML = out;
-
-                const h = (yr) => y(Math.min(yr + 1, NOW)) - y(yr);
-                $('stats').innerHTML = `Label pushes: <b>${pushes}</b><br>2025 is <b>${(h(2025) / h(2012)).toFixed(1)}×</b> the height of 2012`;
-                const last = Math.floor(NOW), max = Math.max(...Array.from({ length: last - START + 1 }, (_, i) => h(START + i)));
-                $('years').innerHTML = Array.from({ length: last - START + 1 }, (_, i) => START + i)
-                    .map((yr) => `<tr><td>${yr}</td><td><span class="bar" style="width:${(h(yr) / max) * 120}px"></span></td><td>${h(yr).toFixed(1)} mm</td></tr>`)
-                    .join('');
-            }
-            document.querySelectorAll('input').forEach((i) => i.addEventListener('input', render));
-            render();
-        </script>
-    </body>
+  const h = (yr) => y(Math.min(yr + 1, NOW)) - y(yr);
+  const last = Math.floor(NOW);
+  $('stats').innerHTML = `Label pushes: <b>${pushes}</b> · 2025 gets <b>${(h(2025) / h(2012)).toFixed(1)}×</b> the room of 2012`;
+  $('years').innerHTML = Array.from({ length: last - START + 1 }, (_, i) => START + i)
+    .map((yr) => `<span>${yr}: <b>${h(yr).toFixed(1)}</b> mm${yr === last ? ' (so far)' : ''}</span>`)
+    .join('');
+}
+document.querySelectorAll('input').forEach((i) => i.addEventListener('input', render));
+render();
+</script>
+</body>
 </html>
