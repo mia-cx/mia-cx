@@ -1,7 +1,8 @@
 <!--
     Swaps print-only content in for the page. On screen the content never shows; in print it is all
-    that shows, unless the page is an Article, which prints itself and gets no print content at all.
-    Render it once, in the root layout, outside <main>, so tools that read <main> never see it.
+    that shows, unless the page is an Article, which prints its own <main> on white paper instead,
+    over the optional `paper`. Render it once, in the root layout, outside <main>, so tools that read
+    <main> never see it.
 -->
 <script lang="ts">
     import type { Snippet } from 'svelte';
@@ -12,9 +13,13 @@
         article = false,
         /** What prints instead of the page, such as a CV followed by an Appendix. */
         children,
-    }: { article?: boolean; children: Snippet } = $props();
+        /** Drawn under a printed Article, such as a field; position it behind <main>. */
+        paper,
+    }: { article?: boolean; children: Snippet; paper?: Snippet } = $props();
 </script>
 
-{#if !article}
+{#if article}
+    <div data-print-paper>{@render paper?.()}</div>
+{:else}
     <div data-print>{@render children()}</div>
 {/if}

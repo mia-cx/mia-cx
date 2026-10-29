@@ -1,20 +1,18 @@
 /*
  * Base print rules, loaded by PrintSwitch. The swap is pure CSS: no JS, so it works for Cmd+P,
  * the browser menu and headless PDF rendering alike.
+ *
+ * Every page is A4 and edge to edge, so a printed field or paper can reach the paper's edge. An
+ * Article gets its margins as padding on <main> instead, repeated on every page it runs across.
  */
 
 @page {
     size: A4;
-    margin: 18mm 20mm;
-}
-
-/* A sheet is one whole printed page, drawn edge to edge, so its page has no margin. */
-@page sheet {
     margin: 0;
 }
 
+/* A sheet is one whole printed page. */
 [data-print-sheet] {
-    page: sheet;
     position: relative;
     width: 210mm;
     height: 297mm;
@@ -28,7 +26,8 @@
 }
 
 @media screen {
-    [data-print] {
+    [data-print],
+    [data-print-paper] {
         display: none;
     }
 }
@@ -39,9 +38,40 @@
         display: none !important;
     }
 
-    /* A screen-sized minimum height would add a blank page after the last sheet. */
-    :root:has([data-print]),
-    :root:has([data-print]) body {
+    /* An Article prints its <main> on its paper, and nothing else: no site header, footer or nav. */
+    body:has([data-print-paper]) :not(main, main *, :has(main), [data-print-paper], [data-print-paper] *) {
+        display: none !important;
+    }
+
+    /* A screen-sized minimum height would add a blank page after the last one. */
+    :root:has([data-print], [data-print-paper]),
+    :root:has([data-print], [data-print-paper]) body {
         min-height: 0;
+    }
+
+    /* Articles: ink on white paper, whatever the site's own colours are. */
+    :root:has([data-print-paper]) {
+        background: #fff;
+        print-color-adjust: exact;
+    }
+    :root:has([data-print-paper]) main {
+        width: auto;
+        max-width: none;
+        margin: 0;
+        padding: 18mm 20mm;
+        /* Each page the Article runs onto gets the same margins. */
+        box-decoration-break: clone;
+    }
+    :root:has([data-print-paper]) main,
+    :root:has([data-print-paper]) main * {
+        color: #1c161a !important;
+        background-color: transparent !important;
+        text-shadow: none !important;
+    }
+    /* Paper can't follow a link, so external ones carry their address. */
+    :root:has([data-print-paper]) main a[href^='http']::after {
+        content: ' (' attr(href) ')';
+        font-size: 0.85em;
+        overflow-wrap: anywhere;
     }
 }
