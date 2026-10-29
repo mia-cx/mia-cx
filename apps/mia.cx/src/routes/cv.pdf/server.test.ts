@@ -130,11 +130,15 @@ describe('/cv.pdf', () => {
         expect(browser.state.launches).toBe(2);
     });
 
-    test('hands the browser to waitUntil before the first render, so leaving mid-render still closes it', async () => {
+    test('closes the browser within Cloudflare’s 30 seconds even if the visitor leaves mid-render', async () => {
+        vi.useFakeTimers();
         browser.state.loads = 0;
         void request('?theme=print');
-        await vi.waitFor(() => expect(browser.state.opened).toHaveLength(1));
+        await vi.advanceTimersByTimeAsync(0);
+        // The visitor leaves now: only waitUntil work goes on.
         expect(background).toHaveLength(1);
+        await vi.advanceTimersByTimeAsync(29_000);
+        expect(browser.state.browsersOpen).toBe(0);
     });
 
     test('prints the default CV when the preset read fails, as /cv shows', async () => {

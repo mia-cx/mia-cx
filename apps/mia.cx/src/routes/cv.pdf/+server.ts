@@ -15,10 +15,11 @@ const RETRY_AFTER = 20;
 const OUT_OF_TIME = /time limit exceeded/i;
 const THEMES: Theme[] = ['colour', 'print'];
 /**
- * How long the other Theme gets after the response. Cloudflare cancels `waitUntil` work after 30
- * seconds; this leaves time to close the browser, which would otherwise bill until it idles out.
+ * How long a browser lives, from launch. Cloudflare cancels `waitUntil` work 30 seconds after the
+ * visitor leaves, at the earliest the moment it launches; this leaves time to close the browser,
+ * which would otherwise bill until it idles out. A render that hasn't finished by then fails.
  */
-const BACKGROUND_DEADLINE = 25_000;
+const BROWSER_LIFETIME = 25_000;
 
 /**
  * `/cv.pdf?theme=colour|print&role=<key>`: /cv with the same query, printed by Browser Rendering to an
@@ -93,12 +94,9 @@ export const GET: RequestHandler = async ({ url, platform }) => {
     };
     // Everything the browser does is held by waitUntil, so it still closes if the visitor leaves mid-render.
     const first = render(theme);
-    const rest = first.then(() => {
-        const printed = printOther().catch((cause: unknown) => console.error(`/cv.pdf ${other}:`, cause));
-        const deadline = new Promise((resolve) => setTimeout(resolve, BACKGROUND_DEADLINE));
-        return Promise.race([printed, deadline]);
-    });
+    const printed = first.then(() => printOther().catch((cause: unknown) => console.error(`/cv.pdf ${other}:`, cause)));
+    const lifetime = new Promise((resolve) => setTimeout(resolve, BROWSER_LIFETIME));
     // A failed first render is thrown to the visitor below, so here it only has to close the browser.
-    ctx.waitUntil(rest.catch(() => {}).finally(() => browser.close()));
+    ctx.waitUntil(Promise.race([printed.catch(() => {}), lifetime]).finally(() => browser.close()));
     return new Response(await first, { headers });
 };
