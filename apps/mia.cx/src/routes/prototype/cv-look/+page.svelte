@@ -17,26 +17,44 @@
 
     type Theme = 'colour' | 'print';
     let theme = $state<Theme>('colour');
-    /** How the field meets white paper: its flares over the page, or as ink multiplied into it. */
-    let light = $state<'flares' | 'ink'>('ink');
-    const ink = $state({ falloff: 1, saturate: 1 });
-    /** The CV buttons' icon box, in cap heights of the button text. */
-    let icon = $state(1.5);
+    /** The values settled in the PRD; Reset returns every control to them. */
+    const LANDED = {
+        /** How the field meets white paper: its flares over the page, or as ink multiplied into it. */
+        light: 'ink' as 'flares' | 'ink',
+        ink: { falloff: 1, saturate: 1 },
+        /** The CV buttons' icon box, in cap heights of the button text. */
+        icon: 1.5,
+        /** Share of the field's light the calm mask takes away behind text and images. */
+        calm: 0.2,
+        /** Page 1 has its own still; page 2 stands for every page after it. */
+        field: [
+            { seed: 93.8, time: 56.25 },
+            { seed: 91.3, time: 32.65 },
+        ],
+        p: {
+            ...{ right: 5, top: 20.5, width: 78, rx: 58, ry: 34, cx: 50, cy: 16, start: 0.45, curve: 2.8 },
+            // The face, kept clear of the field as on the home hero: a feathered ellipse, in shares of the photo.
+            ...{ faceX: 50, faceY: 12, faceRx: 34, faceRy: 20, faceSolid: 55 },
+        },
+    };
+    const landed = () => structuredClone(LANDED);
+    let light = $state(LANDED.light);
+    const ink = $state(landed().ink);
+    let icon = $state(LANDED.icon);
+    let calmStrength = $state(LANDED.calm);
+    const field = $state(landed().field);
+    const p = $state(landed().p);
+    const reset = () => {
+        const next = landed();
+        ({ light, icon, calm: calmStrength } = next);
+        Object.assign(ink, next.ink);
+        next.field.forEach((page, i) => Object.assign(field[i], page));
+        Object.assign(p, next.p);
+    };
 
-    /** Page 1 has its own still; page 2 stands for every page after it. */
-    const field = $state([
-        { seed: 93.8, time: 56.25 },
-        { seed: 91.3, time: 32.65 },
-    ]);
     const canvases: HTMLCanvasElement[] = [];
     let renderers = $state<(RenderBackend | undefined)[]>([]);
     let base = BAKED_RENDER_OPTIONS;
-
-    const p = $state({
-        ...{ right: 5, top: 20.5, width: 78, rx: 58, ry: 34, cx: 50, cy: 16, start: 0.45, curve: 2.8 },
-        // The face, kept clear of the field as on the home hero: a feathered ellipse, in shares of the photo.
-        ...{ faceX: 50, faceY: 12, faceRx: 34, faceRy: 20, faceSolid: 55 },
-    });
 
     /** An elliptical mask whose fade starts flat and eases out, (1 − u²)^curve, so it has no hard edge. */
     const mask = $derived.by(() => {
@@ -98,6 +116,7 @@
         let frame = 0;
         const tick = () => {
             calm.forEach((mask, i) => {
+                mask.strength = calmStrength;
                 if (mask.update(canvases[i].getBoundingClientRect())) renderers[i]?.setCalmMask(mask.canvas);
             });
             frame = requestAnimationFrame(tick);
@@ -133,7 +152,7 @@
         });
     });
 
-    const values = $derived(JSON.stringify({ pages: field, portrait: p, light, ink, icon }));
+    const values = $derived(JSON.stringify({ pages: field, portrait: p, light, ink, icon, calm: calmStrength }));
 
     // The timeline: ln(1 + k·(now − t)), k = 2, ending at the present with a dashed tail.
     const START = 2012, K = 2, H = 92, T = 7, W = 182, X0 = W / 2;
@@ -215,6 +234,7 @@
 <div class="proto" data-theme={theme} data-light={light}>
     <aside>
         <h1>PROTOTYPE · CV look</h1>
+        <button onclick={reset}>Reset to landed values</button>
         <!-- The CV buttons for home and the footer: Colour with a label, Print as an icon with an instant tooltip. -->
         <div class="cv-buttons" style:--icon={icon}>
             <a href="/cv.pdf?theme=colour" download><span class="label">Download CV</span> <FileText aria-hidden="true" /></a>
@@ -250,6 +270,11 @@
                 <input type="range" min="0" max="300" step="0.05" bind:value={page.time} />
             </fieldset>
         {/each}
+        <fieldset>
+            <legend>Dimming behind content</legend>
+            <label>Strength <output>{calmStrength}</output></label>
+            <input type="range" min="0" max="1" step="0.01" bind:value={calmStrength} />
+        </fieldset>
         <fieldset>
             <legend>Portrait</legend>
             {#each portraitControls as [key, label, min, max, step] (key)}

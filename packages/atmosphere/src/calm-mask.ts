@@ -132,6 +132,8 @@ export class CalmMask {
     private viewportSize = '';
     /** The mask itself, for the renderer to upload. It is never attached to the page. */
     readonly canvas = document.createElement('canvas');
+    /** Share of the field's light taken away at the core. PROTOTYPE: settable for the CV look sliders. */
+    strength = STRENGTH;
 
     constructor(private readonly root: Element = document.body) {
         this.context = canvas2d(this.canvas);
@@ -175,7 +177,7 @@ export class CalmMask {
         place(this.view, -viewport.left, -viewport.top, viewport, reach, shapes);
         place(this.measure(this.sources.sticky, 0, 0), -viewport.left, -viewport.top, viewport, reach, shapes);
         const images = shapes.cutouts.map(({ image, box, clip }) => `${image.currentSrc}:${box}:${clip}`);
-        const signature = `${width}x${height}:${shapes.boxes}:${images}`;
+        const signature = `${this.strength}:${width}x${height}:${shapes.boxes}:${images}`;
         if (signature === this.signature) return false;
         this.signature = signature;
         this.draw(shapes.boxes, shapes.cutouts, width, height);
@@ -339,7 +341,7 @@ export class CalmMask {
         // Scale the union to the strength: keeping the destination by a translucent fill multiplies its alpha.
         context.save();
         context.globalCompositeOperation = 'destination-in';
-        context.fillStyle = `rgb(0 0 0 / ${STRENGTH})`;
+        context.fillStyle = `rgb(0 0 0 / ${this.strength})`;
         context.fillRect(0, 0, width, height);
         context.restore();
     }
