@@ -5,16 +5,28 @@
 <script lang="ts">
     import type { Snippet } from 'svelte';
     import { cv } from './content';
+    import portrait from './stills/portrait.webp';
+    import faceColour from './stills/face-colour.webp';
+    import facePrint from './stills/face-print.webp';
+    import Sheet, { type Theme } from './Sheet.svelte';
     import Timeline from './Timeline.svelte';
 
     let {
-        /** Drawn in each sheet behind its content; `page` counts from 1. The stills bake draws a live field here. */
+        /** Colour puts the field on dark paper; Print multiplies it into white paper. */
+        theme = 'print',
+        /** Replaces each sheet's baked field; the stills bake draws a live one here. */
         field,
-    }: { field?: Snippet<[page: number]> } = $props();
+    }: { theme?: Theme; field?: Snippet<[page: number]> } = $props();
+
+    /** The face, kept clear of the field: Colour's copy carries the field's haze, Print's is bare. */
+    const face = { colour: faceColour, print: facePrint };
 </script>
 
-<article class="sheet" data-print-sheet>
-    {@render field?.(1)}
+<Sheet page={1} {theme} {field}>
+    <!-- Both layers come faded from the bake (pnpm cv-stills); the face copy sits above the field. -->
+    <img class="portrait" src={portrait} alt="Portrait of {cv.name}" />
+    <img class="portrait face" src={face[theme]} alt="" data-atmosphere-calm="off" />
+
     <header>
         <h1>{cv.name}</h1>
         <p class="title">{cv.title}</p>
@@ -26,7 +38,7 @@
         </ul>
     </header>
 
-    <section>
+    <section class="profile">
         <h2>Profile</h2>
         <p>{cv.profile}</p>
     </section>
@@ -40,7 +52,7 @@
         <div>
             <section>
                 <h2>Skills</h2>
-                <dl class="stacked">
+                <dl class="skills">
                     {#each cv.skills as { area, items } (area)}
                         <dt>{area}</dt>
                         <dd>{items}</dd>
@@ -50,7 +62,7 @@
 
             <section>
                 <h2>Languages</h2>
-                <dl>
+                <dl class="languages">
                     {#each cv.languages as { language, level } (language)}
                         <dt>{language}</dt>
                         <dd>{level}</dd>
@@ -59,34 +71,37 @@
             </section>
         </div>
     </div>
-</article>
+</Sheet>
 
-<article class="sheet" data-print-sheet>
-    {@render field?.(2)}
+<Sheet page={2} {theme} {field} layout="rows">
     <section>
         <h2>About</h2>
-        {#each cv.about as paragraph (paragraph)}
-            <p>{paragraph}</p>
-        {/each}
+        <div>
+            {#each cv.about as paragraph (paragraph)}
+                <p>{paragraph}</p>
+            {/each}
+        </div>
     </section>
 
     <section>
         <h2>Experience</h2>
-        {#each cv.experience as role (role.title + role.company)}
-            <div class="entry">
-                <h3>{role.title} <span>· {role.company} · {role.dates}</span></h3>
-                <p>{role.description}</p>
-            </div>
-        {/each}
+        <div>
+            {#each cv.experience as role (role.title + role.company)}
+                <div class="entry">
+                    <h3>{role.title} <span>· {role.company} · {role.dates}</span></h3>
+                    <p>{role.description}</p>
+                </div>
+            {/each}
+        </div>
     </section>
 
     <section>
         <h2>Selected work</h2>
-        <ul>
+        <ul class="work">
             {#each cv.work as { name, description, link } (name)}
                 <li>
                     <b>{name}</b>: {description}
-                    {#if link}<a href={link.href}>{link.label}</a>{/if}
+                    {#if link}<a class="url" href={link.href}>{link.label}</a>{/if}
                 </li>
             {/each}
         </ul>
@@ -94,88 +109,110 @@
 
     <section>
         <h2>Education</h2>
-        {#each cv.education as { title, school, dates, note } (title)}
-            <h3>{title} <span>· {school} · {dates}{note ? ` · ${note}` : ''}</span></h3>
-        {/each}
+        <div>
+            {#each cv.education as { title, school, dates, note } (title)}
+                <div class="entry">
+                    <h3>{title} <span>· {school} · {dates}{note ? ` · ${note}` : ''}</span></h3>
+                </div>
+            {/each}
+        </div>
     </section>
-</article>
+</Sheet>
 
 <style>
-    .sheet {
+    .portrait {
+        position: absolute;
+        top: 20.5mm;
+        right: 5mm;
+        width: 78mm;
+    }
+    .face {
+        z-index: 3;
+    }
+
+    header {
         display: flex;
         flex-direction: column;
-        gap: 7mm;
-        padding: 18mm 20mm;
-        background: #fff;
-        color: #000;
-        font-size: 9.5pt;
-        line-height: 1.45;
+        justify-content: flex-end;
+        height: 70mm;
+        padding-bottom: 5mm;
     }
-
     h1 {
-        font-size: 28pt;
-        line-height: 1;
+        /* One word to a line. */
+        width: min-content;
+        font-size: 44pt;
+        font-weight: 660;
+        font-stretch: 70%;
+        line-height: 0.88;
+        letter-spacing: -0.03em;
+    }
+    .title {
+        margin: 3mm 0 4mm;
+        font-size: 14pt;
+        font-weight: 500;
+        font-stretch: 76%;
+        color: var(--dim);
+    }
+    .contact {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1mm 5mm;
+        font-size: 8.4pt;
     }
 
-    h2 {
-        margin-bottom: 2mm;
-        font-size: 11pt;
-    }
-
-    h3 {
-        font-size: 9.5pt;
-    }
-
-    h3 span {
-        font-weight: 400;
+    .profile p {
+        max-width: 128mm;
+        font-size: 9.6pt;
     }
 
     /* Page 1's two columns: the timeline left, Skills and Languages right. */
     .columns {
         display: grid;
         grid-template-columns: 110mm 1fr;
-        gap: 6mm;
+        gap: 0 6mm;
     }
-
-    .columns > div {
-        display: flex;
-        flex-direction: column;
-        gap: 7mm;
-    }
-
-    /* The column is too narrow to set a skill area beside its list. */
-    dl.stacked {
-        display: block;
-    }
-
-    dl.stacked dd + dt {
-        margin-top: 1.5mm;
-    }
-
-    .contact {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0 5mm;
-        margin-top: 3mm;
-    }
-
     dl {
-        display: grid;
-        grid-template-columns: max-content 1fr;
-        gap: 1mm 6mm;
+        margin: 0;
     }
-
+    dt {
+        color: var(--dim);
+    }
     dd {
         margin: 0;
     }
-
-    p + p,
-    .entry + .entry {
-        margin-top: 2.5mm;
+    /* The column is too narrow to set a skill area beside its list. */
+    .skills dd + dt {
+        margin-top: 1.5mm;
+    }
+    .languages {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 1mm 4mm;
     }
 
-    a {
-        color: inherit;
-        text-decoration: none;
+    .entry {
+        margin-bottom: 2.6mm;
+    }
+    .entry p {
+        margin: 0;
+    }
+    h3 {
+        margin: 0 0 0.6mm;
+        font-size: 9.4pt;
+        font-weight: 650;
+    }
+    h3 span {
+        font-weight: 400;
+        color: var(--dim);
+    }
+
+    .work li {
+        margin-bottom: 1mm;
+    }
+    .work b {
+        font-weight: 650;
+    }
+    .work .url {
+        color: var(--dim);
     }
 </style>
