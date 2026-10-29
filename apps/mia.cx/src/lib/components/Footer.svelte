@@ -2,6 +2,7 @@
     import { contact, otherSocials, primarySocials, site, sitemap } from '$lib/content/site';
     import { ArrowLink, Socials } from '@mia-cx/ui';
     import IconMail from '~icons/lucide/mail';
+    import CVButtons from '$lib/cv/CVButtons.svelte';
 
     const year = new Date().getFullYear();
 </script>
@@ -17,6 +18,7 @@
                     <IconMail class="mail" />
                     <span>{contact.email}</span>
                 </ArrowLink>
+                <CVButtons />
             </div>
             <p class="copyright">© {year} {site.domain}</p>
         </section>

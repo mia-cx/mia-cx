@@ -44,3 +44,24 @@ test.describe('in print', () => {
         );
     });
 });
+
+test('home and the footer offer the CV in both Themes', async ({ page }) => {
+    await page.goto('/');
+    for (const scope of [page.locator('[data-section="hero"]'), page.locator('footer')]) {
+        await expect(scope.getByRole('link', { name: 'Download CV' })).toHaveAttribute('href', '/cv.pdf?theme=colour');
+        const print = scope.getByRole('link', { name: 'Download print-friendly CV' });
+        await expect(print).toHaveAttribute('href', '/cv.pdf?theme=print');
+    }
+    const print = page.locator('[data-section="hero"]').getByRole('link', { name: 'Download print-friendly CV' });
+    await print.focus();
+    await expect(print.getByText('Print-friendly')).toBeVisible();
+});
+
+test('on a role’s CV, every CV button downloads that role', async ({ page }) => {
+    await page.goto('/cv?role=frontend');
+    const links = page.getByRole('link', { name: 'Download CV' });
+    await expect(links).toHaveCount(2);
+    for (const link of await links.all()) {
+        await expect(link).toHaveAttribute('href', '/cv.pdf?theme=colour&role=frontend');
+    }
+});

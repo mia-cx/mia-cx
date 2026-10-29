@@ -19,7 +19,7 @@
 </svelte:head>
 
 <main class="container">
-    <div class="actions"><CVButtons role={data.role} /></div>
+    <div class="actions"><CVButtons /></div>
     <div class="sheets" bind:clientWidth={width}>
         <div style:zoom>
             <CV cv={data.cv} theme={data.theme} />
