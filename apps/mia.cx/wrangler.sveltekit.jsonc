@@ -1,0 +1,11 @@
+// What adapter-cloudflare builds into (see svelte.config.js). wrangler.jsonc deploys worker.ts,
+// which wraps the Worker written here; this file is never deployed.
+{
+    "name": "mia-cx",
+    "compatibility_date": "2026-09-24",
+    "main": ".svelte-kit/cloudflare/_worker.js",
+    "assets": {
+        "binding": "ASSETS",
+        "directory": ".svelte-kit/cloudflare",
+    },
+}

@@ -5,8 +5,9 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 const config = {
     preprocess: vitePreprocess(),
     kit: {
-        // Deployed as a Worker with static assets; the settings live in wrangler.jsonc.
-        adapter: adapter(),
+        // Deployed as a Worker with static assets; the settings live in wrangler.jsonc. The adapter
+        // reads its own config, because it writes its Worker over whatever `main` names.
+        adapter: adapter({ config: 'wrangler.sveltekit.jsonc' }),
     },
 };
 

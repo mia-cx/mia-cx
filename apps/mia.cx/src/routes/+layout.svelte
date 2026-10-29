@@ -5,6 +5,7 @@
     import ShaderCanvas from '@mia-cx/atmosphere/ShaderCanvas.svelte';
     import Header from '$lib/components/Header.svelte';
     import Footer from '$lib/components/Footer.svelte';
+    import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
 
     let { children }: { children: Snippet } = $props();
@@ -66,6 +67,8 @@
     <div class="page">
         {@render children()}
     </div>
+
+    {#if !page.error}<PageMarkdown />{/if}
 
     <Footer />
 {/if}

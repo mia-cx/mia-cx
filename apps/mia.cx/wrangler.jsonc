@@ -1,9 +1,10 @@
-// The site runs as a Cloudflare Worker. Every page is prerendered and served as a static asset;
-// the Worker only answers what isn't one, such as the 404 page.
+// The site runs as a Cloudflare Worker. Every page is prerendered and served as a static asset.
+// worker.ts runs first for everything outside /_app: it hands agents a page's Markdown twin, then
+// passes the rest to SvelteKit's Worker, which serves the assets and answers the 404 page.
 {
     "$schema": "node_modules/wrangler/config-schema.json",
     "name": "mia-cx",
-    "main": ".svelte-kit/cloudflare/_worker.js",
+    "main": "worker.ts",
     "compatibility_date": "2026-09-24",
     "compatibility_flags": ["nodejs_als"],
     "routes": [{ "pattern": "mia.cx", "custom_domain": true }],
@@ -13,6 +14,8 @@
     "assets": {
         "binding": "ASSETS",
         "directory": ".svelte-kit/cloudflare",
+        // Pages share their URL with their Markdown twin, so the Worker has to see them first.
+        "run_worker_first": ["/*", "!/_app/*"],
     },
     "observability": {
         "enabled": true,

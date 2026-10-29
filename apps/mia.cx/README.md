@@ -38,3 +38,5 @@ You can preview the production build with `npm run preview`.
 ## Deploying
 
 The site runs as a Cloudflare Worker, configured in `wrangler.jsonc`. Cloudflare builds it from the repo root with `pnpm --filter @mia-cx/mia.cx build` and deploys with `pnpm --filter @mia-cx/mia.cx exec wrangler deploy`. To check the built Worker locally, run `npx wrangler dev` after a build.
+
+The deployed entry is `worker.ts`, which wraps the Worker that `adapter-cloudflare` writes. The adapter reads `wrangler.sveltekit.jsonc` instead of `wrangler.jsonc`, because it overwrites whatever file `main` names.
