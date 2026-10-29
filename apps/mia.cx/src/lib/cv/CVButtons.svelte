@@ -3,11 +3,12 @@
     button for the print-friendly one, named by a popover that shows at once on hover or focus.
 -->
 <script lang="ts">
+    import { page } from '$app/state';
     import FileText from '~icons/lucide/file-text';
     import Printer from '~icons/lucide/printer';
 
-    let { role }: { /** Carried into the PDF, so it matches the CV being shown. */ role?: string | null } = $props();
-
+    /** The role /cv shows, carried into the PDF wherever the buttons sit, so it matches the CV on screen. */
+    const role = $derived(page.data.role);
     const href = (theme: 'colour' | 'print') => `/cv.pdf?${new URLSearchParams({ theme, ...(role ? { role } : {}) })}`;
 </script>
 

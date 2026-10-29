@@ -56,3 +56,12 @@ test('home and the footer offer the CV in both Themes', async ({ page }) => {
     await print.focus();
     await expect(print.getByText('Print-friendly')).toBeVisible();
 });
+
+test('on a role’s CV, every CV button downloads that role', async ({ page }) => {
+    await page.goto('/cv?role=frontend');
+    const links = page.getByRole('link', { name: 'Download CV' });
+    await expect(links).toHaveCount(2);
+    for (const link of await links.all()) {
+        await expect(link).toHaveAttribute('href', '/cv.pdf?theme=colour&role=frontend');
+    }
+});
