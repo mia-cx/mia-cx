@@ -5,16 +5,20 @@
   "type": "module",
   "scripts": {
     "build": "turbo run build",
+    "changeset": "changeset",
     "deploy": "turbo run deploy",
     "dev": "turbo run dev",
     "dev:host": "turbo run dev:host",
     "format": "turbo run format",
     "format:root": "prettier --write .",
     "lint": "turbo run lint",
+    "release:version": "changeset version",
     "test": "turbo run test",
+    "test:release": "node --test .github/scripts/*.test.mjs",
     "test:watch": "turbo run test:watch"
   },
   "devDependencies": {
+    "@changesets/cli": "3.0.3",
     "@mia-cx/config": "workspace:^",
     "eslint": "^10.11.0",
     "prettier": "^3.9.9",
