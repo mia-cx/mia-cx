@@ -1200,6 +1200,10 @@ export class WebGL2Renderer implements RenderBackend {
         this.recreateTargets(v);
         this.invalidate();
     }
+    setTime(seconds: number) {
+        this.simTime = seconds;
+        this.invalidate();
+    }
     invalidate() {
         this.invalid = true;
         this.schedule();

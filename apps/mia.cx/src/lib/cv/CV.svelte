@@ -3,11 +3,18 @@
     order under standard headings, so ATS parsers file it correctly from the PDF's text.
 -->
 <script lang="ts">
+    import type { Snippet } from 'svelte';
     import { cv } from './content';
     import Timeline from './Timeline.svelte';
+
+    let {
+        /** Drawn in each sheet behind its content; `page` counts from 1. The stills bake draws a live field here. */
+        field,
+    }: { field?: Snippet<[page: number]> } = $props();
 </script>
 
 <article class="sheet" data-print-sheet>
+    {@render field?.(1)}
     <header>
         <h1>{cv.name}</h1>
         <p class="title">{cv.title}</p>
@@ -55,6 +62,7 @@
 </article>
 
 <article class="sheet" data-print-sheet>
+    {@render field?.(2)}
     <section>
         <h2>About</h2>
         {#each cv.about as paragraph (paragraph)}
