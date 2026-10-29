@@ -17,7 +17,7 @@
     <article>
         <h1>Textile {title.toLowerCase()}</h1>
         <p class="effective">Effective <time datetime="2026-10-19">19 October 2026</time></p>
-        <nav aria-label="Textile policies">
+        <nav aria-label="Textile policies" data-print-hide>
             <a href="/textile/terms" aria-current={page.url.pathname === '/textile/terms' ? 'page' : undefined}>
                 Terms of service
             </a>

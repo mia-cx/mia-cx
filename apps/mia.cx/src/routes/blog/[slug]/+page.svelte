@@ -16,7 +16,7 @@
 </svelte:head>
 
 <main class="container">
-    <a class="back mono" href="/blog">← Blog</a>
+    <a class="back mono" href="/blog" data-print-hide>← Blog</a>
 
     <article>
         <header>

@@ -8,8 +8,9 @@
     import later from './stills/article-2.webp';
 </script>
 
-<img class="later" src={later} alt="" />
-<div class="first"><img src={first} alt="" /></div>
+<!-- Print-only, so they wait their turn behind what the page shows. -->
+<img class="later" src={later} alt="" fetchpriority="low" decoding="async" />
+<div class="first"><img src={first} alt="" fetchpriority="low" decoding="async" /></div>
 
 <style>
     img {
