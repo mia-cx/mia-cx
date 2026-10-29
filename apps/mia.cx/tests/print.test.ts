@@ -22,11 +22,14 @@ test.describe('in print', () => {
         await expect(page.getByRole('navigation', { name: 'Sitemap' })).toBeHidden();
     });
 
-    test('an Article prints itself and no CV', async ({ page }) => {
+    test('an Article prints itself on its paper, with no CV and no site chrome', async ({ page }) => {
         for (const route of ['/work/vesta', '/textile/privacy']) {
             await page.goto(route);
             await expect(page.locator('main')).toBeVisible();
             await expect(page.locator('[data-print]')).toHaveCount(0);
+            await expect(page.locator('[data-print-paper] img').first()).toBeVisible();
+            await expect(page.locator('header[data-header]')).toBeHidden();
+            await expect(page.getByRole('navigation', { name: 'Sitemap' })).toBeHidden();
         }
     });
 });
