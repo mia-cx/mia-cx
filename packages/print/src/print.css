@@ -84,10 +84,11 @@
         filter: none !important;
         animation: none !important;
     }
-    /* Paper can't follow a link, so external ones carry their address. */
+    /* Paper can't follow a link, so external ones carry their address, in its own case to type back in. */
     :root:has([data-print-paper]) main a[href^='http']::after {
         content: ' (' attr(href) ')';
         font-size: 0.85em;
         overflow-wrap: anywhere;
+        text-transform: none;
     }
 }
