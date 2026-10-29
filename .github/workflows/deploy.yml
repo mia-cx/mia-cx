@@ -11,10 +11,15 @@ on:
                 description: Exact main commit to deploy
                 required: true
                 type: string
-
-concurrency:
-    group: deploy-${{ inputs.environment }}
-    cancel-in-progress: false
+            latest_only:
+                description: Skip the deploy when main already carries a newer version of the site
+                required: false
+                type: boolean
+                default: false
+        outputs:
+            deployed:
+                description: Whether this commit was deployed
+                value: ${{ jobs.deploy.outputs.deployed }}
 
 permissions:
     contents: read
@@ -24,6 +29,12 @@ jobs:
         name: Check and deploy to ${{ inputs.environment }}
         runs-on: ubuntu-latest
         timeout-minutes: 30
+        # One deploy per environment at a time, in arrival order.
+        concurrency:
+            group: deploy-${{ inputs.environment }}
+            cancel-in-progress: false
+        outputs:
+            deployed: ${{ steps.deploy.outputs.deployed }}
         environment:
             name: ${{ inputs.environment }}
             url: ${{ inputs.environment == 'production' && 'https://mia.cx' || 'https://staging.mia.cx' }}
@@ -65,12 +76,27 @@ jobs:
               run: |
                   printf '\n/*\n  X-Robots-Tag: noindex\n' >> apps/mia.cx/.svelte-kit/cloudflare/_headers
 
+            # Releases can reach this queue out of order. This job holds the environment's only slot, so a
+            # newer release on main is either done or still waiting behind it; either way it deploys itself,
+            # and an older one must not land after it.
             - name: Deploy
+              id: deploy
               env:
                   ENVIRONMENT: ${{ inputs.environment }}
                   SHA: ${{ inputs.sha }}
+                  LATEST_ONLY: ${{ inputs.latest_only }}
               run: |
                   version="$(node -p "require('./apps/mia.cx/package.json').version")"
+                  if [ "$LATEST_ONLY" = true ]; then
+                    git fetch --depth=1 origin main
+                    newest="$(git show FETCH_HEAD:apps/mia.cx/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")"
+                    if [ "$version" != "$newest" ]; then
+                      echo "mia.cx $version is superseded by $newest on main, so it was not deployed." >> "$GITHUB_STEP_SUMMARY"
+                      echo "deployed=false" >> "$GITHUB_OUTPUT"
+                      exit 0
+                    fi
+                  fi
                   args=(--message "mia.cx $version at ${SHA:0:7}")
                   [ "$ENVIRONMENT" = staging ] && args+=(--env staging)
                   pnpm --filter @mia-cx/mia.cx exec wrangler deploy "${args[@]}"
+                  echo "deployed=true" >> "$GITHUB_OUTPUT"

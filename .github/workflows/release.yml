@@ -133,6 +133,8 @@ jobs:
         with:
             environment: production
             sha: ${{ needs.release.outputs.sha }}
+            # An automatic release never lands after a newer one; a manual redeploy may roll back on purpose.
+            latest_only: ${{ github.event_name == 'push' }}
         secrets: inherit
         permissions:
             contents: read
@@ -140,6 +142,7 @@ jobs:
     tag:
         name: Tag the deployed release
         needs: [release, production]
+        if: needs.production.outputs.deployed == 'true'
         runs-on: ubuntu-latest
         timeout-minutes: 5
         permissions:
