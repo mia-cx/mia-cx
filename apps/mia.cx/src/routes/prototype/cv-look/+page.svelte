@@ -19,6 +19,8 @@
     /** How the field meets white paper: its flares over the page, or as ink multiplied into it. */
     let light = $state<'flares' | 'ink'>('ink');
     const ink = $state({ falloff: 1, saturate: 1 });
+    /** The CV buttons' icon box, in cap heights of the button text. */
+    let icon = $state(1);
 
     /** Page 1 has its own still; page 2 stands for every page after it. */
     const field = $state([
@@ -117,7 +119,7 @@
         });
     });
 
-    const values = $derived(JSON.stringify({ pages: field, portrait: p, light, ink }));
+    const values = $derived(JSON.stringify({ pages: field, portrait: p, light, ink, icon }));
 
     // The timeline: ln(1 + k·(now − t)), k = 2, ending at the present with a dashed tail.
     const START = 2012, K = 2, H = 92, T = 7, W = 182, X0 = W / 2;
@@ -200,13 +202,15 @@
     <aside>
         <h1>PROTOTYPE · CV look</h1>
         <!-- The CV buttons for home and the footer: Colour with a label, Print as an icon with an instant tooltip. -->
-        <div class="cv-buttons">
+        <div class="cv-buttons" style:--icon={icon}>
             <a href="/cv.pdf?theme=colour" download>Download CV <FileText aria-hidden="true" /></a>
             <a href="/cv.pdf?theme=print" download aria-label="Download print-friendly CV" class="icon">
                 <span class="doc" aria-hidden="true"><FileText /><span class="badge"><Printer /></span></span>
                 <span class="tip" aria-hidden="true">Print-friendly</span>
             </a>
         </div>
+        <label>Icon size (cap) <output>{icon}</output></label>
+        <input type="range" min="0.8" max="1.6" step="0.05" bind:value={icon} />
         <fieldset>
             <legend>Theme</legend>
             <label><input type="radio" bind:group={theme} value="colour" /> Colour</label>
@@ -462,14 +466,14 @@
     .cv-buttons a + a { margin-left: -1px; }
     .cv-buttons a:hover, .cv-buttons a:focus-visible { position: relative; z-index: 1; border-color: var(--accent); color: var(--accent); }
     /* The icon box is exactly 1cap; Lucide draws in 20 of its 24 units, so the glyph sits a little inside it. */
-    .cv-buttons :global(svg) { width: 1cap; height: 1cap; }
+    .cv-buttons :global(svg) { width: calc(var(--icon) * 1cap); height: calc(var(--icon) * 1cap); }
     /* Lucide draws at 2; 1.5 matches the weight of the button text. */
     .cv-buttons :global(svg *) { stroke-width: 1.5; }
     .cv-buttons .icon { position: relative; justify-content: center; width: 40px; padding: 0; }
     .doc { position: relative; display: grid; }
     /* The printer sits on the document's corner, cut out of it by the button's own background. */
-    .badge { position: absolute; right: -0.35cap; bottom: -0.3cap; display: grid; padding: 1px; background: var(--panel); line-height: 0; }
-    .badge :global(svg) { width: 0.65cap; height: 0.65cap; }
+    .badge { position: absolute; right: calc(var(--icon) * -0.35cap); bottom: calc(var(--icon) * -0.3cap); display: grid; padding: 1px; background: var(--panel); line-height: 0; }
+    .badge :global(svg) { width: calc(var(--icon) * 0.65cap); height: calc(var(--icon) * 0.65cap); }
     /* Instant: no delay, unlike a title tooltip. */
     .tip { position: absolute; top: calc(100% + 6px); left: 50%; translate: -50% 0; padding: 4px 8px; border: 1px solid var(--panel-line); background: var(--panel); color: var(--ink); font-size: 13px; white-space: nowrap; pointer-events: none; opacity: 0; }
     .icon:hover .tip, .icon:focus-visible .tip { opacity: 1; }
