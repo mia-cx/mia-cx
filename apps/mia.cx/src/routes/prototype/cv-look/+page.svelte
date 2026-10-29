@@ -7,6 +7,7 @@
     import { onMount } from 'svelte';
     import { BAKED_RENDER_OPTIONS, loadBakedRenderOptions } from '@mia-cx/atmosphere/baked-settings';
     import { selectRenderBackend, type RenderBackend } from '@mia-cx/atmosphere/render-backend';
+    import { CalmMask } from '@mia-cx/atmosphere/calm-mask';
     import portrait from '$lib/assets/portrait-800.webp';
     import { encode } from 'uqr';
     import FileText from '~icons/lucide/file-text';
@@ -92,18 +93,31 @@
     onMount(() => {
         fit();
         let disposed = false;
+        // Each sheet calms its own field behind its own text and images, as the site does.
+        const calm = canvases.map((canvas) => new CalmMask(canvas.closest('.sheet')!));
+        let frame = 0;
+        const tick = () => {
+            calm.forEach((mask, i) => {
+                if (mask.update(canvases[i].getBoundingClientRect())) renderers[i]?.setCalmMask(mask.canvas);
+            });
+            frame = requestAnimationFrame(tick);
+        };
         loadBakedRenderOptions().then((loaded) => {
             base = { ...loaded, renderScale: 1, dprCap: 2 };
             canvases.forEach((canvas, i) =>
                 selectRenderBackend(canvas, { ...base, seed: still(i).seed }).then(({ renderer }) => {
                     if (disposed) return renderer.destroy();
                     renderer.setPaused(true);
+                    renderer.setCalmMask(calm[i].canvas);
                     renderers[i] = renderer;
                 }),
             );
+            tick();
         });
         return () => {
             disposed = true;
+            cancelAnimationFrame(frame);
+            calm.forEach((mask) => mask.destroy());
             renderers.forEach((r) => r?.destroy());
         };
     });
@@ -264,7 +278,7 @@
                 <img src={portrait} alt="Portrait of Mia Riezebos" style:mask-image={mask} />
             </div>
             <!-- The same photo above the field, cut to the face, with the field's haze but not its light. -->
-            <div class="portrait face" aria-hidden="true" style:right="{p.right}mm" style:top="{p.top}mm" style:width="{p.width}mm">
+            <div class="portrait face" aria-hidden="true" data-atmosphere-calm="off" style:right="{p.right}mm" style:top="{p.top}mm" style:width="{p.width}mm">
                 <img src={portrait} alt="" style:mask-image="{mask}, {face}" />
                 <div class="haze" style:mask-image="url({portrait}), {mask}, {face}"></div>
             </div>
