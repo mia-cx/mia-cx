@@ -10,10 +10,12 @@
     import type { Snippet } from 'svelte';
     import firstColour from './stills/cv-1-colour.webp';
     import firstPrint from './stills/cv-1-print.webp';
-    import later from './stills/cv-2.webp';
+    import laterColour from './stills/cv-2-colour.webp';
+    import laterPrint from './stills/cv-2-print.webp';
 
-    /** Page 1's still has its Theme's fade baked in, since PDF readers drop CSS masks. */
+    /** Each Theme's stills have its fades baked in, since PDF readers drop CSS masks. */
     const first = { colour: firstColour, print: firstPrint };
+    const later = { colour: laterColour, print: laterPrint };
 
     let {
         page,
@@ -33,11 +35,11 @@
     } = $props();
 </script>
 
-<article class="sheet {layout}" class:first={page === 1} data-theme={theme} data-print-sheet>
+<article class="sheet cv-sheet {layout}" class:first={page === 1} data-theme={theme} data-print-sheet>
     {#if field}
         {@render field(page)}
     {:else}
-        <img class="field" src={page === 1 ? first[theme] : later} alt="" />
+        <img class="field" src={(page === 1 ? first : later)[theme]} alt="" />
     {/if}
     {@render children()}
 </article>
@@ -70,8 +72,8 @@
 
     /*
      * The field floats over the text and the photo, as on the site: its alpha comes from luminance, so
-     * only the bright lobes wash over. The bake already dimmed it around the content and faded page 1
-     * down the sheet. Later pages sit lighter. Print multiplies it into white paper like ink.
+     * only the bright lobes wash over. The bake already dimmed it around the content and faded it down
+     * the sheet. Later pages sit lighter. Print multiplies it into white paper like ink.
      */
     .field {
         position: absolute;
@@ -91,33 +93,37 @@
         opacity: 0.6;
     }
 
-    .sheet :global(h2) {
+    /*
+     * Defaults for what a sheet holds. Unscoped, so they outrank the site's element resets but not the
+     * content's own classes: a class on a paragraph or link in the CV or Appendix wins.
+     */
+    :global(.cv-sheet h2) {
         margin: 0 0 2.5mm;
         font-size: 12pt;
         font-weight: 650;
         font-stretch: 76%;
         letter-spacing: -0.01em;
     }
-    .sheet :global(section) {
+    :global(.cv-sheet section) {
         margin-top: 4mm;
         padding-top: 3mm;
         border-top: 0.25mm solid var(--line);
     }
     /* The section that opens a sheet, straight after its field, needs no rule above it. */
-    .sheet > :global(:first-child + section) {
+    :global(.cv-sheet > :first-child + section) {
         margin-top: 0;
         padding-top: 0;
         border-top: 0;
     }
-    .sheet :global(p) {
+    :global(.cv-sheet p) {
         margin: 0 0 2mm;
     }
-    .rows :global(section) {
+    :global(.cv-sheet.rows section) {
         display: grid;
         grid-template-columns: 30mm 1fr;
         gap: 0 6mm;
     }
-    .rows :global(section h2) {
+    :global(.cv-sheet.rows section h2) {
         margin: 0;
     }
 
@@ -125,7 +131,7 @@
      * Links look exactly like the text around them, so paper shows nothing extra; the PDF still carries
      * them as clickable link annotations. Hover only exists on screen, so it never reaches print.
      */
-    .sheet :global(a) {
+    :global(.cv-sheet a) {
         color: inherit;
         text-decoration: none;
     }
