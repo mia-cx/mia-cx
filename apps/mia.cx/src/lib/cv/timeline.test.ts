@@ -30,9 +30,7 @@ describe('the CV timeline', () => {
             for (let i = 1; i < labels.length; i++)
                 expect(labels[i].y - labels[i - 1].y).toBeGreaterThanOrEqual(LABEL_HEIGHT);
         }
-        expect(layout.sides.left.labels.map(({ title }) => title)).toEqual(
-            cv.timeline.work.map(({ title }) => title),
-        );
+        expect(layout.sides.left.labels.map(({ title }) => title)).toEqual(cv.timeline.work.map(({ title }) => title));
     });
 
     test('gives recent years more room than older ones', () => {

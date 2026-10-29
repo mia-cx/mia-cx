@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
     import { cv } from './content';
+    import Timeline from './Timeline.svelte';
 </script>
 
 <article class="sheet" data-print-sheet>
@@ -23,25 +24,34 @@
         <p>{cv.profile}</p>
     </section>
 
-    <section>
-        <h2>Skills</h2>
-        <dl>
-            {#each cv.skills as { area, items } (area)}
-                <dt>{area}</dt>
-                <dd>{items}</dd>
-            {/each}
-        </dl>
-    </section>
+    <div class="columns">
+        <section>
+            <h2>Experience</h2>
+            <Timeline work={cv.timeline.work} creative={cv.timeline.creative} />
+        </section>
 
-    <section>
-        <h2>Languages</h2>
-        <dl>
-            {#each cv.languages as { language, level } (language)}
-                <dt>{language}</dt>
-                <dd>{level}</dd>
-            {/each}
-        </dl>
-    </section>
+        <div>
+            <section>
+                <h2>Skills</h2>
+                <dl class="stacked">
+                    {#each cv.skills as { area, items } (area)}
+                        <dt>{area}</dt>
+                        <dd>{items}</dd>
+                    {/each}
+                </dl>
+            </section>
+
+            <section>
+                <h2>Languages</h2>
+                <dl>
+                    {#each cv.languages as { language, level } (language)}
+                        <dt>{language}</dt>
+                        <dd>{level}</dd>
+                    {/each}
+                </dl>
+            </section>
+        </div>
+    </div>
 </article>
 
 <article class="sheet" data-print-sheet>
@@ -110,6 +120,28 @@
 
     h3 span {
         font-weight: 400;
+    }
+
+    /* Page 1's two columns: the timeline left, Skills and Languages right. */
+    .columns {
+        display: grid;
+        grid-template-columns: 110mm 1fr;
+        gap: 6mm;
+    }
+
+    .columns > div {
+        display: flex;
+        flex-direction: column;
+        gap: 7mm;
+    }
+
+    /* The column is too narrow to set a skill area beside its list. */
+    dl.stacked {
+        display: block;
+    }
+
+    dl.stacked dd + dt {
+        margin-top: 1.5mm;
     }
 
     .contact {
