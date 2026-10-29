@@ -13,7 +13,7 @@
     }: { work: TimelineEntry[]; creative: TimelineEntry[]; today?: Date } = $props();
 
     /** Millimetres: the axis's height, and the room each side has for its bars and labels. */
-    const HEIGHT = 92;
+    const HEIGHT = 128;
     const LEFT = 62;
     const RIGHT = 48;
     /** Room above the axis for the side headings. */
@@ -86,6 +86,7 @@
     }
 
     .tail {
+        stroke: var(--tail, currentColor);
         stroke-dasharray: 0.8 0.8;
     }
 
@@ -110,6 +111,12 @@
     .year,
     .subtitle {
         font-size: 2.05px;
-        opacity: 0.7;
+    }
+
+    /* Supporting text recedes: the sheet's dim ink where it has one. */
+    .head,
+    .year,
+    .subtitle {
+        fill: var(--dim, currentColor);
     }
 </style>

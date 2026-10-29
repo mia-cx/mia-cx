@@ -1,6 +1,6 @@
 /**
- * Bakes the field stills the printed CV and Articles draw under their content, from the
- * /cv-stills page, in a Chromium you already have open, over the DevTools protocol:
+ * Bakes the field stills the printed CV and Articles draw under their content, and the CV's portrait
+ * layers, from the /cv-stills page, in a Chromium you already have open, over the DevTools protocol:
  *
  *   pnpm build && pnpm preview
  *   pnpm cv-stills [base-url] [devtools-url]
@@ -9,15 +9,20 @@
  * automation browsers and headless software renderers do not. The page opens in a background tab
  * with focus emulated, so it keeps drawing without taking the window, and closes when done.
  *
- * Re-run it when a seed, a frame or the sheets' layout changes: the dimming follows the layout.
+ * Re-run it when a seed, a frame, a mask or the sheets' layout changes: the dimming follows the layout.
  */
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const [base = 'http://localhost:4173', devtools = 'http://127.0.0.1:9222'] = process.argv.slice(2);
 const out = (name: string) => fileURLToPath(new URL(`../src/lib/cv/stills/${name}.webp`, import.meta.url));
-/** Output pixels per CSS pixel: an A4 sheet comes out about 1600 px wide, plenty for a soft field. */
+/** Device pixels per CSS pixel the field renders at; its effects are tuned for a 2× display. */
 const RESOLUTION = 2;
+/**
+ * Output pixels per CSS pixel. The field is all soft gradients, so a sheet saved at 1× (794 px wide)
+ * prints the same as at 2× for a seventh of the bytes, and every page that isn't an Article carries it.
+ */
+const OUTPUT = 1;
 
 const { webSocketDebuggerUrl } = (await (await fetch(`${devtools}/json/version`)).json()) as {
     webSocketDebuggerUrl: string;
@@ -71,31 +76,34 @@ try {
     const deadline = Date.now() + 60_000;
     for (;;) {
         const { ready, failure } = await evaluate<{ ready: boolean; failure?: string }>(`(() => {
-            const stills = [...document.querySelectorAll('canvas[data-still]')];
+            const stills = [...document.querySelectorAll('[data-still]')];
             return {
-                ready: stills.length > 0 && stills.every((canvas) => canvas.hasAttribute('data-ready')),
-                failure: stills.find((canvas) => canvas.dataset.error)?.dataset.error,
+                ready: stills.length > 0 && stills.every((still) => still.hasAttribute('data-ready')),
+                failure: stills.find((still) => still.dataset.error)?.dataset.error,
             };
         })()`);
-        if (failure) throw new Error(`a field could not be baked: ${failure}`);
+        if (failure) throw new Error(`a layer could not be baked: ${failure}`);
         if (ready) break;
         if (Date.now() > deadline) throw new Error('the fields never drew; is WebGPU on in this Chromium?');
         await sleep(250);
     }
 
-    const stills = await evaluate<{ name: string; x: number; y: number; width: number; height: number; dpr: number }[]>(
-        `[...document.querySelectorAll('canvas[data-still]')].map((canvas) => {
-            const r = canvas.getBoundingClientRect();
-            return { name: canvas.dataset.still, x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height,
-                dpr: devicePixelRatio };
+    // A layer can ask for more pixels with data-scale: the portrait is sharp where the field is soft.
+    const stills = await evaluate<
+        { name: string; x: number; y: number; width: number; height: number; scale: number }[]
+    >(
+        `[...document.querySelectorAll('[data-still]')].map((still) => {
+            const r = still.getBoundingClientRect();
+            return { name: still.dataset.still, x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height,
+                scale: (Number(still.dataset.scale) || ${OUTPUT}) / devicePixelRatio };
         })`,
     );
-    for (const { name, x, y, width, height, dpr } of stills) {
+    for (const { name, x, y, width, height, scale } of stills) {
         const { data } = await run<{ data: string }>('Page.captureScreenshot', {
             format: 'webp',
-            quality: 90,
+            quality: 80,
             captureBeyondViewport: true,
-            clip: { x, y, width, height, scale: RESOLUTION / dpr },
+            clip: { x, y, width, height, scale },
         });
         writeFileSync(out(name), Buffer.from(data, 'base64'));
         console.log(`still: ${out(name)}`);

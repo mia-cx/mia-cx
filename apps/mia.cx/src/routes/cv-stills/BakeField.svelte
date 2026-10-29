@@ -8,7 +8,20 @@
     import { CalmMask, type CalmOptions } from '@mia-cx/atmosphere/calm-mask';
     import { selectRenderBackend } from '@mia-cx/atmosphere/render-backend';
 
-    let { name, seed, time, calm }: { name: string; seed: number; time: number; calm: CalmOptions } = $props();
+    let {
+        name,
+        seed,
+        time,
+        calm,
+        fade,
+    }: {
+        name: string;
+        seed: number;
+        time: number;
+        calm: CalmOptions;
+        /** A mask the still is baked through, since PDF readers drop CSS masks. */
+        fade?: string;
+    } = $props();
 
     let canvas: HTMLCanvasElement;
     let ready = $state(false);
@@ -50,7 +63,13 @@
     });
 </script>
 
-<canvas bind:this={canvas} data-still={name} data-ready={ready || undefined} data-error={failure}></canvas>
+<canvas
+    bind:this={canvas}
+    data-still={name}
+    data-ready={ready || undefined}
+    data-error={failure}
+    style:mask-image={fade}
+></canvas>
 
 <style>
     canvas {
