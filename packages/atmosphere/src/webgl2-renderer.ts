@@ -292,13 +292,6 @@ export class WebGL2Renderer implements RenderBackend {
     private invalid = true;
     private frame = 0;
     private simTime = 0;
-    get time() {
-        return this.simTime;
-    }
-    set time(value: number) {
-        this.simTime = value;
-        this.invalidate();
-    }
     private lastTick = performance.now();
     private historyValid = false;
     private datamoshWasActive = false;

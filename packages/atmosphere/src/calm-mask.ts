@@ -1,30 +1,20 @@
 /**
  * A feathered map of where the page shows text and images, small enough to redraw every frame.
  * The field multiplies its light by one minus the mask's alpha, so it still moves over the copy
- * but never peaks behind it. The same canvas, scaled up, is the debug overlay.
+ * but never peaks behind it.
  */
-export interface CalmSettings {
-    /** Off leaves the mask clear and skips measuring the page. */
-    enabled: boolean;
-    /** CSS pixels past each line box or image at which the darkening is at half strength. */
-    radius: number;
-    /** Gaussian blur over that edge, in CSS pixels. */
-    feather: number;
-    /** Falloff curve: above 1 pulls the darkening in toward the copy, below 1 spreads it out. */
-    exponent: number;
-    /** Share of the field's light taken away at the core. */
-    strength: number;
-}
 
-export const CALM_DEFAULTS: CalmSettings = { enabled: true, radius: 110, feather: 128, exponent: 1, strength: 0.2 };
-
+/** CSS pixels past each line box or image at which the darkening is at half strength. */
+const RADIUS = 110;
+/** Gaussian blur over that edge, in CSS pixels. */
+const FEATHER = 128;
+/** Share of the field's light taken away at the core. */
+const STRENGTH = 0.2;
 /** CSS pixels per mask texel. The mask is all soft edges, so a coarse grid loses nothing. */
-export const TEXEL = 8;
+const TEXEL = 8;
 /** Elements whose content never calms the field: opted out by the page, or not drawn at all. */
 const SKIP = '[data-atmosphere-calm="off"], canvas, script, style, template, noscript';
 const MEDIA = 'img, video, svg';
-/** Debug overlay colour. Only the alpha reaches the field. */
-const TINT = [0, 255, 170] as const;
 /** Image silhouettes grow by the radius by stamping them around rings at a third, two thirds and all of it. */
 const DILATION = [
     [0, 0],
@@ -69,7 +59,7 @@ function visibleArea(element: Element): Cutout['clip'] {
     return clip;
 }
 
-const canvas2d = (canvas: HTMLCanvasElement) => canvas.getContext('2d', { willReadFrequently: true })!;
+const canvas2d = (canvas: HTMLCanvasElement) => canvas.getContext('2d')!;
 
 /** Measured shapes around some origin: boxes flattened as x, y, width, height, and image cutouts. */
 interface Layer {
@@ -138,12 +128,11 @@ export class CalmMask {
     private page?: Layer;
     private view?: Layer;
     private signature = '';
+    /** The mask itself, for the renderer to upload. It is never attached to the page. */
+    readonly canvas = document.createElement('canvas');
 
-    constructor(
-        readonly canvas: HTMLCanvasElement,
-        private readonly root: Element = document.body,
-    ) {
-        this.context = canvas2d(canvas);
+    constructor(private readonly root: Element = document.body) {
+        this.context = canvas2d(this.canvas);
         // The mask's own canvases, the debug panel and anything opted out never affect it.
         const relevant = ({ target }: MutationRecord) =>
             !(target instanceof Element ? target : target.parentElement)?.closest(SKIP);
@@ -164,26 +153,25 @@ export class CalmMask {
     }
 
     /** Redraws the mask for the current layout. Returns whether it changed and needs uploading. */
-    update(viewport: DOMRect, settings: CalmSettings): boolean {
+    update(viewport: DOMRect): boolean {
         const width = Math.max(1, Math.ceil(viewport.width / TEXEL)),
             height = Math.max(1, Math.ceil(viewport.height / TEXEL));
-        const reach = settings.radius + settings.feather * 3;
+        // A Gaussian is spent by three standard deviations.
+        const reach = RADIUS + FEATHER * 3;
         const shapes: Layer = { boxes: [], cutouts: [] };
-        if (settings.enabled) {
-            if (this.stale) this.collect();
-            if (!this.page || !this.view || moving()) {
-                this.page = this.measure(this.sources.page, scrollX, scrollY);
-                this.view = this.measure(this.sources.view, 0, 0);
-            }
-            place(this.page, -scrollX - viewport.left, -scrollY - viewport.top, viewport, reach, shapes);
-            place(this.view, -viewport.left, -viewport.top, viewport, reach, shapes);
-            place(this.measure(this.sources.sticky, 0, 0), -viewport.left, -viewport.top, viewport, reach, shapes);
+        if (this.stale) this.collect();
+        if (!this.page || !this.view || moving()) {
+            this.page = this.measure(this.sources.page, scrollX, scrollY);
+            this.view = this.measure(this.sources.view, 0, 0);
         }
+        place(this.page, -scrollX - viewport.left, -scrollY - viewport.top, viewport, reach, shapes);
+        place(this.view, -viewport.left, -viewport.top, viewport, reach, shapes);
+        place(this.measure(this.sources.sticky, 0, 0), -viewport.left, -viewport.top, viewport, reach, shapes);
         const images = shapes.cutouts.map(({ image, box, clip }) => `${image.currentSrc}:${box}:${clip}`);
-        const signature = `${width}x${height}:${Object.values(settings)}:${shapes.boxes}:${images}`;
+        const signature = `${width}x${height}:${shapes.boxes}:${images}`;
         if (signature === this.signature) return false;
         this.signature = signature;
-        this.draw(shapes.boxes, shapes.cutouts, width, height, settings);
+        this.draw(shapes.boxes, shapes.cutouts, width, height);
         return true;
     }
 
@@ -289,7 +277,7 @@ export class CalmMask {
         return canvas;
     }
 
-    private draw(boxes: number[], cutouts: Cutout[], width: number, height: number, settings: CalmSettings) {
+    private draw(boxes: number[], cutouts: Cutout[], width: number, height: number) {
         const { canvas, context, scratch } = this;
         for (const target of cutouts.length ? [canvas, scratch] : [canvas])
             if (target.width !== width || target.height !== height) {
@@ -297,8 +285,9 @@ export class CalmMask {
                 target.height = height;
             } else canvas2d(target).clearRect(0, 0, width, height);
         // Expand every box by the radius with round corners, then blur the union: the feather.
-        const radius = settings.radius / TEXEL;
-        context.filter = settings.feather > 0 ? `blur(${settings.feather / TEXEL}px)` : 'none';
+        const radius = RADIUS / TEXEL;
+        context.save();
+        context.filter = `blur(${FEATHER / TEXEL}px)`;
         context.fillStyle = '#fff';
         context.beginPath();
         for (let i = 0; i < boxes.length; i += 4)
@@ -326,16 +315,11 @@ export class CalmMask {
             }
             context.drawImage(scratch, 0, 0);
         }
-        // Shape the falloff and scale it to the strength, through a lookup over the 256 alpha levels.
-        const curve = Array.from({ length: 256 }, (_, a) => 255 * settings.strength * (a / 255) ** settings.exponent);
-        const image = context.getImageData(0, 0, width, height),
-            pixels = image.data;
-        for (let i = 0; i < pixels.length; i += 4) {
-            pixels[i] = TINT[0];
-            pixels[i + 1] = TINT[1];
-            pixels[i + 2] = TINT[2];
-            pixels[i + 3] = curve[pixels[i + 3]];
-        }
-        context.putImageData(image, 0, 0);
+        // Scale the union to the strength: keeping the destination by a translucent fill multiplies its alpha.
+        context.filter = 'none';
+        context.globalCompositeOperation = 'destination-in';
+        context.fillStyle = `rgb(0 0 0 / ${STRENGTH})`;
+        context.fillRect(0, 0, width, height);
+        context.restore();
     }
 }

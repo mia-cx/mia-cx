@@ -19,8 +19,6 @@ export interface RenderBackend {
     onStats?: (fps: number, width: number, height: number, rolling?: FrameRollingSummary, renderScale?: number) => void;
     onGpuStats?: (stats: GpuTimingStats | null) => void;
     onLost?: (message: string) => void;
-    /** The field's clock in simulated seconds. Setting it, with the same seed, redraws that exact moment. */
-    time: number;
     setOptions(options: RenderOptions): void;
     setCursorState(state: CursorSnapshot): void;
     setCursorDensityField(field: CursorDensityFieldSnapshot): void;

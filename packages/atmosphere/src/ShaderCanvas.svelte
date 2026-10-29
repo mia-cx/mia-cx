@@ -9,18 +9,6 @@
     import { CursorState } from './cursor';
     import { CursorDensityField } from './cursor-density-field';
     import { CalmMask } from './calm-mask';
-    import {
-        CALM_CONTROLS,
-        CENTRE_CONTROLS,
-        calmSettings,
-        centreEnabled,
-        centreSettings,
-        drawCentreMask,
-        frozenField,
-        overlays,
-        resetFieldDebug,
-    } from './field-debug';
-    import type { RenderOptions } from './renderer';
 
     let {
         /** Ceiling for adaptive resolution, 1 is full. Lower it when most of the canvas is covered. */
@@ -62,27 +50,11 @@
     let status = $state('Starting graphics…');
     let fps = $state(0);
     let fpsVisible = $state(false);
-    let calmCanvas: HTMLCanvasElement;
-    let centreCanvas: HTMLCanvasElement;
-    /** Shows the debug panel and its darkening overlays. Toggled with M. */
-    let calmDebug = $state(false);
-    /** The centre darkening the field actually gets: the tuned shape, at no strength when it is off. */
-    const centre = () => ({ ...centreSettings.get(), ...(centreEnabled.get() ? {} : { centerDarkness: 0 }) });
-    const centred = (value: RenderOptions): RenderOptions => ({
-        ...value,
-        parameters: { ...value.parameters, ...centre() },
-    });
     let options = BAKED_RENDER_OPTIONS;
     const cursorState = new CursorState();
     const cursorDensityField = new CursorDensityField();
     let densityPoints: { x: number; y: number; timeStamp: number }[] = [];
-    let reducedMotion = false;
-    const halted = () => reducedMotion || frozenField.get() !== undefined;
-    function togglePause() {
-        if (!renderer) return;
-        frozenField.set(frozenField.get() ? undefined : { seed: options.seed, time: renderer.time });
-        renderer.setPaused(halted());
-    }
+    let paused = false;
 
     /*
      * Route changes hand the dim between the scroll animation and the base opacity. A browser will
@@ -202,26 +174,21 @@
         sendCursor();
     }
     function keyDown(event: KeyboardEvent) {
-        if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+        if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.key.toLowerCase() !== 'f') return;
         if (event.target instanceof HTMLElement && event.target.closest('input, textarea, [contenteditable]')) return;
-        const key = event.key.toLowerCase();
-        if (key === 'f') fpsVisible = !fpsVisible;
-        else if (key === 'm') calmDebug = !calmDebug;
+        fpsVisible = !fpsVisible;
     }
 
     onMount(() => {
         let disposed = false;
-        const frozen = frozenField.get();
-        const pageSeed = frozen?.seed ?? Math.random() * 1000;
+        const pageSeed = Math.random() * 1000;
         options = { ...BAKED_RENDER_OPTIONS, seed: pageSeed, renderScale, dprCap };
-        reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const calmMask = new CalmMask(calmCanvas);
-        const applyCentre = () => renderer?.setOptions(centred(options));
-        const unlistenCentre = [centreSettings.listen(applyCentre), centreEnabled.listen(applyCentre)];
+        paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const calmMask = new CalmMask();
         loadBakedRenderOptions()
             .then((loadedOptions) => {
                 options = { ...loadedOptions, seed: pageSeed, renderScale, dprCap };
-                return selectRenderBackend(canvas, centred(options));
+                return selectRenderBackend(canvas, options);
             })
             .then(({ renderer: instance }) => {
                 if (disposed) return instance.destroy();
@@ -235,14 +202,13 @@
                     fps = nextFps;
                 };
                 instance.setCursorState(cursorState);
-                instance.setCalmMask(calmCanvas);
+                instance.setCalmMask(calmMask.canvas);
                 const rect = canvas.getBoundingClientRect();
                 if (!instance.gpuCursorDensity) {
                     cursorDensityField.resize(rect.width, rect.height);
                     instance.setCursorDensityField(cursorDensityField.snapshot());
                 }
-                if (frozen) instance.time = frozen.time;
-                instance.setPaused(halted());
+                instance.setPaused(paused);
                 instance.onLost = (message) => {
                     ready = false;
                     failed = true;
@@ -269,14 +235,13 @@
         const animateCursor = (now: number) => {
             if (!document.hidden) {
                 const dt = Math.max(0, (now - cursorTime) / 1000);
-                if (!halted()) {
+                if (!paused) {
                     cursorState.tick(dt);
                     sendCursor();
                 }
                 const rect = canvas.getBoundingClientRect();
                 resizeCursorDensity(rect);
-                if (calmMask.update(rect, calmSettings.get())) renderer?.setCalmMask(calmCanvas);
-                if (calmDebug && overlays.get().centre) drawCentreMask(centreCanvas, rect.width, rect.height, centre());
+                if (calmMask.update(rect)) renderer?.setCalmMask(calmMask.canvas);
                 const batch = densityPoints;
                 densityPoints = [];
                 const gpuPath = renderer?.gpuCursorDensity === true;
@@ -308,7 +273,7 @@
         };
         cursorFrame = requestAnimationFrame(animateCursor);
         const visibility = () => {
-            renderer?.setPaused(document.hidden || halted());
+            renderer?.setPaused(document.hidden || paused);
             if (document.hidden) pointerLeave();
             cursorTime = performance.now();
         };
@@ -335,7 +300,6 @@
             window.removeEventListener('keydown', keyDown);
             cancelAnimationFrame(cursorFrame);
             calmMask.destroy();
-            unlistenCentre.forEach((unlisten) => unlisten());
             renderer?.destroy();
         };
     });
@@ -352,64 +316,7 @@
 ></canvas>
 <!-- A layer of its own, so a lost device's last frame can never show over it. -->
 {#if failed}<div class="fallback" aria-hidden="true"></div>{/if}
-{#if ready && fpsVisible}<output class="fps" data-atmosphere-calm="off" aria-label="Frames per second"
-        >{fps.toFixed(1)} FPS</output
-    >{/if}
-<!-- Drawn every frame and uploaded to the field; shown over the page only while debugging. -->
-<canvas class="overlay" class:visible={calmDebug && $overlays.calm} bind:this={calmCanvas} aria-hidden="true"></canvas>
-<canvas class="overlay" class:visible={calmDebug && $overlays.centre} bind:this={centreCanvas} aria-hidden="true"
-></canvas>
-{#snippet slider(
-    control: { label: string; min: number; max: number; step: number },
-    value: number,
-    set: (value: number) => void,
-)}
-    <label>
-        <span>{control.label}</span>
-        <input
-            type="range"
-            min={control.min}
-            max={control.max}
-            step={control.step}
-            {value}
-            oninput={(event) => set(event.currentTarget.valueAsNumber)}
-        />
-        <output>{value}</output>
-    </label>
-{/snippet}
-{#snippet toggle(label: string, checked: boolean, set: (checked: boolean) => void)}
-    <label>
-        <span>{label}</span>
-        <input type="checkbox" {checked} onchange={(event) => set(event.currentTarget.checked)} />
-    </label>
-{/snippet}
-{#if calmDebug}
-    <form class="calm-panel" data-atmosphere-calm="off" aria-label="Field debug">
-        {@render toggle('Calm', $calmSettings.enabled, (enabled) =>
-            calmSettings.set({ ...calmSettings.get(), enabled }),
-        )}
-        {@render toggle('Show calm', $overlays.calm, (calm) => overlays.set({ ...overlays.get(), calm }))}
-        {#each CALM_CONTROLS as control (control.key)}
-            {@render slider(control, $calmSettings[control.key], (value) =>
-                calmSettings.set({ ...calmSettings.get(), [control.key]: value }),
-            )}
-        {/each}
-        {@render toggle('Centre', $centreEnabled, (enabled) => centreEnabled.set(enabled))}
-        {@render toggle('Show centre', $overlays.centre, (centre) => overlays.set({ ...overlays.get(), centre }))}
-        {#each CENTRE_CONTROLS as control (control.key)}
-            {@render slider(control, $centreSettings[control.key], (value) =>
-                centreSettings.set({ ...centreSettings.get(), [control.key]: value }),
-            )}
-        {/each}
-        <div class="actions">
-            <button type="button" onclick={resetFieldDebug}>Reset</button>
-            <button type="button" onclick={togglePause}>{$frozenField ? 'Play' : 'Pause'}</button>
-            {#if $frozenField}
-                <output>seed {$frozenField.seed.toFixed(2)} · t {$frozenField.time.toFixed(2)}</output>
-            {/if}
-        </div>
-    </form>
-{/if}
+{#if ready && fpsVisible}<output class="fps" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
 
 <style>
@@ -483,45 +390,6 @@
             12px/1.2 ui-monospace,
             monospace;
         pointer-events: none;
-    }
-    .overlay {
-        display: none;
-        z-index: 49;
-        opacity: 1;
-    }
-    .overlay.visible {
-        display: block;
-    }
-    .calm-panel {
-        position: fixed;
-        bottom: max(0.5rem, env(safe-area-inset-bottom));
-        left: max(0.5rem, env(safe-area-inset-left));
-        z-index: 50;
-        display: grid;
-        gap: 0.25rem;
-        padding: 0.5rem 0.6rem;
-        color: #fff;
-        background: rgb(0 0 0 / 70%);
-        font:
-            12px/1.2 ui-monospace,
-            monospace;
-    }
-    .calm-panel label {
-        display: grid;
-        grid-template-columns: 6rem 10rem 3rem;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .calm-panel input[type='checkbox'] {
-        justify-self: start;
-    }
-    .calm-panel .actions {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .calm-panel output {
-        text-align: end;
     }
     @supports (-webkit-touch-callout: none) {
         canvas {

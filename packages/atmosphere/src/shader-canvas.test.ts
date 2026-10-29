@@ -13,13 +13,12 @@ describe('ShaderCanvas', () => {
     it('decays and uploads while base evolution is paused, but freezes in hidden tabs', () => {
         const animation = source.slice(source.indexOf('const animateCursor'), source.indexOf('const visibility'));
         expect(animation).toContain('if (!document.hidden)');
-        expect(animation).toContain('if (!halted())');
-        expect(animation.indexOf('cursorState.tick(dt)')).toBeGreaterThan(animation.indexOf('if (!halted())'));
+        expect(animation).toContain('if (!paused)');
+        expect(animation.indexOf('cursorState.tick(dt)')).toBeGreaterThan(animation.indexOf('if (!paused)'));
     });
 
-    it('seeds every page load unless a paused frame was saved, and honours the render scale prop', () => {
-        expect(source).toContain('const pageSeed = frozen?.seed ?? Math.random() * 1000');
-        expect(source).toContain('if (frozen) instance.time = frozen.time');
+    it('seeds every page load and honours the render scale prop', () => {
+        expect(source).toContain('const pageSeed = Math.random() * 1000');
         expect(source).toContain('{ ...loadedOptions, seed: pageSeed, renderScale, dprCap }');
     });
 
