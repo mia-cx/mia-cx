@@ -4,9 +4,9 @@
 -->
 <script lang="ts">
     import { QRCode, type Appendix } from '@mia-cx/print';
-    import Sheet, { type Theme } from './Sheet.svelte';
+    import Sheet from './Sheet.svelte';
 
-    let { appendix, theme = 'print' }: { appendix: Appendix; theme?: Theme } = $props();
+    let { appendix }: { appendix: Appendix } = $props();
 
     /** How many items fit on a sheet, hairline rows with a 15 mm code each. */
     const PER_SHEET = 12;
@@ -20,19 +20,19 @@
 
 {#each sheets as items, i (i)}
     <!-- After the CV's two pages, so each sheet takes the later pages' field. -->
-    <Sheet page={3 + i} {theme}>
+    <Sheet page={3 + i} theme="print">
         <section>
             {#if i === 0}<h2>{appendix.title}</h2>{/if}
             <ul>
-                {#each items as { title, tagline, url } (url + title)}
+                {#each items as { title, tagline, url } (title)}
                     <li>
                         <div>
-                            <h3>{title}</h3>
+                            <h3 class="line">{title}</h3>
                             <span class="line">{tagline}</span>
-                            <span class="line url"><a href={url}>{printed(url)}</a></span>
+                            {#if url}<span class="line url"><a href={url}>{printed(url)}</a></span>{/if}
                         </div>
                         <!-- The address above is the link for readers; the code is for phones. -->
-                        <a class="qr" href={url} tabindex="-1" aria-hidden="true"><QRCode {url} /></a>
+                        {#if url}<a class="qr" href={url} tabindex="-1" aria-hidden="true"><QRCode {url} /></a>{/if}
                     </li>
                 {/each}
             </ul>
@@ -43,7 +43,7 @@
 <style>
     li {
         display: grid;
-        grid-template-columns: 1fr 15mm;
+        grid-template-columns: minmax(0, 1fr) 15mm;
         gap: 6mm;
         align-items: start;
         padding: 2.6mm 0;
@@ -54,14 +54,16 @@
         border-top: 0;
     }
     h3 {
-        margin: 0 0 0.6mm;
         font-size: 9.4pt;
         font-weight: 650;
     }
-    /* Lines, not paragraphs: tighter than the sheet's paragraph spacing, so twelve items fit. */
+    /* One line each, tighter than the sheet's paragraphs: every row has the same height, so twelve always fit. */
     .line {
         display: block;
-        margin-bottom: 0.6mm;
+        margin: 0 0 0.6mm;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     /* The link inherits it: the sheet sets links in the colour of their text. */
     .url {

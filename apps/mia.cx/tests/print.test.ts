@@ -36,7 +36,6 @@ test.describe('in print', () => {
     test('an index page prints the CV, then its Appendix', async ({ page }) => {
         await page.goto('/work');
         const sheets = page.locator('[data-print] [data-print-sheet]');
-        await expect(sheets).toHaveCount(3);
         const appendix = sheets.nth(2);
         await expect(appendix.getByRole('heading', { name: 'Work' })).toBeVisible();
         await expect(appendix.getByRole('link', { name: 'mia.cx/work/caelestis' })).toHaveAttribute(

@@ -5,8 +5,8 @@ export { default as QRCode } from './QRCode.svelte';
 export interface AppendixItem {
     title: string;
     tagline: string;
-    /** Where the item lives; printed without its protocol, and encoded in the QR code. */
-    url: string;
+    /** Where the item lives; printed without its protocol, and encoded in the QR code. Neither prints without it. */
+    url?: string;
 }
 
 /** What an index page prints after the CV: its name and its items. */
