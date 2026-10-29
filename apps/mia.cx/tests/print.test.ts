@@ -32,4 +32,15 @@ test.describe('in print', () => {
             await expect(page.getByRole('navigation', { name: 'Sitemap' })).toBeHidden();
         }
     });
+
+    test('an index page prints the CV, then its Appendix', async ({ page }) => {
+        await page.goto('/work');
+        const sheets = page.locator('[data-print] [data-print-sheet]');
+        const appendix = sheets.nth(2);
+        await expect(appendix.getByRole('heading', { name: 'Work' })).toBeVisible();
+        await expect(appendix.getByRole('link', { name: 'mia.cx/work/caelestis' })).toHaveAttribute(
+            'href',
+            'https://mia.cx/work/caelestis',
+        );
+    });
 });

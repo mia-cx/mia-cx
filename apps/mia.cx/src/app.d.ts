@@ -8,6 +8,8 @@ declare global {
         interface PageData {
             /** Set by pages that print themselves; every other page prints the CV. */
             article?: boolean;
+            /** Set by index pages: their items, printed after the CV. */
+            appendix?: import('@mia-cx/print').Appendix;
         }
         // interface PageState {}
         // interface Platform {}
