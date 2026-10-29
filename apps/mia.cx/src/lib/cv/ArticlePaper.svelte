@@ -9,7 +9,7 @@
 </script>
 
 <!-- Print-only, so they wait their turn behind what the page shows. -->
-<img class="later" src={later} alt="" fetchpriority="low" decoding="async" />
+<div class="later"><img src={later} alt="" fetchpriority="low" decoding="async" /></div>
 <div class="first"><img src={first} alt="" fetchpriority="low" decoding="async" /></div>
 
 <style>
@@ -39,6 +39,7 @@
      * back by the margins so its dimming still lines up with the text.
      */
     @supports (font: -apple-system-body) {
+        /* Sized by its insets, so it stays a whole sheet; Safari repeats a fixed box per page only then. */
         .later {
             inset: -18mm -20mm;
         }
