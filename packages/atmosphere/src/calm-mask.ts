@@ -291,10 +291,16 @@ export class CalmMask {
                 target.width = width;
                 target.height = height;
             } else canvas2d(target).clearRect(0, 0, width, height);
-        // Expand every box by the radius with round corners, then blur the union: the feather.
+        // Expand every box by the radius with round corners, then blur the union: the feather. Safari
+        // ships canvas filters switched off, so the blur is a shadow, which every engine draws: the
+        // shapes go one canvas-width off to the left and only their blurred shadow is offset back.
+        // A shadow blur is twice the Gaussian's standard deviation.
         const radius = RADIUS / TEXEL;
         context.save();
-        context.filter = `blur(${FEATHER / TEXEL}px)`;
+        context.translate(-width, 0);
+        context.shadowOffsetX = width;
+        context.shadowBlur = (FEATHER / TEXEL) * 2;
+        context.shadowColor = '#fff';
         context.fillStyle = '#fff';
         context.beginPath();
         for (let i = 0; i < boxes.length; i += 4)
@@ -322,8 +328,9 @@ export class CalmMask {
             }
             context.drawImage(scratch, 0, 0);
         }
+        context.restore();
         // Scale the union to the strength: keeping the destination by a translucent fill multiplies its alpha.
-        context.filter = 'none';
+        context.save();
         context.globalCompositeOperation = 'destination-in';
         context.fillStyle = `rgb(0 0 0 / ${STRENGTH})`;
         context.fillRect(0, 0, width, height);
