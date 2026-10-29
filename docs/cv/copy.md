@@ -60,7 +60,7 @@ I'm almost entirely self-taught. I studied Music & Technology at HKU and found t
 ### Experience
 
 **Junior Support Consultant** · Humaris · Sep 2026 – present
-I help advisors, customers of ParaDIGMA groep and their employees use ParaDIGMA's online absenteeism platform, working in TopDesk, Excel and the platform itself.
+I help advisors, customers of ParaDIGMA Groep and their employees use ParaDIGMA's online absenteeism platform, working in TopDesk, Excel and the platform itself.
 
 **Founder** · mia.cx · Jul 2021 – present
 mia.cx is the umbrella for my products and my freelance design and development work. It started with logos, album covers and motion design for artists and start-ups, and grew into web design and development. In 2023 I launched the hypertrance.eu webshop for nuphory on Shopify and Cloudflare.
@@ -76,7 +76,7 @@ I stocked shelves, received freight from the distribution centres before opening
 
 ### Selected work
 
-- **Caelestis**: a template overlay and shared server for groups painting together on wplace.live. caelestis.mia.cx
+- **Caelestis**: a template overlay and shared server for groups painting together on wplace.live. caelest.is
 - **Discord Wrapped**: turns a Discord data package into a report with shareable stories. discordwrapped.app
 - **Vesta**: an all-in-one platform for independent musicians, small labels and creative publishers. In development.
 - **Maal**: meal planning for people with ADHD.
