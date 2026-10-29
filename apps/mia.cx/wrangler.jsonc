@@ -20,4 +20,10 @@
     "observability": {
         "enabled": true,
     },
+    "env": {
+        // The `mia-cx-staging` Worker: every push to main lands here before a release reaches mia.cx.
+        "staging": {
+            "routes": [{ "pattern": "staging.mia.cx", "custom_domain": true }],
+        },
+    },
 }

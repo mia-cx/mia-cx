@@ -1,0 +1,23 @@
+{
+    "changelog": "@changesets/cli/changelog",
+    "commit": false,
+    "fixed": [],
+    "linked": [],
+    "access": "restricted",
+    "baseBranch": "main",
+    "updateInternalDependencies": "patch",
+    "ignore": [
+        "@jackyzha0/quartz",
+        "@mia-cx/atmosphere",
+        "@mia-cx/config",
+        "@mia-cx/patch.cx",
+        "@mia-cx/shaderdemo",
+        "@mia-cx/ui",
+        "@mia-cx/utils",
+        "@mia-cx/web-utils"
+    ],
+    "privatePackages": {
+        "version": true,
+        "tag": false
+    }
+}
