@@ -20,7 +20,7 @@
     let light = $state<'flares' | 'ink'>('ink');
     const ink = $state({ falloff: 1, saturate: 1 });
     /** The CV buttons' icon box, in cap heights of the button text. */
-    let icon = $state(1);
+    let icon = $state(1.5);
 
     /** Page 1 has its own still; page 2 stands for every page after it. */
     const field = $state([
@@ -470,8 +470,8 @@
     /* Lucide draws at 2; 1.5 matches the weight of the button text. */
     .cv-buttons :global(svg *) { stroke-width: 1.5; }
     .cv-buttons .icon { position: relative; justify-content: center; width: 40px; padding: 0; }
-    /* The badge hangs off the bottom right; shift by half its overhang so the pair reads as centred. */
-    .doc { position: relative; display: grid; translate: calc(var(--icon) * -0.17cap) calc(var(--icon) * -0.15cap); }
+    /* The document lines up with its neighbour; only the badge's sideways overhang is balanced, by half. */
+    .doc { position: relative; display: grid; translate: calc(var(--icon) * -0.17cap) 0; }
     /* Trim the label to cap height and baseline, so centring lines the icon up with the capitals. */
     .label { text-box: trim-both cap alphabetic; }
     /* The printer sits on the document's corner, cut out of it by the button's own background. */
