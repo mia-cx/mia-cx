@@ -124,6 +124,7 @@ jobs:
         secrets: inherit
         permissions:
             contents: read
+            pull-requests: read
 
     production:
         name: Deploy approved release
@@ -132,28 +133,28 @@ jobs:
         uses: ./.github/workflows/deploy.yml
         with:
             environment: production
-            sha: ${{ needs.release.outputs.sha }}
-            # An automatic release never lands after a newer one; a manual redeploy may roll back on purpose.
-            latest_only: ${{ github.event_name == 'push' }}
+            # A release ships the newest release on main when it gets the slot; a manual redeploy ships
+            # exactly the commit it names, which may roll back on purpose.
+            sha: ${{ github.event_name == 'workflow_dispatch' && needs.release.outputs.sha || '' }}
         secrets: inherit
         permissions:
             contents: read
+            pull-requests: read
 
     tag:
         name: Tag the deployed release
-        needs: [release, production]
-        if: needs.production.outputs.deployed == 'true'
+        needs: production
         runs-on: ubuntu-latest
         timeout-minutes: 5
         permissions:
             contents: write
         env:
-            SHA: ${{ needs.release.outputs.sha }}
+            SHA: ${{ needs.production.outputs.sha }}
         steps:
             - name: Check out repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  ref: ${{ needs.release.outputs.sha }}
+                  ref: ${{ needs.production.outputs.sha }}
 
             - name: Tag the release commit
               run: |

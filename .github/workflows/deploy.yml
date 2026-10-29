@@ -8,33 +8,31 @@ on:
                 required: true
                 type: string
             sha:
-                description: Exact main commit to deploy
-                required: true
-                type: string
-            latest_only:
-                description: Skip the deploy when main already carries a newer version of the site
+                description: Exact main commit to deploy; empty deploys the newest release merged into main
                 required: false
-                type: boolean
-                default: false
+                type: string
+                default: ''
         outputs:
-            deployed:
-                description: Whether this commit was deployed
-                value: ${{ jobs.deploy.outputs.deployed }}
+            sha:
+                description: The commit that was deployed
+                value: ${{ jobs.deploy.outputs.sha }}
 
 permissions:
     contents: read
+    pull-requests: read
 
 jobs:
     deploy:
         name: Check and deploy to ${{ inputs.environment }}
         runs-on: ubuntu-latest
         timeout-minutes: 30
-        # One deploy per environment at a time, in arrival order.
+        # One deploy per environment at a time. GitHub keeps only the newest waiting run, which is
+        # why an automatic production deploy ships the newest release rather than its own commit.
         concurrency:
             group: deploy-${{ inputs.environment }}
             cancel-in-progress: false
         outputs:
-            deployed: ${{ steps.deploy.outputs.deployed }}
+            sha: ${{ steps.target.outputs.sha }}
         environment:
             name: ${{ inputs.environment }}
             url: ${{ inputs.environment == 'production' && 'https://mia.cx' || 'https://staging.mia.cx' }}
@@ -46,7 +44,37 @@ jobs:
             - name: Check out repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  ref: ${{ inputs.sha }}
+                  ref: ${{ inputs.sha || 'main' }}
+                  fetch-depth: ${{ inputs.sha && 1 || 0 }}
+
+            # Releases reach the queue out of order and waiting runs get dropped, so whichever run holds
+            # the slot ships the newest release on main. It can never land an older release after a
+            # newer one, and a dropped run's release still goes out with the run that replaced it.
+            - name: Choose the commit to deploy
+              id: target
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  SHA: ${{ inputs.sha }}
+              run: |
+                  if [ -n "$SHA" ]; then
+                    echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+                    exit 0
+                  fi
+                  version() {
+                    git show "$1:apps/mia.cx/package.json" 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version" 2>/dev/null
+                  }
+                  # Walk main's own history, newest first, through the commits that changed the site's version.
+                  for sha in $(git log --first-parent --format=%H HEAD -- apps/mia.cx/package.json); do
+                    [ "$(version "$sha")" = "$(version "$sha^1")" ] && continue
+                    release="$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --paginate --slurp | node .github/scripts/release-merge.mjs "$sha" "$GITHUB_REPOSITORY")"
+                    if [ "$release" = true ]; then
+                      git checkout -q "$sha"
+                      echo "sha=$sha" >> "$GITHUB_OUTPUT"
+                      exit 0
+                    fi
+                  done
+                  echo 'No release pull request has been merged into main' >&2
+                  exit 1
 
             - name: Set up pnpm
               uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -76,27 +104,12 @@ jobs:
               run: |
                   printf '\n/*\n  X-Robots-Tag: noindex\n' >> apps/mia.cx/.svelte-kit/cloudflare/_headers
 
-            # Releases can reach this queue out of order. This job holds the environment's only slot, so a
-            # newer release on main is either done or still waiting behind it; either way it deploys itself,
-            # and an older one must not land after it.
             - name: Deploy
-              id: deploy
               env:
                   ENVIRONMENT: ${{ inputs.environment }}
-                  SHA: ${{ inputs.sha }}
-                  LATEST_ONLY: ${{ inputs.latest_only }}
+                  SHA: ${{ steps.target.outputs.sha }}
               run: |
                   version="$(node -p "require('./apps/mia.cx/package.json').version")"
-                  if [ "$LATEST_ONLY" = true ]; then
-                    git fetch --depth=1 origin main
-                    newest="$(git show FETCH_HEAD:apps/mia.cx/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")"
-                    if [ "$version" != "$newest" ]; then
-                      echo "mia.cx $version is superseded by $newest on main, so it was not deployed." >> "$GITHUB_STEP_SUMMARY"
-                      echo "deployed=false" >> "$GITHUB_OUTPUT"
-                      exit 0
-                    fi
-                  fi
                   args=(--message "mia.cx $version at ${SHA:0:7}")
                   [ "$ENVIRONMENT" = staging ] && args+=(--env staging)
                   pnpm --filter @mia-cx/mia.cx exec wrangler deploy "${args[@]}"
-                  echo "deployed=true" >> "$GITHUB_OUTPUT"
