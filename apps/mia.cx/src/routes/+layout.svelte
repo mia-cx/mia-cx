@@ -93,7 +93,7 @@
     Outside <main>, so Markdown twins never carry it.
 -->
 <PrintSwitch article={page.data.article === true}>
-    <CV cv={page.data.cv} />
+    <CV cv={page.data.cv} theme={page.data.theme} />
     {#if page.data.appendix}<Appendix appendix={page.data.appendix} />{/if}
     {#snippet paper()}<ArticlePaper />{/snippet}
 </PrintSwitch>

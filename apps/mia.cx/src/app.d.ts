@@ -14,12 +14,16 @@ declare global {
             cv?: import('$lib/cv/content').CV;
             /** Set by /cv: the role it was asked for, kept in the address it shares. */
             role?: string | null;
+            /** Set by /cv: the Theme it shows, which printing it (and so /cv.pdf) keeps. Elsewhere, Print. */
+            theme?: import('$lib/cv/Sheet.svelte').Theme;
         }
         // interface PageState {}
         interface Platform {
             env: {
                 /** Role presets for /cv, keyed by role: JSON `{ title, skills? }`. */
                 CV_PRESETS?: { get(key: string): Promise<string | null> };
+                /** Cloudflare Browser Rendering, which prints /cv.pdf. */
+                BROWSER?: import('@cloudflare/puppeteer').BrowserWorker;
             };
         }
     }
