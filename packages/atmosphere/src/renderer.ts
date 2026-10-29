@@ -1160,10 +1160,9 @@ export class AtmosphereRenderer {
             make(BLOOM_BLUR_SHADER_SOURCE, { format: BLOOM_TEXTURE_FORMAT }),
             make(GOD_RAYS_SHADER_SOURCE, { format: GOD_RAYS_TEXTURE_FORMAT }),
             make(MATERIALIZE_SHADER_SOURCE, { format: 'rgba16float' }),
-            make(
-                primaryPostKind === undefined ? POST_EFFECT_SHADER_SOURCE : compactPostShaderSource(primaryPostKind),
-                { format: POST_TEXTURE_FORMAT },
-            ),
+            make(primaryPostKind === undefined ? POST_EFFECT_SHADER_SOURCE : compactPostShaderSource(primaryPostKind), {
+                format: POST_TEXTURE_FORMAT,
+            }),
             make(PRESENT_SHADER_SOURCE, { format }),
             make(COLOUR_EFFECT_SHADER_SOURCE, { format: 'rgba16float' }),
             make(LUT_SHADER_SOURCE, { format: 'rgba16float' }),
