@@ -67,8 +67,10 @@
                 <h2>Skills</h2>
                 <dl class="skills">
                     {#each cv.skills as { area, items } (area)}
-                        <dt>{area}</dt>
-                        <dd>{items}</dd>
+                        <div>
+                            <dt>{area}</dt>
+                            <dd>{items}</dd>
+                        </div>
                     {/each}
                 </dl>
             </section>
@@ -184,6 +186,23 @@
         grid-template-columns: 110mm 1fr;
         gap: 0 6mm;
     }
+    /* Skills and Languages run the timeline's height, so the column ends where it does: the skill areas spread out. */
+    .columns > div {
+        display: flex;
+        flex-direction: column;
+    }
+    .columns > div > section:first-child {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+    }
+    .skills {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 4mm;
+    }
     dl {
         margin: 0;
     }
@@ -192,10 +211,6 @@
     }
     dd {
         margin: 0;
-    }
-    /* The column is too narrow to set a skill area beside its list. */
-    .skills dd + dt {
-        margin-top: 1.5mm;
     }
     .languages {
         display: grid;

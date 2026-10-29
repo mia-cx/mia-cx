@@ -13,7 +13,7 @@
     }: { work: TimelineEntry[]; creative: TimelineEntry[]; today?: Date } = $props();
 
     /** Millimetres: the axis's height, and the room each side has for its bars and labels. */
-    const HEIGHT = 92;
+    const HEIGHT = 128;
     const LEFT = 62;
     const RIGHT = 48;
     /** Room above the axis for the side headings. */
