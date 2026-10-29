@@ -6,6 +6,7 @@
     const portraitSet = `${portrait480} 480w, ${portrait800} 800w, ${portrait1200} 1200w, ${portrait1600} 1600w`;
     import { ArrowLink, Socials } from '@mia-cx/ui';
     import Contact from '$lib/components/Contact.svelte';
+    import CVButtons from '$lib/cv/CVButtons.svelte';
     import { intro, otherSocials, primarySocials, site } from '$lib/content/site';
     import { featuredWork } from '$lib/content/vault';
 
@@ -31,8 +32,9 @@
                 </p>
                 <p class="pronouns mono" data-enter style:--enter="4">{site.pronouns}</p>
             </div>
-            <div data-enter style:--enter="5">
+            <div class="reach" data-enter style:--enter="5">
                 <Socials featured={primarySocials} more={otherSocials} panelId="hero-socials" />
+                <CVButtons />
             </div>
         </div>
 
@@ -260,7 +262,12 @@
         margin-top: 18px;
         color: var(--ink-dim);
     }
-    .identity :global(.socials) {
+    /* The CV sits beside the socials' +N button. */
+    .reach {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px 20px;
         margin-top: 26px;
     }
 
