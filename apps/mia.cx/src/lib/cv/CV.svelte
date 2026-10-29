@@ -26,7 +26,7 @@
 
     <div class="columns">
         <section>
-            <h2>Experience</h2>
+            <h2>Timeline</h2>
             <Timeline work={cv.timeline.work} creative={cv.timeline.creative} />
         </section>
 
