@@ -26,9 +26,9 @@
         icon: 1.5,
         dim: {
             /** The calm mask: the share of the field's light taken away behind text and images. */
-            content: { on: true, strength: 0.2 },
+            content: { on: true, strength: 0.2, radius: 110, feather: 128, exponent: 1 },
             /** The shader's own rounded rectangle, darkening the middle of each sheet. */
-            centre: { on: true, strength: 0.25 },
+            centre: { on: true, strength: 0.25, width: 0.85, height: 0.85, roundness: 4.7, softness: 1.5 },
         },
         /** Page 1 has its own still; page 2 stands for every page after it. */
         field: [
@@ -95,6 +95,21 @@
         ['faceSolid', 'Feather starts (%)', 0, 95, 1],
     ];
 
+    type Slider<K> = [K, string, number, number, number][];
+    const contentControls: Slider<'strength' | 'radius' | 'feather' | 'exponent'> = [
+        ['strength', 'Strength', 0, 1, 0.01],
+        ['radius', 'Radius (px)', 0, 300, 1],
+        ['feather', 'Feather (px)', 0, 300, 1],
+        ['exponent', 'Exponent', 0.1, 6, 0.05],
+    ];
+    const centreControls: Slider<'strength' | 'width' | 'height' | 'roundness' | 'softness'> = [
+        ['strength', 'Strength', 0, 1.5, 0.01],
+        ['width', 'Width', 0.1, 2.5, 0.01],
+        ['height', 'Height', 0.1, 2.5, 0.01],
+        ['roundness', 'Roundness', 2, 12, 0.1],
+        ['softness', 'Softness', 0.01, 1.5, 0.01],
+    ];
+
     /** Sheets after page 2 (the Appendix) share its still. */
     const still = (i: number) => field[Math.min(i, field.length - 1)];
 
@@ -122,7 +137,8 @@
         let frame = 0;
         const tick = () => {
             calm.forEach((mask, i) => {
-                mask.strength = dim.content.on ? dim.content.strength : 0;
+                const { on, strength, radius, feather, exponent } = dim.content;
+                mask.settings = { radius, feather, exponent, strength: on ? strength : 0 };
                 if (mask.update(canvases[i].getBoundingClientRect())) renderers[i]?.setCalmMask(mask.canvas);
             });
             frame = requestAnimationFrame(tick);
@@ -151,8 +167,15 @@
         renderers.forEach((renderer, i) => {
             if (!renderer) return;
             const { seed, time } = still(i);
-            const centerDarkness = dim.centre.on ? dim.centre.strength : 0;
-            renderer.setOptions({ ...base, seed, parameters: { ...base.parameters, centerDarkness } });
+            const { on, strength, width, height, roundness, softness } = dim.centre;
+            const centre = {
+                centerDarkness: on ? strength : 0,
+                centerWidth: width,
+                centerHeight: height,
+                centerRoundness: roundness,
+                centerSoftness: softness,
+            };
+            renderer.setOptions({ ...base, seed, parameters: { ...base.parameters, ...centre } });
             // PROTOTYPE: the renderers keep simulation time private; scrubbing it is the whole point here.
             (renderer as unknown as { simTime: number }).simTime = time;
             renderer.invalidate();
@@ -280,11 +303,15 @@
         <fieldset>
             <legend>Dimming</legend>
             <label><input type="checkbox" bind:checked={dim.content.on} /> Behind text and images</label>
-            <label>Strength <output>{dim.content.strength}</output></label>
-            <input type="range" min="0" max="1" step="0.01" bind:value={dim.content.strength} disabled={!dim.content.on} />
+            {#each contentControls as [key, label, min, max, step] (key)}
+                <label>{label} <output>{dim.content[key]}</output></label>
+                <input type="range" {min} {max} {step} bind:value={dim.content[key]} disabled={!dim.content.on} />
+            {/each}
             <label><input type="checkbox" bind:checked={dim.centre.on} /> Centre of the sheet</label>
-            <label>Strength <output>{dim.centre.strength}</output></label>
-            <input type="range" min="0" max="1.5" step="0.01" bind:value={dim.centre.strength} disabled={!dim.centre.on} />
+            {#each centreControls as [key, label, min, max, step] (key)}
+                <label>{label} <output>{dim.centre[key]}</output></label>
+                <input type="range" {min} {max} {step} bind:value={dim.centre[key]} disabled={!dim.centre.on} />
+            {/each}
         </fieldset>
         <fieldset>
             <legend>Portrait</legend>

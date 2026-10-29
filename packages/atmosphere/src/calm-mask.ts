@@ -132,8 +132,11 @@ export class CalmMask {
     private viewportSize = '';
     /** The mask itself, for the renderer to upload. It is never attached to the page. */
     readonly canvas = document.createElement('canvas');
-    /** Share of the field's light taken away at the core. PROTOTYPE: settable for the CV look sliders. */
-    strength = STRENGTH;
+    /**
+     * PROTOTYPE: the tuned constants, settable for the CV look sliders. Exponent shapes the falloff,
+     * alpha^exponent, before the strength scales it; 1 leaves it as the blur draws it.
+     */
+    settings = { radius: RADIUS, feather: FEATHER, exponent: 1, strength: STRENGTH };
 
     constructor(private readonly root: Element = document.body) {
         this.context = canvas2d(this.canvas);
@@ -161,7 +164,7 @@ export class CalmMask {
         const width = Math.max(1, Math.ceil(viewport.width / TEXEL)),
             height = Math.max(1, Math.ceil(viewport.height / TEXEL));
         // A Gaussian is spent by three standard deviations.
-        const reach = RADIUS + FEATHER * 3;
+        const reach = this.settings.radius + this.settings.feather * 3;
         const shapes: Layer = { boxes: [], cutouts: [] };
         if (this.stale) this.collect();
         const size = `${viewport.width}x${viewport.height}`;
@@ -177,7 +180,7 @@ export class CalmMask {
         place(this.view, -viewport.left, -viewport.top, viewport, reach, shapes);
         place(this.measure(this.sources.sticky, 0, 0), -viewport.left, -viewport.top, viewport, reach, shapes);
         const images = shapes.cutouts.map(({ image, box, clip }) => `${image.currentSrc}:${box}:${clip}`);
-        const signature = `${this.strength}:${width}x${height}:${shapes.boxes}:${images}`;
+        const signature = `${Object.values(this.settings)}:${width}x${height}:${shapes.boxes}:${images}`;
         if (signature === this.signature) return false;
         this.signature = signature;
         this.draw(shapes.boxes, shapes.cutouts, width, height);
@@ -297,6 +300,7 @@ export class CalmMask {
         // ships canvas filters switched off, so the blur is a shadow, which every engine draws: the
         // shapes are drawn off the canvas to the left and only their blurred shadow is offset back.
         // A shadow blur is twice the Gaussian's standard deviation.
+        const { radius: RADIUS, feather: FEATHER, exponent, strength } = this.settings;
         const radius = RADIUS / TEXEL;
         // Boxes are cut off past this margin, where the feather can no longer reach the view, so the
         // shift below always clears them: nothing but the shadow lands on the canvas.
@@ -338,10 +342,16 @@ export class CalmMask {
             context.drawImage(scratch, 0, 0);
         }
         context.restore();
+        if (exponent !== 1) {
+            const image = context.getImageData(0, 0, width, height),
+                pixels = image.data;
+            for (let i = 3; i < pixels.length; i += 4) pixels[i] = 255 * (pixels[i] / 255) ** exponent;
+            context.putImageData(image, 0, 0);
+        }
         // Scale the union to the strength: keeping the destination by a translucent fill multiplies its alpha.
         context.save();
         context.globalCompositeOperation = 'destination-in';
-        context.fillStyle = `rgb(0 0 0 / ${this.strength})`;
+        context.fillStyle = `rgb(0 0 0 / ${strength})`;
         context.fillRect(0, 0, width, height);
         context.restore();
     }
