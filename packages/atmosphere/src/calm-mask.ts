@@ -110,7 +110,7 @@ const moving = () =>
 /**
  * Builds the mask every frame without reading layout every frame. Content that scrolls with the
  * page is measured once in page coordinates and shifted by the scroll offset; it is measured again
- * only when the page changes: DOM edits, a resize, fonts or images loading, nested scrolling, or a
+ * only when the page changes: DOM edits, the page or view resizing, fonts or images loading, nested scrolling, or a
  * running animation. Fixed content is cached the same way in view coordinates; only sticky content,
  * which moves against both, is measured every frame.
  */
@@ -128,6 +128,8 @@ export class CalmMask {
     private page?: Layer;
     private view?: Layer;
     private signature = '';
+    /** The view's last size: resizing it moves fixed and viewport-sized content without resizing the page. */
+    private viewportSize = '';
     /** The mask itself, for the renderer to upload. It is never attached to the page. */
     readonly canvas = document.createElement('canvas');
 
@@ -160,6 +162,11 @@ export class CalmMask {
         const reach = RADIUS + FEATHER * 3;
         const shapes: Layer = { boxes: [], cutouts: [] };
         if (this.stale) this.collect();
+        const size = `${viewport.width}x${viewport.height}`;
+        if (size !== this.viewportSize) {
+            this.viewportSize = size;
+            this.invalidate();
+        }
         if (!this.page || !this.view || moving()) {
             this.page = this.measure(this.sources.page, scrollX, scrollY);
             this.view = this.measure(this.sources.view, 0, 0);
