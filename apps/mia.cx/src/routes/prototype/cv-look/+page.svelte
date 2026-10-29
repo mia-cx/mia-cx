@@ -467,8 +467,8 @@
     .cv-buttons a:hover, .cv-buttons a:focus-visible { position: relative; z-index: 1; border-color: var(--accent); color: var(--accent); }
     /* The icon box is exactly 1cap; Lucide draws in 20 of its 24 units, so the glyph sits a little inside it. */
     .cv-buttons :global(svg) { width: calc(var(--icon) * 1cap); height: calc(var(--icon) * 1cap); }
-    /* Lucide draws at 2; 1.5 matches the weight of the button text. */
-    .cv-buttons :global(svg *) { stroke-width: 1.5; }
+    /* A fixed on-screen stroke, so the smaller printer badge draws as heavy as the document. 0.065em matches the label's weight. */
+    .cv-buttons :global(svg *) { vector-effect: non-scaling-stroke; stroke-width: 0.065em; }
     .cv-buttons .icon { position: relative; justify-content: center; width: 40px; padding: 0; }
     /* The document lines up with its neighbour; only the badge's sideways overhang is balanced, by half. */
     .doc { position: relative; display: grid; translate: calc(var(--icon) * -0.17cap) 0; }
