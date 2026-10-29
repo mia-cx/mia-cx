@@ -12,6 +12,8 @@ declare global {
             appendix?: import('@mia-cx/print').Appendix;
             /** Set by /cv: the CV a role preset gives, which printing the page prints too. */
             cv?: import('$lib/cv/content').CV;
+            /** Set by /cv: the role it was asked for, kept in the address it shares. */
+            role?: string | null;
         }
         // interface PageState {}
         interface Platform {

@@ -52,7 +52,8 @@
 <svelte:head>
     <meta property="og:site_name" content={site.domain} />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="{site.url}{page.url.pathname}" />
+    <!-- A role link keeps its role: crawlers that re-read og:url would otherwise show the plain CV. -->
+    <meta property="og:url" content="{site.url}{page.url.pathname}{page.data.role ? `?role=${page.data.role}` : ''}" />
     <meta property="og:image" content="{site.url}/og.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />

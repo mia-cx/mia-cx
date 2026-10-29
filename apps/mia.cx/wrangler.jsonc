@@ -1,4 +1,5 @@
-// The site runs as a Cloudflare Worker. Every page is prerendered and served as a static asset.
+// The site runs as a Cloudflare Worker. Pages are prerendered and served as static assets, except /cv,
+// which SvelteKit's Worker renders per request.
 // worker.ts runs first for everything outside /_app: it hands agents a page's Markdown twin, then
 // passes the rest to SvelteKit's Worker, which serves the assets and answers the 404 page.
 {
