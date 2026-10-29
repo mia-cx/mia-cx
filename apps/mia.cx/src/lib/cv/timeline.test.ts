@@ -41,4 +41,19 @@ describe('the CV timeline', () => {
         const [vwo, albertHeijn] = layout.sides.left.bars;
         expect(albertHeijn.offset).not.toBe(vwo.offset);
     });
+
+    test('counts an entry through its end month', () => {
+        const entry = (start: string, end: string) => ({ title: start, subtitle: '', start, end });
+        // A one-month role, and two roles that both ran in July 2019.
+        const { bars } = layoutTimeline(
+            {
+                left: [entry('2018-03', '2018-03'), entry('2019-01', '2019-07'), entry('2019-07', '2020-01')],
+                right: [],
+            },
+            today,
+            HEIGHT,
+        ).sides.left;
+        expect(bars[0].y2).toBeGreaterThan(bars[0].y1);
+        expect(bars[2].offset).not.toBe(bars[1].offset);
+    });
 });

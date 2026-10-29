@@ -83,8 +83,9 @@ export function layoutTimeline(entries: Record<Side, TimelineEntry[]>, today: Da
         // Each lane remembers when its last bar ends; a bar takes the first lane free by its start.
         const laneEnds: number[] = [];
         const bars = sorted.map(({ start, end }) => {
+            // An entry runs through its end month, so it ends where the next month starts.
             const from = toYear(start),
-                to = end ? toYear(end) : now;
+                to = end ? Math.min(toYear(end) + 1 / 12, now) : now;
             let lane = laneEnds.findIndex((free) => free <= from);
             if (lane < 0) lane = laneEnds.length;
             laneEnds[lane] = to;
