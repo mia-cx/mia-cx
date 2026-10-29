@@ -324,7 +324,7 @@
             <section>
                 <h2>Experience</h2>
                 <div>
-                    <div class="entry"><h3>Junior Support Consultant <span>· Humaris · Sep 2026 – present</span></h3><p>I help advisors, customers of ParaDIGMA groep and their employees use ParaDIGMA's online absenteeism platform, working in TopDesk, Excel and the platform itself.</p></div>
+                    <div class="entry"><h3>Junior Support Consultant <span>· Humaris · Sep 2026 – present</span></h3><p>I help advisors, customers of ParaDIGMA Groep and their employees use ParaDIGMA's online absenteeism platform, working in TopDesk, Excel and the platform itself.</p></div>
                     <div class="entry"><h3>Founder <span>· mia.cx · Jul 2021 – present</span></h3><p>mia.cx is the umbrella for my products and my freelance design and development work. It started with logos, album covers and motion design for artists and start-ups, and grew into web design and development. In 2023 I launched the hypertrance.eu webshop for nuphory on Shopify and Cloudflare.</p></div>
                     <div class="entry"><h3>Customer Care Agent <span>· ABN AMRO · Nov 2023 – Jul 2025</span></h3><p>I helped clients with their banking every day: about half needed guidance in the mobile app, and the rest ranged from financial questions to complex disputes. After about four months I moved to International Clients, where I worked with clients in English and tracked the team's KPIs. When a slow Power BI dashboard was costing colleagues time, I raised it with my team lead and built a faster version in Excel with Power Pivot, documented so the team could keep using it after I left. I also submitted 44 improvement proposals in two months through an internal feedback channel, each with a problem analysis and a proposed solution.</p></div>
                     <div class="entry"><h3>Call Agent <span>· Teleperformance, for GGD Coronalijn · Feb 2022 – Jul 2022</span></h3><p>I booked COVID test appointments by phone during a period of high call volumes, often for stressed or worried callers, and handled their personal data with care.</p></div>
@@ -334,7 +334,7 @@
             <section>
                 <h2>Selected work</h2>
                 <ul class="work">
-                    <li><b>Caelestis</b>: a template overlay and shared server for groups painting together on wplace.live. <a class="url" href="https://caelestis.mia.cx">caelestis.mia.cx</a></li>
+                    <li><b>Caelestis</b>: a template overlay and shared server for groups painting together on wplace.live. <a class="url" href="https://caelest.is">caelest.is</a></li>
                     <li><b>Discord Wrapped</b>: turns a Discord data package into a report with shareable stories. <a class="url" href="https://discordwrapped.app">discordwrapped.app</a></li>
                     <li><b>Vesta</b>: an all-in-one platform for independent musicians, small labels and creative publishers. In development.</li>
                     <li><b>Maal</b>: meal planning for people with ADHD.</li>
