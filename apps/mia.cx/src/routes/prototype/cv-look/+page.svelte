@@ -26,9 +26,9 @@
         icon: 1.5,
         dim: {
             /** The calm mask: the share of the field's light taken away behind text and images. */
-            content: { on: true, strength: 0.2, radius: 110, feather: 128, exponent: 1 },
-            /** The shader's own rounded rectangle, darkening the middle of each sheet. */
-            centre: { on: true, strength: 0.25, width: 0.85, height: 0.85, roundness: 4.7, softness: 1.5 },
+            content: { on: true, strength: 0.95, radius: 73, feather: 137, exponent: 1 },
+            /** The shader's own rounded rectangle, darkening the middle of each sheet. The CV leaves it off. */
+            centre: { on: false, strength: 0.25, width: 0.85, height: 0.85, roundness: 4.7, softness: 1.5 },
         },
         /** Page 1 has its own still; page 2 stands for every page after it. */
         field: [
