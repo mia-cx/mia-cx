@@ -10,6 +10,7 @@ const backend = (name: 'webgpu' | 'webgl2') =>
         setCursorDensityField: vi.fn(),
         setCalmMask: vi.fn(),
         setPaused: vi.fn(),
+        setTime: vi.fn(),
         invalidate: vi.fn(),
         destroy: vi.fn(),
     }) as RenderBackend;

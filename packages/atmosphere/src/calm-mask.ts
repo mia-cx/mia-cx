@@ -4,12 +4,16 @@
  * but never peaks behind it.
  */
 
-/** CSS pixels past each line box or image at which the darkening is at half strength. */
-const RADIUS = 110;
-/** Gaussian blur over that edge, in CSS pixels. */
-const FEATHER = 128;
-/** Share of the field's light taken away at the core. */
-const STRENGTH = 0.2;
+/** How the darkening is shaped. The site uses the defaults; a printed CV tunes its own. */
+export interface CalmOptions {
+    /** CSS pixels past each line box or image at which the darkening is at half strength. */
+    radius: number;
+    /** Gaussian blur over that edge, in CSS pixels. */
+    feather: number;
+    /** Share of the field's light taken away at the core. */
+    strength: number;
+}
+export const CALM_DEFAULTS: CalmOptions = { radius: 110, feather: 128, strength: 0.2 };
 /** CSS pixels per mask texel. The mask is all soft edges, so a coarse grid loses nothing. */
 const TEXEL = 8;
 /** Elements whose content never calms the field: opted out by the page, or not drawn at all. */
@@ -133,7 +137,10 @@ export class CalmMask {
     /** The mask itself, for the renderer to upload. It is never attached to the page. */
     readonly canvas = document.createElement('canvas');
 
-    constructor(private readonly root: Element = document.body) {
+    constructor(
+        private readonly root: Element = document.body,
+        private readonly options: CalmOptions = CALM_DEFAULTS,
+    ) {
         this.context = canvas2d(this.canvas);
         // The mask's own canvases, the debug panel and anything opted out never affect it.
         const relevant = ({ target }: MutationRecord) =>
@@ -159,7 +166,7 @@ export class CalmMask {
         const width = Math.max(1, Math.ceil(viewport.width / TEXEL)),
             height = Math.max(1, Math.ceil(viewport.height / TEXEL));
         // A Gaussian is spent by three standard deviations.
-        const reach = RADIUS + FEATHER * 3;
+        const reach = this.options.radius + this.options.feather * 3;
         const shapes: Layer = { boxes: [], cutouts: [] };
         if (this.stale) this.collect();
         const size = `${viewport.width}x${viewport.height}`;
@@ -295,15 +302,16 @@ export class CalmMask {
         // ships canvas filters switched off, so the blur is a shadow, which every engine draws: the
         // shapes are drawn off the canvas to the left and only their blurred shadow is offset back.
         // A shadow blur is twice the Gaussian's standard deviation.
-        const radius = RADIUS / TEXEL;
+        const { feather, strength } = this.options;
+        const radius = this.options.radius / TEXEL;
         // Boxes are cut off past this margin, where the feather can no longer reach the view, so the
         // shift below always clears them: nothing but the shadow lands on the canvas.
-        const margin = (RADIUS + FEATHER * 3) / TEXEL;
+        const margin = radius + (feather * 3) / TEXEL;
         const shift = width + margin * 2;
         context.save();
         context.translate(-shift, 0);
         context.shadowOffsetX = shift;
-        context.shadowBlur = (FEATHER / TEXEL) * 2;
+        context.shadowBlur = (feather / TEXEL) * 2;
         context.shadowColor = '#fff';
         context.fillStyle = '#fff';
         context.beginPath();
@@ -339,7 +347,7 @@ export class CalmMask {
         // Scale the union to the strength: keeping the destination by a translucent fill multiplies its alpha.
         context.save();
         context.globalCompositeOperation = 'destination-in';
-        context.fillStyle = `rgb(0 0 0 / ${STRENGTH})`;
+        context.fillStyle = `rgb(0 0 0 / ${strength})`;
         context.fillRect(0, 0, width, height);
         context.restore();
     }

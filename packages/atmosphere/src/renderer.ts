@@ -1529,6 +1529,10 @@ export class AtmosphereRenderer {
         );
         this.invalidate();
     }
+    setTime(seconds: number) {
+        this.simTime = seconds;
+        this.invalidate();
+    }
     invalidate() {
         this.invalid = true;
         this.schedule();

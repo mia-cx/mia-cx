@@ -28,6 +28,8 @@ export interface RenderBackend {
     queueCursorDensityUpdate?(update: CursorDensityUpdate): void;
     resetCursorDensityStroke?(): void;
     setPaused(paused: boolean): void;
+    /** Moves the field to `seconds` of simulation time. Paused, it stays there: a still of that frame. */
+    setTime(seconds: number): void;
     invalidate(): void;
     destroy(): void;
 }
