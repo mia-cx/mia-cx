@@ -48,6 +48,7 @@
     "wrangler": "^4.138.0"
   },
   "dependencies": {
+    "@cloudflare/puppeteer": "^1.4.0",
     "@fontsource-variable/archivo": "^5.3.0",
     "@mia-cx/atmosphere": "workspace:*",
     "@mia-cx/print": "workspace:*",

@@ -1,13 +1,16 @@
-// The site runs as a Cloudflare Worker. Pages are prerendered and served as static assets, except /cv,
-// which SvelteKit's Worker renders per request.
-// worker.ts runs first for everything outside /_app: it hands agents a page's Markdown twin, then
-// passes the rest to SvelteKit's Worker, which serves the assets and answers the 404 page.
+// The site runs as a Cloudflare Worker. Every page but /cv and /cv.pdf is prerendered and served as
+// a static asset. worker.ts runs first for everything outside /_app: it hands agents a page's Markdown
+// twin, then passes the rest to SvelteKit's Worker, which serves the assets, renders /cv and /cv.pdf,
+// and answers the 404 page.
 {
     "$schema": "node_modules/wrangler/config-schema.json",
     "name": "mia-cx",
     "main": "worker.ts",
     "compatibility_date": "2026-09-24",
-    "compatibility_flags": ["nodejs_als"],
+    // nodejs_compat for @cloudflare/puppeteer, which prints /cv.pdf; it includes AsyncLocalStorage.
+    "compatibility_flags": ["nodejs_compat"],
+    // Cloudflare Browser Rendering, for /cv.pdf.
+    "browser": { "binding": "BROWSER" },
     "routes": [{ "pattern": "mia.cx", "custom_domain": true }],
     // Kept on alongside the domain so branch builds get preview URLs.
     "workers_dev": true,
@@ -30,6 +33,7 @@
             "routes": [{ "pattern": "staging.mia.cx", "custom_domain": true }],
             // Bindings don't carry over into an environment.
             "kv_namespaces": [{ "binding": "CV_PRESETS", "id": "d7d079ec11854eb98c655432d1e48b24" }],
+            "browser": { "binding": "BROWSER" },
         },
     },
 }

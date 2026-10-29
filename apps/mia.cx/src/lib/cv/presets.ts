@@ -8,6 +8,20 @@ import { cv, type CV } from './content';
 /** Keys Mia hands out in links, like `?role=support-lead`. Anything else is not looked up. */
 export const ROLE_KEY = /^[a-z0-9-]{1,64}$/;
 
+/**
+ * The raw preset stored for a role key, or null. Keys that aren't role keys are never looked up, and a
+ * failed read counts as no preset: the CV falls back to the default rather than break a shared link.
+ */
+export async function readPreset(kv: App.Platform['env']['CV_PRESETS'], key: string | null) {
+    if (!key || !ROLE_KEY.test(key)) return null;
+    return (
+        (await kv?.get(key).catch((error: unknown) => {
+            console.error(`CV preset ${key}:`, error);
+            return null;
+        })) ?? null
+    );
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
 /** A preset as stored: JSON `{ title, skills? }`, skills in the CV's own shape. Anything else is no preset. */
