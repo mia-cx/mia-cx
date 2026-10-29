@@ -8,6 +8,10 @@ identity and shared reading-page typography when adding content.
 The active site lives in `apps/mia.cx` on `main`. The root checkout may still use the older `legacy` branch; start new
 work from `origin/main` in a separate worktree. Cloudflare Workers serves the prerendered site at `https://mia.cx`.
 
+Releases follow Caelestis: GitHub Actions deploys every push to `main` to `https://staging.mia.cx`, and only a merged
+Changesets release pull request deploys to production. Visitor-facing changes carry a `@mia-cx/mia.cx` changeset. CI
+uses the organisation's Cloudflare account variable and token rather than Cloudflare's own Git builds.
+
 ## Textile policies
 
 Host Textile's public terms at `/textile/terms` and privacy policy at `/textile/privacy`. Keep both reachable from the

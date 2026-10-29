@@ -37,6 +37,12 @@ You can preview the production build with `npm run preview`.
 
 ## Deploying
 
-The site runs as a Cloudflare Worker, configured in `wrangler.jsonc`. Cloudflare builds it from the repo root with `pnpm --filter @mia-cx/mia.cx build` and deploys with `pnpm --filter @mia-cx/mia.cx exec wrangler deploy`. To check the built Worker locally, run `npx wrangler dev` after a build.
+The site runs as a Cloudflare Worker, configured in `wrangler.jsonc`. GitHub Actions deploys it with [Changesets](../../.changeset/README.md):
+
+- Every push to `main` is checked, built and deployed to [staging.mia.cx](https://staging.mia.cx), the `staging` environment, which search engines are told not to index. It also opens or updates the release pull request.
+- Merging the release pull request bumps the site's version, deploys it to [mia.cx](https://mia.cx) once staging is up, and tags the commit `mia.cx@v<version>`.
+- To redeploy a release, run the Release workflow by hand with that release's merge commit.
+
+CI deploys with the organisation's `CLOUDFLARE_ACCOUNT_ID` variable and `CLOUDFLARE_API_TOKEN` secret. To check the built Worker locally, run `npx wrangler dev` after a build.
 
 The deployed entry is `worker.ts`, which wraps the Worker that `adapter-cloudflare` writes. The adapter reads `wrangler.sveltekit.jsonc` instead of `wrangler.jsonc`, because it overwrites whatever file `main` names.
