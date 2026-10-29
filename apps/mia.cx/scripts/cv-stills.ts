@@ -16,8 +16,13 @@ import { fileURLToPath } from 'node:url';
 
 const [base = 'http://localhost:4173', devtools = 'http://127.0.0.1:9222'] = process.argv.slice(2);
 const out = (name: string) => fileURLToPath(new URL(`../src/lib/cv/stills/${name}.webp`, import.meta.url));
-/** Output pixels per CSS pixel: an A4 sheet comes out about 1600 px wide, plenty for a soft field. */
+/** Device pixels per CSS pixel the field renders at; its effects are tuned for a 2× display. */
 const RESOLUTION = 2;
+/**
+ * Output pixels per CSS pixel. The field is all soft gradients, so a sheet saved at 1× (794 px wide)
+ * prints the same as at 2× for a seventh of the bytes, and every page that isn't an Article carries it.
+ */
+const OUTPUT = 1;
 
 const { webSocketDebuggerUrl } = (await (await fetch(`${devtools}/json/version`)).json()) as {
     webSocketDebuggerUrl: string;
@@ -90,13 +95,13 @@ try {
         `[...document.querySelectorAll('[data-still]')].map((still) => {
             const r = still.getBoundingClientRect();
             return { name: still.dataset.still, x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height,
-                scale: (Number(still.dataset.scale) || ${RESOLUTION}) / devicePixelRatio };
+                scale: (Number(still.dataset.scale) || ${OUTPUT}) / devicePixelRatio };
         })`,
     );
     for (const { name, x, y, width, height, scale } of stills) {
         const { data } = await run<{ data: string }>('Page.captureScreenshot', {
             format: 'webp',
-            quality: 90,
+            quality: 80,
             captureBeyondViewport: true,
             clip: { x, y, width, height, scale },
         });

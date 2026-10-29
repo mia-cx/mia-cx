@@ -23,14 +23,24 @@
 
     let root: HTMLElement;
     let ready = $state(false);
-    onMount(() => {
-        Promise.all([...root.querySelectorAll('img')].map((img) => img.decode())).then(() => (ready = true));
+    let failure = $state<string>();
+    const frame = () => new Promise(requestAnimationFrame);
+    onMount(async () => {
+        try {
+            await Promise.all([...root.querySelectorAll('img')].map((img) => img.decode()));
+            // The haze's CSS mask uses the same image, but paints on its own schedule: give it two frames.
+            await frame();
+            await frame();
+            ready = true;
+        } catch (error) {
+            failure = `the portrait did not load: ${error instanceof Error ? error.message : error}`;
+        }
     });
 </script>
 
 <div class="portraits" bind:this={root}>
     {#each layers as { name, mask, haze } (name)}
-        <div class="layer" data-still={name} data-scale="3" data-ready={ready || undefined}>
+        <div class="layer" data-still={name} data-scale="3" data-ready={ready || undefined} data-error={failure}>
             <img src={portrait} alt="" style:mask-image={mask} />
             {#if haze}<div class="haze" style:mask-image="url({portrait}), {mask}"></div>{/if}
         </div>

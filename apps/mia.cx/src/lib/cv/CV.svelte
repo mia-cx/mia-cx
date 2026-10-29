@@ -5,7 +5,7 @@
 <script lang="ts">
     import type { Snippet } from 'svelte';
     import { cv } from './content';
-    import portrait from './stills/portrait.webp';
+    import bakedPortrait from './stills/portrait.webp';
     import faceColour from './stills/face-colour.webp';
     import facePrint from './stills/face-print.webp';
     import Sheet, { type Theme } from './Sheet.svelte';
@@ -16,7 +16,12 @@
         theme = 'print',
         /** Replaces each sheet's baked field; the stills bake draws a live one here. */
         field,
-    }: { theme?: Theme; field?: Snippet<[page: number]> } = $props();
+        /**
+         * The photo, faded by the bake. The bake itself passes the unfaded cutout, so the field is
+         * dimmed around the whole figure, as the prototype measured it.
+         */
+        portrait = bakedPortrait,
+    }: { theme?: Theme; field?: Snippet<[page: number]>; portrait?: string } = $props();
 
     /** The face, kept clear of the field: Colour's copy carries the field's haze, Print's is bare. */
     const face = { colour: faceColour, print: facePrint };
@@ -24,8 +29,16 @@
 
 <Sheet page={1} {theme} {field}>
     <!-- Both layers come faded from the bake (pnpm cv-stills); the face copy sits above the field. -->
-    <img class="portrait" src={portrait} alt="Portrait of {cv.name}" />
-    <img class="portrait face" src={face[theme]} alt="" data-atmosphere-calm="off" />
+    <!-- Print-only on most pages, so they wait their turn behind what the page shows. -->
+    <img class="portrait" src={portrait} alt="Portrait of {cv.name}" fetchpriority="low" decoding="async" />
+    <img
+        class="portrait face"
+        src={face[theme]}
+        alt=""
+        data-atmosphere-calm="off"
+        fetchpriority="low"
+        decoding="async"
+    />
 
     <header>
         <h1>{cv.name}</h1>

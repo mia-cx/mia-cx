@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
     import { onMount } from 'svelte';
+    import cutout from '$lib/assets/portrait-1200.webp';
     import CV from '$lib/cv/CV.svelte';
     import BakeField from './BakeField.svelte';
     import BakePortrait from './BakePortrait.svelte';
@@ -38,7 +39,7 @@
 
 <div class="stills">
     <!-- Each Theme's pages, for their fades. -->
-    <CV>
+    <CV portrait={cutout}>
         {#snippet field(page)}
             <BakeField
                 name="cv-{page}-colour"
@@ -48,7 +49,7 @@
             />
         {/snippet}
     </CV>
-    <CV>
+    <CV portrait={cutout}>
         {#snippet field(page)}
             <BakeField name="cv-{page}-print" {...STILLS[page - 1]} calm={CALM} fade={FADE.print} />
         {/snippet}
