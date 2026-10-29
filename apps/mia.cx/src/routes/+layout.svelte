@@ -15,7 +15,9 @@
     /** Only the home page has a hero for the header's blur to key off. */
     const hasHero = $derived(page.url.pathname === '/');
     /** The share card at /og is just the field and its own text: no header, footer or page chrome. */
-    const bare = $derived(page.url.pathname === '/og');
+    /** The bake page for the printed field draws its own fields, one per sheet, and nothing else. */
+    const stills = $derived(page.url.pathname === '/cv-stills');
+    const bare = $derived(page.url.pathname === '/og' || stills);
 
     /*
      * First load only: the page stays hidden while the shader compiles, then everything enters
@@ -57,7 +59,7 @@
 </svelte:head>
 
 <!-- Full strength behind the hero and on the share card; half behind reading pages. -->
-<ShaderCanvas dims={hasHero} opacity={hasHero || bare ? 1 : 0.5} onsettle={reveal} />
+{#if !stills}<ShaderCanvas dims={hasHero} opacity={hasHero || bare ? 1 : 0.5} onsettle={reveal} />{/if}
 
 <div class="boot" aria-hidden="true"><span></span></div>
 
