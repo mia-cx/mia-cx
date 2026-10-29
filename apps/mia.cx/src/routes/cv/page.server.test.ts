@@ -21,6 +21,12 @@ describe('/cv', () => {
         expect(await visit('?role=astronaut')).toMatchObject({ cv, theme: 'print' });
     });
 
+    test('a failed KV read gives the default CV', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        kv.get.mockRejectedValueOnce(new Error('KV GET failed: 500'));
+        expect(await visit('?role=support-lead')).toMatchObject({ cv });
+    });
+
     test('a key that is not a role key is never looked up', async () => {
         kv.get.mockClear();
         expect(await visit('?role=../../etc')).toMatchObject({ cv, role: null });
