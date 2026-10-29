@@ -29,7 +29,10 @@ export default {
                 : undefined;
         if (twin) {
             // The original request carries its method and conditional headers, so HEAD and 304s still work.
-            const markdown = await env.ASSETS.fetch(new Request(new URL(twin, url), request));
+            const twinRequest = new Request(new URL(twin, url), request);
+            let markdown = await env.ASSETS.fetch(twinRequest);
+            // Pages the Worker renders, like /cv, have no prerendered twin: SvelteKit renders it instead.
+            if (!markdown.ok && markdown.status !== 304) markdown = await sveltekit.fetch(twinRequest, env, ctx);
             if (markdown.ok || markdown.status === 304) {
                 const response = new Response(markdown.body, markdown);
                 response.headers.set('content-type', 'text/markdown; charset=utf-8');
