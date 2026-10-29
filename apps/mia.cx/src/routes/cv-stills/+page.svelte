@@ -87,7 +87,7 @@
         opacity: 0;
     }
 
-    /* The @page margins every printed Article page keeps. */
+    /* An Article's text column: keep it equal to <main>'s print padding in @mia-cx/print's print.css. */
     .column {
         position: absolute;
         top: 18mm;

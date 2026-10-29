@@ -171,6 +171,15 @@ select {
 :root[data-boot='entering'] footer .inner {
     --enter: 6;
 }
+/* Print never waits for the shader: an Article printed during the first load still shows its text. */
+@media print {
+    :root[data-boot] .page {
+        opacity: 1;
+    }
+    :root[data-boot] .page * {
+        animation: none;
+    }
+}
 .page main > :nth-child(1) {
     --enter: 1;
 }

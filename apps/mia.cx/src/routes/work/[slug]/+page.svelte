@@ -14,7 +14,7 @@
 </svelte:head>
 
 <main class="container">
-    <a class="back mono" href="/work">← Work</a>
+    <a class="back mono" href="/work" data-print-hide>← Work</a>
 
     <header>
         <h1>{note.title}</h1>
@@ -50,7 +50,7 @@
 
     <Mentions mentions={data.mentions} />
 
-    <nav class="siblings mono" aria-label="Other work">
+    <nav class="siblings mono" aria-label="Other work" data-print-hide>
         {#if data.previous}<a href="/work/{data.previous.slug}">← {data.previous.title}</a>{:else}<span></span>{/if}
         {#if data.next}<a class="next" href="/work/{data.next.slug}">{data.next.title} →</a>{/if}
     </nav>
