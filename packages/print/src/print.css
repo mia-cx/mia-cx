@@ -15,7 +15,8 @@
 [data-print-sheet] {
     position: relative;
     width: 210mm;
-    height: 297mm;
+    /* A hair under A4: at exactly 297mm Safari rounds each sheet onto a second, blank page. */
+    height: 296.8mm;
     overflow: hidden;
     break-after: page;
     print-color-adjust: exact;
@@ -42,6 +43,10 @@
     body:has([data-print-paper]) :not(main, main *, :has(main), [data-print-paper], [data-print-paper] *) {
         display: none !important;
     }
+    /* What only works on screen, like navigation inside <main>, opts out with data-print-hide. */
+    [data-print-hide] {
+        display: none !important;
+    }
 
     /* A screen-sized minimum height would add a blank page after the last one. */
     :root:has([data-print], [data-print-paper]),
@@ -58,8 +63,13 @@
         width: auto;
         max-width: none;
         margin: 0;
+        /* mia.cx's Article stills are dimmed over this column (its cv-stills page): keep the two equal. */
         padding: 18mm 20mm;
-        /* Each page the Article runs onto gets the same margins. */
+        /*
+         * Each page the Article runs onto gets the same margins, in Chromium and Firefox. Safari clones
+         * padding only on inline boxes, and prints neither named pages' margins nor a per-page repeat, so
+         * there an Article's margins hold only at its start and end.
+         */
         box-decoration-break: clone;
     }
     :root:has([data-print-paper]) main,
@@ -67,6 +77,12 @@
         color: #1c161a !important;
         background-color: transparent !important;
         text-shadow: none !important;
+        /*
+         * Screen effects stop: a scroll-driven blur left on the page makes Chromium print it as an
+         * image, with no selectable text or links.
+         */
+        filter: none !important;
+        animation: none !important;
     }
     /* Paper can't follow a link, so external ones carry their address. */
     :root:has([data-print-paper]) main a[href^='http']::after {
