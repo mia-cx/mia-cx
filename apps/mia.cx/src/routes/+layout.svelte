@@ -3,6 +3,8 @@
     import { onMount, type Snippet } from 'svelte';
     import { page } from '$app/state';
     import ShaderCanvas from '@mia-cx/atmosphere/ShaderCanvas.svelte';
+    import { PrintSwitch } from '@mia-cx/print';
+    import CV from '$lib/cv/CV.svelte';
     import Header from '$lib/components/Header.svelte';
     import Footer from '$lib/components/Footer.svelte';
     import PageMarkdown from '$lib/components/PageMarkdown.svelte';
@@ -72,6 +74,11 @@
 
     <Footer />
 {/if}
+
+<!-- Printing any page but an Article gives the CV. Outside <main>, so Markdown twins never carry it. -->
+<PrintSwitch article={page.data.article === true}>
+    <CV />
+</PrintSwitch>
 
 <style>
     .page {
