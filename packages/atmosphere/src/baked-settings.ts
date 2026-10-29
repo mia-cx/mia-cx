@@ -5,6 +5,9 @@ import { leadingAdjustmentRegion, type ColourEffect, type PostEffect } from './p
 // Vite emits the binary as an asset and hands back its final URL, so no static/ copy is needed.
 import lutUrl from './baked-adjustment-lut.bin?url';
 
+/** Where the baked LUT is served from, for a `<link rel="preload">` ahead of hydration. */
+export { lutUrl as BAKED_LUT_URL };
+
 /** Canonical build-time configuration: no persistence, migration, normalization, or asset lookup. */
 const settings = defaultSettingsFixture.settings as unknown as {
     seed: number;

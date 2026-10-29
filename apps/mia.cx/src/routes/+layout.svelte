@@ -1,6 +1,6 @@
 <script lang="ts">
     import '../app.css';
-    import { onMount, type Snippet } from 'svelte';
+    import type { Snippet } from 'svelte';
     import { page } from '$app/state';
     import ShaderCanvas from '@mia-cx/atmosphere/ShaderCanvas.svelte';
     import Header from '$lib/components/Header.svelte';
@@ -16,13 +16,12 @@
     const bare = $derived(page.url.pathname === '/og');
 
     /*
-     * First load only: the page stays hidden while the shader compiles, then everything enters
+     * First load of the home page only: it stays hidden while the shader compiles, then everything enters
      * together. `data-boot` on <html> drives it all from CSS; it is set before paint in app.html
-     * and cleared once the entrance has played, so later navigations do not animate.
+     * and cleared once the entrance has played, so later navigations do not animate. A GPU still
+     * compiling at 2.5 s is not waited for: app.html reveals the page itself.
      */
     const ENTRANCE_MS = 1800;
-    // Only a stalled GPU reaches this; failure reveals at once through onsettle.
-    const MAX_WAIT_MS = 12000;
     function reveal() {
         const root = document.documentElement;
         if (root.dataset.boot !== 'loading') return;
@@ -31,12 +30,6 @@
             if (root.dataset.boot === 'entering') delete root.dataset.boot;
         }, ENTRANCE_MS);
     }
-    onMount(() => {
-        // Tells the shell's own failsafe in app.html that the app is running and owns the reveal.
-        document.documentElement.dataset.hydrated = '';
-        const timer = setTimeout(reveal, MAX_WAIT_MS);
-        return () => clearTimeout(timer);
-    });
 </script>
 
 <!--
