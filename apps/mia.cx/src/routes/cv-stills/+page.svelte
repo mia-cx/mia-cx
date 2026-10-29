@@ -18,8 +18,9 @@
     /** Tuned on the CV prototype: the field dims hard and close around the copy. */
     const CALM = { strength: 0.95, radius: 73, feather: 137 };
     /**
-     * How page 1's field fades down the sheet, per Theme. Colour is full at the top easing to half,
-     * like the home page as the hero scrolls away; Print fades further, so the ink stays at the top.
+     * How the field fades down a sheet. Colour fades page 1 only, full at the top easing to half, like
+     * the home page as the hero scrolls away; later pages sit at an even half. Print fades every page
+     * further, so the ink stays near the top.
      */
     const FADE = {
         colour: 'linear-gradient(to bottom, #000 22%, rgb(0 0 0 / 0.5) 55%)',
@@ -36,25 +37,27 @@
 </svelte:head>
 
 <div class="stills">
-    <!-- Page 1 once per Theme, for its fade; the later pages share one still. -->
+    <!-- Each Theme's pages, for their fades. -->
     <CV>
         {#snippet field(page)}
-            {#if page === 1}
-                <BakeField name="cv-1-colour" {...STILLS[0]} calm={CALM} fade={FADE.colour} />
-            {:else}
-                <BakeField name="cv-2" {...STILLS[1]} calm={CALM} />
-            {/if}
+            <BakeField
+                name="cv-{page}-colour"
+                {...STILLS[page - 1]}
+                calm={CALM}
+                fade={page === 1 ? FADE.colour : undefined}
+            />
         {/snippet}
     </CV>
     <CV>
         {#snippet field(page)}
-            {#if page === 1}<BakeField name="cv-1-print" {...STILLS[0]} calm={CALM} fade={FADE.print} />{/if}
+            <BakeField name="cv-{page}-print" {...STILLS[page - 1]} calm={CALM} fade={FADE.print} />
         {/snippet}
     </CV>
 
+    <!-- Articles print in the Print theme. -->
     {#each STILLS as still, i (i)}
         <div class="sheet" data-print-sheet>
-            <BakeField name="article-{i + 1}" {...still} calm={CALM} fade={i === 0 ? FADE.print : undefined} />
+            <BakeField name="article-{i + 1}" {...still} calm={CALM} fade={FADE.print} />
             <!-- Stands for an Article's text: the whole column inside the page margins. -->
             <svg class="column" aria-hidden="true"></svg>
         </div>
