@@ -12,8 +12,13 @@ Article:
 ```svelte
 <PrintSwitch article={page.data.article === true}>
   <CV />
+  {#snippet paper()}<ArticleField />{/snippet}
 </PrintSwitch>
 ```
+
+An Article prints its own `<main>` on white paper: everything outside `<main>` (header, footer, nav)
+is hidden, text is set in ink, and external links are followed by their address. The optional
+`paper` snippet is drawn underneath, for a field or texture; position it behind `<main>`.
 
 The site decides where the Article flag comes from: mia.cx sets `article: true` in the page data of
 its write-ups and policies; a notes site could read it from frontmatter.
@@ -24,5 +29,6 @@ especially) don't matter.
 
 ## Pages
 
-`print.css` sets A4 with margins for ordinary printed pages. Mark an element `data-print-sheet` to make
-it one whole page, drawn edge to edge with no margin: a CV sheet, say. Each sheet ends its page.
+`print.css` sets A4 pages with no margin, so anything printed can reach the paper's edge. An Article's
+`<main>` takes its margins as padding, repeated on every page it runs onto. Mark an element
+`data-print-sheet` to make it one whole page: a CV sheet, say. Each sheet ends its page.
