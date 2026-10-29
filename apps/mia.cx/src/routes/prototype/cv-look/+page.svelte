@@ -138,7 +138,8 @@
         const tick = () => {
             calm.forEach((mask, i) => {
                 const { on, strength, radius, feather, exponent } = dim.content;
-                mask.settings = { radius, feather, exponent, strength: on ? strength : 0 };
+                // The mask measures the zoomed sheets, so its distances zoom with them: stable in sheet pixels.
+                mask.settings = { radius: radius * zoom, feather: feather * zoom, exponent, strength: on ? strength : 0 };
                 if (mask.update(canvases[i].getBoundingClientRect())) renderers[i]?.setCalmMask(mask.canvas);
             });
             frame = requestAnimationFrame(tick);
