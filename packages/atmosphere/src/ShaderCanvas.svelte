@@ -8,6 +8,7 @@
     import { selectRenderBackend, type RenderBackend } from './render-backend';
     import { CursorState } from './cursor';
     import { CursorDensityField } from './cursor-density-field';
+    import { CalmMask } from './calm-mask';
 
     let {
         /** Ceiling for adaptive resolution, 1 is full. Lower it when most of the canvas is covered. */
@@ -183,6 +184,7 @@
         const pageSeed = Math.random() * 1000;
         options = { ...BAKED_RENDER_OPTIONS, seed: pageSeed, renderScale, dprCap };
         paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const calmMask = new CalmMask();
         loadBakedRenderOptions()
             .then((loadedOptions) => {
                 options = { ...loadedOptions, seed: pageSeed, renderScale, dprCap };
@@ -200,6 +202,7 @@
                     fps = nextFps;
                 };
                 instance.setCursorState(cursorState);
+                instance.setCalmMask(calmMask.canvas);
                 const rect = canvas.getBoundingClientRect();
                 if (!instance.gpuCursorDensity) {
                     cursorDensityField.resize(rect.width, rect.height);
@@ -238,6 +241,7 @@
                 }
                 const rect = canvas.getBoundingClientRect();
                 resizeCursorDensity(rect);
+                if (calmMask.update(rect)) renderer?.setCalmMask(calmMask.canvas);
                 const batch = densityPoints;
                 densityPoints = [];
                 const gpuPath = renderer?.gpuCursorDensity === true;
@@ -295,6 +299,7 @@
             window.removeEventListener('blur', pointerLeave);
             window.removeEventListener('keydown', keyDown);
             cancelAnimationFrame(cursorFrame);
+            calmMask.destroy();
             renderer?.destroy();
         };
     });

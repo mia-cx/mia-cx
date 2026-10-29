@@ -80,6 +80,20 @@ describe('WebGL2 parity backend', () => {
         }
     });
 
+    it('takes the calm mask off the field before the threshold on both backends', () => {
+        const calmed = (source: string, sample: string, multiply: string) => {
+            expect(source).toContain(sample);
+            expect(source).toContain(multiply);
+            expect(source.indexOf(multiply)).toBeLessThan(source.indexOf('threshold', source.indexOf(multiply)));
+        };
+        calmed(
+            BASE_SHADER_SOURCE,
+            'textureSample(calmField,densitySampler,pos.xy/u.resolution).a',
+            'natural*=1.-calm;',
+        );
+        calmed(shaders.BASE, 'texture(_group_0_binding_6_fs,', 'natural = (_calm_natural * (1.0 - calm));');
+    });
+
     it('samples the persistent density texture with generated GLSL parity', () => {
         expect(shaders.BASE).toContain('uniform highp sampler2D _group_0_binding_2_fs;');
         expect(shaders.BASE).toContain('texture(_group_0_binding_2_fs, vec2(uv))');
