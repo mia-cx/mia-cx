@@ -24,8 +24,12 @@
         ink: { falloff: 1, saturate: 1 },
         /** The CV buttons' icon box, in cap heights of the button text. */
         icon: 1.5,
-        /** Share of the field's light the calm mask takes away behind text and images. */
-        calm: 0.2,
+        dim: {
+            /** The calm mask: the share of the field's light taken away behind text and images. */
+            content: { on: true, strength: 0.2 },
+            /** The shader's own rounded rectangle, darkening the middle of each sheet. */
+            centre: { on: true, strength: 0.25 },
+        },
         /** Page 1 has its own still; page 2 stands for every page after it. */
         field: [
             { seed: 93.8, time: 56.25 },
@@ -41,13 +45,15 @@
     let light = $state(LANDED.light);
     const ink = $state(landed().ink);
     let icon = $state(LANDED.icon);
-    let calmStrength = $state(LANDED.calm);
+    const dim = $state(landed().dim);
     const field = $state(landed().field);
     const p = $state(landed().p);
     const reset = () => {
         const next = landed();
-        ({ light, icon, calm: calmStrength } = next);
+        ({ light, icon } = next);
         Object.assign(ink, next.ink);
+        Object.assign(dim.content, next.dim.content);
+        Object.assign(dim.centre, next.dim.centre);
         next.field.forEach((page, i) => Object.assign(field[i], page));
         Object.assign(p, next.p);
     };
@@ -116,7 +122,7 @@
         let frame = 0;
         const tick = () => {
             calm.forEach((mask, i) => {
-                mask.strength = calmStrength;
+                mask.strength = dim.content.on ? dim.content.strength : 0;
                 if (mask.update(canvases[i].getBoundingClientRect())) renderers[i]?.setCalmMask(mask.canvas);
             });
             frame = requestAnimationFrame(tick);
@@ -145,14 +151,15 @@
         renderers.forEach((renderer, i) => {
             if (!renderer) return;
             const { seed, time } = still(i);
-            renderer.setOptions({ ...base, seed });
+            const centerDarkness = dim.centre.on ? dim.centre.strength : 0;
+            renderer.setOptions({ ...base, seed, parameters: { ...base.parameters, centerDarkness } });
             // PROTOTYPE: the renderers keep simulation time private; scrubbing it is the whole point here.
             (renderer as unknown as { simTime: number }).simTime = time;
             renderer.invalidate();
         });
     });
 
-    const values = $derived(JSON.stringify({ pages: field, portrait: p, light, ink, icon, calm: calmStrength }));
+    const values = $derived(JSON.stringify({ pages: field, portrait: p, light, ink, icon, dim }));
 
     // The timeline: ln(1 + k·(now − t)), k = 2, ending at the present with a dashed tail.
     const START = 2012, K = 2, H = 92, T = 7, W = 182, X0 = W / 2;
@@ -271,9 +278,13 @@
             </fieldset>
         {/each}
         <fieldset>
-            <legend>Dimming behind content</legend>
-            <label>Strength <output>{calmStrength}</output></label>
-            <input type="range" min="0" max="1" step="0.01" bind:value={calmStrength} />
+            <legend>Dimming</legend>
+            <label><input type="checkbox" bind:checked={dim.content.on} /> Behind text and images</label>
+            <label>Strength <output>{dim.content.strength}</output></label>
+            <input type="range" min="0" max="1" step="0.01" bind:value={dim.content.strength} disabled={!dim.content.on} />
+            <label><input type="checkbox" bind:checked={dim.centre.on} /> Centre of the sheet</label>
+            <label>Strength <output>{dim.centre.strength}</output></label>
+            <input type="range" min="0" max="1.5" step="0.01" bind:value={dim.centre.strength} disabled={!dim.centre.on} />
         </fieldset>
         <fieldset>
             <legend>Portrait</legend>
