@@ -1,7 +1,12 @@
 name: Release
 
 # Every push to main deploys to staging.mia.cx and opens or updates the Changesets release pull
-# request. Merging that pull request versions the site and, once staging is up, deploys it to mia.cx.
+# request. Merging that pull request versions the site and deploys it to mia.cx.
+#
+# There is no workflow-wide concurrency: GitHub replaces a pending run in a group with the newest
+# one, which would let an ordinary push cancel a release waiting behind another run. Each deploy
+# environment queues on its own in deploy.yml instead, where the newest pending deploy of the same
+# environment always contains the one it replaces.
 on:
     push:
         branches:
@@ -13,18 +18,14 @@ on:
                 type: string
                 required: true
 
-concurrency:
-    group: release
-    cancel-in-progress: false
-
 jobs:
-    version:
-        name: Version mia.cx
+    release:
+        name: Identify a release
         runs-on: ubuntu-latest
-        timeout-minutes: 10
+        timeout-minutes: 5
         permissions:
-            contents: write
-            pull-requests: write
+            contents: read
+            pull-requests: read
         outputs:
             release: ${{ steps.release.outputs.release }}
             sha: ${{ steps.release.outputs.sha }}
@@ -34,20 +35,13 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Set up pnpm
-              uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-
             - name: Set up Node.js
               uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
               with:
                   node-version-file: .nvmrc
-                  cache: pnpm
-
-            - name: Install dependencies
-              run: pnpm install --frozen-lockfile
 
             - name: Check release tooling
-              run: pnpm test:release
+              run: node --test .github/scripts/*.test.mjs
 
             - name: Identify a merged release pull request
               id: release
@@ -79,8 +73,37 @@ jobs:
                   fi
                   echo "release=$release" >> "$GITHUB_OUTPUT"
 
+    version:
+        name: Open or update the release pull request
+        if: github.event_name == 'push'
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        # Only the newest main matters for the release pull request, and no deploy waits on this job.
+        concurrency:
+            group: release-pull-request
+            cancel-in-progress: true
+        permissions:
+            contents: write
+            pull-requests: write
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+
+            - name: Set up pnpm
+              uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+            - name: Set up Node.js
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version-file: .nvmrc
+                  cache: pnpm
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
             - name: Open or update the release pull request
-              if: github.event_name == 'push'
               uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2
               with:
                   version-script: pnpm release:version
@@ -92,48 +115,42 @@ jobs:
 
     staging:
         name: Deploy to staging
-        needs: version
         # A production redeploy leaves staging on main rather than rolling it back to the release.
         if: github.event_name == 'push'
         uses: ./.github/workflows/deploy.yml
         with:
             environment: staging
-            sha: ${{ needs.version.outputs.sha }}
+            sha: ${{ github.sha }}
         secrets: inherit
         permissions:
             contents: read
 
     production:
         name: Deploy approved release
-        needs: [version, staging]
-        # Staging goes first and must succeed, unless this is a redeploy that skips it.
-        if: >-
-            !cancelled() &&
-            needs.version.result == 'success' &&
-            needs.version.outputs.release == 'true' &&
-            (needs.staging.result == 'success' || needs.staging.result == 'skipped')
+        needs: release
+        if: needs.release.outputs.release == 'true'
         uses: ./.github/workflows/deploy.yml
         with:
             environment: production
-            sha: ${{ needs.version.outputs.sha }}
+            sha: ${{ needs.release.outputs.sha }}
         secrets: inherit
         permissions:
             contents: read
 
     tag:
         name: Tag the deployed release
-        needs: [version, production]
+        needs: [release, production]
         runs-on: ubuntu-latest
         timeout-minutes: 5
         permissions:
             contents: write
         env:
-            SHA: ${{ needs.version.outputs.sha }}
+            SHA: ${{ needs.release.outputs.sha }}
         steps:
             - name: Check out repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  ref: ${{ needs.version.outputs.sha }}
+                  ref: ${{ needs.release.outputs.sha }}
 
             - name: Tag the release commit
               run: |
