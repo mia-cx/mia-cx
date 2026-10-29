@@ -56,6 +56,14 @@ try {
     await run('Emulation.setFocusEmulationEnabled', { enabled: true });
     // Transparent where the page draws nothing, so each still keeps the field's own alpha.
     await run('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } });
+    // The field renders at the page's pixel density, and its effects work in device pixels, so the
+    // density is pinned: the same seed and frame bake the same still on any display. 0 keeps the size.
+    await run('Emulation.setDeviceMetricsOverride', {
+        width: 0,
+        height: 0,
+        deviceScaleFactor: RESOLUTION,
+        mobile: false,
+    });
     await run('Page.navigate', { url: `${base}/cv-stills` });
 
     const deadline = Date.now() + 60_000;
