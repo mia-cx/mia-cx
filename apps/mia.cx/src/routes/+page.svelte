@@ -119,8 +119,8 @@
         display: grid;
         justify-items: start;
     }
-    /* Above the portrait, which is positioned and would otherwise paint over the icons. */
-    .identity :global(.socials) {
+    /* Above the portrait, which is positioned and would otherwise paint over the icons and buttons. */
+    .reach {
         position: relative;
         z-index: 1;
     }
