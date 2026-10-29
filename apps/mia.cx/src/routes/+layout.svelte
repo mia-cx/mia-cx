@@ -4,6 +4,7 @@
     import { page } from '$app/state';
     import ShaderCanvas from '@mia-cx/atmosphere/ShaderCanvas.svelte';
     import { PrintSwitch } from '@mia-cx/print';
+    import Appendix from '$lib/cv/Appendix.svelte';
     import ArticlePaper from '$lib/cv/ArticlePaper.svelte';
     import CV from '$lib/cv/CV.svelte';
     import Header from '$lib/components/Header.svelte';
@@ -84,6 +85,7 @@
 -->
 <PrintSwitch article={page.data.article === true}>
     <CV />
+    {#if page.data.appendix}<Appendix appendix={page.data.appendix} />{/if}
     {#snippet paper()}<ArticlePaper />{/snippet}
 </PrintSwitch>
 
