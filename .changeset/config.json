@@ -11,6 +11,7 @@
         "@mia-cx/atmosphere",
         "@mia-cx/config",
         "@mia-cx/patch.cx",
+        "@mia-cx/print",
         "@mia-cx/shaderdemo",
         "@mia-cx/ui",
         "@mia-cx/utils",

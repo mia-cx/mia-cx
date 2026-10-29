@@ -9,7 +9,7 @@ stack:
   - TypeScript
   - Svelte
   - WebGL
-live: "https://caelestis.mia.cx"
+live: "https://caelest.is"
 source: "https://github.com/mia-riezebos/Caelestis"
 ---
 

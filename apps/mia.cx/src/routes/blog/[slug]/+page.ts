@@ -5,4 +5,5 @@ import type { EntryGenerator, PageLoad } from './$types';
 // With the blog off there are no posts to prerender, and the Worker answers every post URL with a 404.
 export const prerender = SECTIONS.blog.published;
 export const entries: EntryGenerator = postEntries;
-export const load: PageLoad = ({ params }) => loadPost(params.slug);
+// A post is an Article: it prints itself, not the CV.
+export const load: PageLoad = ({ params }) => ({ ...loadPost(params.slug), article: true });

@@ -1,0 +1,37 @@
+{
+  "name": "@mia-cx/print",
+  "version": "0.1.0",
+  "private": true,
+  "description": "What a site prints: a print switch that swaps print-only content, such as a CV, in for the page.",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./print.css": "./src/print.css"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "format": "prettier --write .",
+    "lint": "prettier --check . && eslint ."
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@mia-cx/config": "workspace:*",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "prettier-plugin-svelte": "^4.1.1",
+    "svelte": "5.57.1",
+    "svelte-check": "^4.7.6",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.0"
+  }
+}

@@ -5,7 +5,10 @@ declare global {
     namespace App {
         // interface Error {}
         // interface Locals {}
-        // interface PageData {}
+        interface PageData {
+            /** Set by pages that print themselves; every other page prints the CV. */
+            article?: boolean;
+        }
         // interface PageState {}
         // interface Platform {}
     }

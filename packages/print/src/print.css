@@ -1,0 +1,47 @@
+/*
+ * Base print rules, loaded by PrintSwitch. The swap is pure CSS: no JS, so it works for Cmd+P,
+ * the browser menu and headless PDF rendering alike.
+ */
+
+@page {
+    size: A4;
+    margin: 18mm 20mm;
+}
+
+/* A sheet is one whole printed page, drawn edge to edge, so its page has no margin. */
+@page sheet {
+    margin: 0;
+}
+
+[data-print-sheet] {
+    page: sheet;
+    position: relative;
+    width: 210mm;
+    height: 297mm;
+    overflow: hidden;
+    break-after: page;
+    print-color-adjust: exact;
+}
+
+[data-print-sheet]:last-child {
+    break-after: auto;
+}
+
+@media screen {
+    [data-print] {
+        display: none;
+    }
+}
+
+@media print {
+    /* Only the print content and the elements that hold it print; everything else on the page goes. */
+    body:has([data-print]) :not([data-print], [data-print] *, :has([data-print])) {
+        display: none !important;
+    }
+
+    /* A screen-sized minimum height would add a blank page after the last sheet. */
+    :root:has([data-print]),
+    :root:has([data-print]) body {
+        min-height: 0;
+    }
+}
