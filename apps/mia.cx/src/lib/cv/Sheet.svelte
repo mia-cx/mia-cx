@@ -39,7 +39,14 @@
     {#if field}
         {@render field(page)}
     {:else}
-        <img class="field" src={(page === 1 ? first : later)[theme]} alt="" fetchpriority="low" decoding="async" />
+        <img
+            class="field"
+            src={(page === 1 ? first : later)[theme]}
+            alt=""
+            aria-hidden="true"
+            fetchpriority="low"
+            decoding="async"
+        />
     {/if}
     {@render children()}
 </article>

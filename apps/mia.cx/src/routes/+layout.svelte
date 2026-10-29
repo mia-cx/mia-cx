@@ -61,7 +61,15 @@
 </svelte:head>
 
 <!-- Full strength behind the hero and on the share card; half behind reading pages. -->
-{#if !stills}<ShaderCanvas dims={hasHero} opacity={hasHero || bare ? 1 : 0.5} onsettle={reveal} />{/if}
+{#if !stills}
+    <!-- /cv's sheets carry their own field, so the site's stays behind them there. -->
+    <ShaderCanvas
+        dims={hasHero}
+        opacity={hasHero || bare ? 1 : 0.5}
+        layer={page.url.pathname === '/cv' ? 'back' : 'front'}
+        onsettle={reveal}
+    />
+{/if}
 
 <div class="boot" aria-hidden="true"><span></span></div>
 
@@ -84,7 +92,7 @@
     Outside <main>, so Markdown twins never carry it.
 -->
 <PrintSwitch article={page.data.article === true}>
-    <CV />
+    <CV cv={page.data.cv} />
     {#if page.data.appendix}<Appendix appendix={page.data.appendix} />{/if}
     {#snippet paper()}<ArticlePaper />{/snippet}
 </PrintSwitch>

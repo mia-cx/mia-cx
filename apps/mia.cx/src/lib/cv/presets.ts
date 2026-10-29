@@ -11,7 +11,7 @@ export const ROLE_KEY = /^[a-z0-9-]{1,64}$/;
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
 /** A preset as stored: JSON `{ title, skills? }`, skills in the CV's own shape. Anything else is no preset. */
-function parse(raw: string): Pick<CV, 'title'> & Partial<Pick<CV, 'skills'>> | undefined {
+function parse(raw: string): (Pick<CV, 'title'> & Partial<Pick<CV, 'skills'>>) | undefined {
     let value: unknown;
     try {
         value = JSON.parse(raw);
