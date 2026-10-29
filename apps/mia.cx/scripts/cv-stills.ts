@@ -57,22 +57,28 @@ try {
     // Transparent where the page draws nothing, so each still keeps the field's own alpha.
     await run('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } });
     // The field renders at the page's pixel density, and its effects work in device pixels, so the
-    // density is pinned: the same seed and frame bake the same still on any display. 0 keeps the size.
+    // density is pinned, and the width with it so the sheets lay out the same in any window: the
+    // same seed and frame bake the same still anywhere.
     await run('Emulation.setDeviceMetricsOverride', {
-        width: 0,
-        height: 0,
+        width: 1024,
+        height: 1024,
         deviceScaleFactor: RESOLUTION,
         mobile: false,
     });
-    await run('Page.navigate', { url: `${base}/cv-stills` });
+    const { errorText } = await run<{ errorText?: string }>('Page.navigate', { url: `${base}/cv-stills` });
+    if (errorText) throw new Error(`could not open ${base}/cv-stills (${errorText}); is pnpm preview running?`);
 
     const deadline = Date.now() + 60_000;
-    while (
-        !(await evaluate<boolean>(`(() => {
-        const stills = document.querySelectorAll('canvas[data-still]');
-        return stills.length > 0 && [...stills].every((canvas) => canvas.hasAttribute('data-ready'));
-    })()`))
-    ) {
+    for (;;) {
+        const { ready, failure } = await evaluate<{ ready: boolean; failure?: string }>(`(() => {
+            const stills = [...document.querySelectorAll('canvas[data-still]')];
+            return {
+                ready: stills.length > 0 && stills.every((canvas) => canvas.hasAttribute('data-ready')),
+                failure: stills.find((canvas) => canvas.dataset.error)?.dataset.error,
+            };
+        })()`);
+        if (failure) throw new Error(`a field could not be baked: ${failure}`);
+        if (ready) break;
         if (Date.now() > deadline) throw new Error('the fields never drew; is WebGPU on in this Chromium?');
         await sleep(250);
     }

@@ -12,6 +12,8 @@
 
     let canvas: HTMLCanvasElement;
     let ready = $state(false);
+    /** Why the field couldn't be baked, for the script to report instead of waiting it out. */
+    let failure = $state<string>();
     const frame = () => new Promise(requestAnimationFrame);
 
     onMount(() => {
@@ -29,6 +31,8 @@
                 dprCap: 2,
             });
             destroy = () => renderer.destroy();
+            // The WebGL2 fallback draws a different field; a still from it would not match the others.
+            if (renderer.backend !== 'webgpu') throw new Error(`the field drew with ${renderer.backend}, not WebGPU`);
             renderer.setPaused(true);
             renderer.setTime(time);
             await document.fonts.ready;
@@ -38,7 +42,7 @@
             // The paused redraw with the mask lands a frame or two after the first one.
             for (let i = 0; i < 3; i++) await frame();
             ready = true;
-        })();
+        })().catch((error) => (failure = error instanceof Error ? error.message : String(error)));
         return () => {
             mask.destroy();
             destroy();
@@ -46,7 +50,7 @@
     });
 </script>
 
-<canvas bind:this={canvas} data-still={name} data-ready={ready || undefined}></canvas>
+<canvas bind:this={canvas} data-still={name} data-ready={ready || undefined} data-error={failure}></canvas>
 
 <style>
     canvas {

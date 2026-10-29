@@ -14,9 +14,9 @@
 
     /** Only the home page has a hero for the header's blur to key off. */
     const hasHero = $derived(page.url.pathname === '/');
-    /** The share card at /og is just the field and its own text: no header, footer or page chrome. */
     /** The bake page for the printed field draws its own fields, one per sheet, and nothing else. */
     const stills = $derived(page.url.pathname === '/cv-stills');
+    /** The share card at /og is just the field and its own text: no header, footer or page chrome. */
     const bare = $derived(page.url.pathname === '/og' || stills);
 
     /*
