@@ -14,7 +14,9 @@ test.describe('in print', () => {
         const cv = page.locator('[data-print]');
         await expect(cv.getByRole('heading', { level: 1 })).toHaveText('Mia Riezebos');
         await expect(cv.getByText('Product Engineer & Founder')).toBeVisible();
-        await expect(cv.getByRole('heading', { name: 'Experience' })).toBeVisible();
+        // Page 1's timeline and page 2's entries both sit under an Experience heading.
+        await expect(cv.getByRole('heading', { name: 'Experience' })).toHaveCount(2);
+        await expect(cv.getByRole('heading', { name: 'Selected work' })).toBeVisible();
         await expect(page.locator('main')).toBeHidden();
         await expect(page.locator('header[data-header]')).toBeHidden();
         await expect(page.getByRole('navigation', { name: 'Sitemap' })).toBeHidden();
