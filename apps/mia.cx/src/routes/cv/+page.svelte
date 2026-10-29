@@ -15,6 +15,7 @@
     <title>CV — {site.domain}</title>
     <meta property="og:title" content="{site.name}, {data.cv.title}" />
     <meta name="description" content="The CV of {site.name}, {data.cv.title}." />
+    <meta name="cv-preset" content={data.preset} />
 </svelte:head>
 
 <main class="container">

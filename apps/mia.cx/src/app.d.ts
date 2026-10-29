@@ -25,6 +25,8 @@ declare global {
                 /** Cloudflare Browser Rendering, which prints /cv.pdf. */
                 BROWSER?: import('@cloudflare/puppeteer').BrowserWorker;
             };
+            /** Keeps the Worker alive for work that finishes after the response. */
+            ctx: { waitUntil(promise: Promise<unknown>): void };
         }
     }
 }

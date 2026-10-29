@@ -1,3 +1,4 @@
+import { digest } from '$lib/cv/pdf';
 import { ROLE_KEY, resolveCV } from '$lib/cv/presets';
 import type { PageServerLoad } from './$types';
 
@@ -19,5 +20,7 @@ export const load: PageServerLoad = async ({ url, platform }) => {
               return null;
           })
         : null;
-    return { cv: resolveCV(raw), theme, role } as const;
+    // Published on the page, so /cv.pdf caches a render only when it shows the preset /cv.pdf read.
+    const preset = raw ? await digest(raw) : '';
+    return { cv: resolveCV(raw), theme, role, preset } as const;
 };

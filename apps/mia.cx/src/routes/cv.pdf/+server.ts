@@ -1,46 +1,37 @@
-import puppeteer, { type BrowserWorker } from '@cloudflare/puppeteer';
+import puppeteer, { type Browser } from '@cloudflare/puppeteer';
 import { error } from '@sveltejs/kit';
-import { site } from '$lib/content/site';
-import { ROLE_KEY, resolveCV } from '$lib/cv/presets';
+import { ROLE_KEY } from '$lib/cv/presets';
 import { cacheKey, digest, pdfDate, pdfFilename } from '$lib/cv/pdf';
+import type { Theme } from '$lib/cv/Sheet.svelte';
 import type { RequestHandler } from './$types';
 
 export const prerender = false;
 
 /** A day: one render per Theme, role and preset value per day. */
 const MAX_AGE = 86_400;
-/** How long a browser stays open after a render, so the next download reuses it. */
-const KEEP_ALIVE = 60_000;
 /** The free plan starts one new browser every 20 seconds. */
 const RETRY_AFTER = 20;
-
-/** An open browser no one is using, or a new one: back-to-back downloads would otherwise hit the launch limit. */
-async function openBrowser(binding: BrowserWorker) {
-    const idle = (await puppeteer.sessions(binding)).find((session) => !session.connectionId);
-    if (idle) {
-        try {
-            return await puppeteer.connect(binding, idle.sessionId);
-        } catch {
-            // Another request took it first; launch our own.
-        }
-    }
-    return puppeteer.launch(binding, { keep_alive: KEEP_ALIVE });
-}
+/** What Browser Rendering says once the day's browser time is spent. */
+const OUT_OF_TIME = /time limit exceeded/i;
+const THEMES: Theme[] = ['colour', 'print'];
 
 /**
  * `/cv.pdf?theme=colour|print&role=<key>`: /cv with the same query, printed by Browser Rendering to an
  * A4 PDF with backgrounds, as `MiaRiezebos_CV_YYYY-MM-DD.pdf`. Renders are cached here for the day;
  * the download itself is never cached downstream, so a preset edit or a new day always reaches it.
+ * The browser prints the other Theme too before it closes, so the second button is a cache hit.
  */
 export const GET: RequestHandler = async ({ url, platform }) => {
-    const env = platform?.env;
-    if (!env?.BROWSER) error(503, 'PDF rendering is not set up here.');
+    const binding = platform?.env.BROWSER;
+    if (!platform || !binding) error(503, 'PDF rendering is not set up here.');
+    const { env, ctx } = platform;
 
     const key = url.searchParams.get('role');
-    const theme = url.searchParams.get('theme') === 'colour' ? 'colour' : 'print';
+    const theme: Theme = url.searchParams.get('theme') === 'colour' ? 'colour' : 'print';
     const preset = (key && ROLE_KEY.test(key) && (await env.CV_PRESETS?.get(key))) || '';
     // A role without a preset is the default CV, so it renders and caches as that: made-up roles cost nothing.
     const role = preset ? key : null;
+    const presetDigest = preset && (await digest(preset));
     const date = pdfDate(new Date());
     const headers = {
         'content-type': 'application/pdf',
@@ -49,44 +40,63 @@ export const GET: RequestHandler = async ({ url, platform }) => {
     };
 
     const cache = (globalThis.caches as (CacheStorage & { default: Cache }) | undefined)?.default;
-    const entry = cacheKey(url.origin, { date, theme, role, preset: preset && (await digest(preset)) });
-    const cached = await cache?.match(entry);
+    const entry = (theme: Theme) => cacheKey(url.origin, { date, theme, role, preset: presetDigest });
+    const cached = await cache?.match(entry(theme));
     if (cached) return new Response(cached.body, { headers });
 
-    const page = new URL('/cv', url.origin);
-    page.searchParams.set('theme', theme);
-    if (role) page.searchParams.set('role', role);
-
-    let browser;
+    let browser: Browser;
     try {
-        browser = await openBrowser(env.BROWSER);
-    } catch {
+        browser = await puppeteer.launch(binding);
+    } catch (cause) {
+        if (OUT_OF_TIME.test(String(cause))) {
+            return new Response('PDF downloads are paused until tomorrow. Print the CV from mia.cx/cv instead.', {
+                status: 503,
+            });
+        }
         return new Response('The CV is busy printing. Try again in a moment.', {
             status: 503,
             headers: { 'retry-after': String(RETRY_AFTER) },
         });
     }
-    let pdf: Uint8Array<ArrayBuffer>;
-    let current: boolean;
-    try {
+
+    /** Prints one Theme, caching it only when /cv showed the preset read here: KV may lag an edit. */
+    async function render(theme: Theme) {
+        const page = new URL('/cv', url.origin);
+        page.searchParams.set('theme', theme);
+        if (role) page.searchParams.set('role', role);
         const tab = await browser.newPage();
-        const response = await tab.goto(page.href, { waitUntil: 'networkidle0' });
-        if (!response?.ok()) error(502, 'The CV page did not render.');
-        await tab.emulateMediaType('print');
-        // /cv reads KV on its own, which may lag an edit: only a page showing the preset read here is cached.
-        const title = await tab.$eval('meta[property="og:title"]', (meta) => meta.getAttribute('content'));
-        current = title === `${site.name}, ${resolveCV(preset).title}`;
-        // Copied onto a plain ArrayBuffer, which is what a Response body takes.
-        pdf = new Uint8Array(await tab.pdf({ preferCSSPageSize: true, printBackground: true }));
-        await tab.close();
-    } finally {
-        // Left open for the next download; it closes itself once idle.
-        browser.disconnect();
+        try {
+            const response = await tab.goto(page.href, { waitUntil: 'networkidle0' });
+            if (!response?.ok()) error(502, 'The CV page did not render.');
+            await tab.emulateMediaType('print');
+            const shown = await tab.$eval('meta[name="cv-preset"]', (meta) => meta.getAttribute('content'));
+            // Copied onto a plain ArrayBuffer, which is what a Response body takes.
+            const pdf = new Uint8Array(await tab.pdf({ preferCSSPageSize: true, printBackground: true }));
+            if (shown === presetDigest) {
+                const stored = { ...headers, 'cache-control': `public, max-age=${MAX_AGE}` };
+                await cache?.put(entry(theme), new Response(pdf.slice(), { headers: stored }));
+            }
+            return pdf;
+        } finally {
+            await tab.close();
+        }
     }
 
-    if (current) {
-        const stored = { ...headers, 'cache-control': `public, max-age=${MAX_AGE}` };
-        await cache?.put(entry, new Response(pdf.slice(), { headers: stored }));
+    let pdf: Uint8Array<ArrayBuffer>;
+    try {
+        pdf = await render(theme);
+    } catch (cause) {
+        await browser.close();
+        throw cause;
     }
+    const other = THEMES.find((each) => each !== theme)!;
+    const printOther = async () => {
+        if (!(await cache?.match(entry(other)))) await render(other);
+    };
+    ctx.waitUntil(
+        printOther()
+            .catch((cause: unknown) => console.error(`/cv.pdf ${other}:`, cause))
+            .finally(() => browser.close()),
+    );
     return new Response(pdf, { headers });
 };
