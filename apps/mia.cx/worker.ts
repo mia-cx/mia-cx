@@ -1,7 +1,7 @@
 /**
  * The Worker in front of SvelteKit's. A page requested by an AI agent, or by anything that prefers
- * `text/markdown`, gets the page's prerendered Markdown twin at the same URL; everything else goes
- * to SvelteKit unchanged.
+ * `text/markdown`, gets the page's Markdown twin at the same URL: prerendered, or rendered here for
+ * pages like /cv that SvelteKit renders per request. Everything else goes to SvelteKit unchanged.
  */
 // @ts-expect-error written by adapter-cloudflare during `vite build`, before wrangler bundles this
 import sveltekit from './.svelte-kit/cloudflare/_worker.js';
@@ -29,7 +29,11 @@ export default {
                 : undefined;
         if (twin) {
             // The original request carries its method and conditional headers, so HEAD and 304s still work.
-            const markdown = await env.ASSETS.fetch(new Request(new URL(twin, url), request));
+            // The query too, so /cv?role=… gets that role's twin.
+            const twinRequest = new Request(new URL(twin + url.search, url), request);
+            let markdown = await env.ASSETS.fetch(twinRequest);
+            // Pages the Worker renders, like /cv, have no prerendered twin: SvelteKit renders it instead.
+            if (!markdown.ok && markdown.status !== 304) markdown = await sveltekit.fetch(twinRequest, env, ctx);
             if (markdown.ok || markdown.status === 304) {
                 const response = new Response(markdown.body, markdown);
                 response.headers.set('content-type', 'text/markdown; charset=utf-8');

@@ -1,10 +1,12 @@
 <script lang="ts">
     /** The current page as Markdown: open its `.md` twin, or copy it. Also what gets the twins prerendered. */
+    import { building } from '$app/environment';
     import { page } from '$app/state';
     import { ArrowLink } from '@mia-cx/ui';
     import { markdownPath } from '$lib/markdown';
 
-    const href = $derived(markdownPath(page.url.pathname));
+    // With the query, so /cv?role=… copies that role's CV. Prerendered pages have none to read.
+    const href = $derived(markdownPath(page.url.pathname) + (building ? '' : page.url.search));
     const COPIED_MS = 2000;
     let status = $state<'idle' | 'copied' | 'failed'>('idle');
 

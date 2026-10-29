@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
     import type { Snippet } from 'svelte';
-    import { cv } from './content';
+    import { cv as defaultCV, type CV } from './content';
     import bakedPortrait from './stills/portrait.webp';
     import faceColour from './stills/face-colour.webp';
     import facePrint from './stills/face-print.webp';
@@ -12,6 +12,8 @@
     import Timeline from './Timeline.svelte';
 
     let {
+        /** What it says: the default CV, or one a role preset retitled. */
+        cv = defaultCV,
         /** Colour puts the field on dark paper; Print multiplies it into white paper. */
         theme = 'print',
         /** Replaces each sheet's baked field; the stills bake draws a live one here. */
@@ -21,7 +23,7 @@
          * dimmed around the whole figure, as the prototype measured it.
          */
         portrait = bakedPortrait,
-    }: { theme?: Theme; field?: Snippet<[page: number]>; portrait?: string } = $props();
+    }: { cv?: CV; theme?: Theme; field?: Snippet<[page: number]>; portrait?: string } = $props();
 
     /** The face, kept clear of the field: Colour's copy carries the field's haze, Print's is bare. */
     const face = { colour: faceColour, print: facePrint };
@@ -35,6 +37,7 @@
         class="portrait face"
         src={face[theme]}
         alt=""
+        aria-hidden="true"
         data-atmosphere-calm="off"
         fetchpriority="low"
         decoding="async"

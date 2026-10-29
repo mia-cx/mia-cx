@@ -10,9 +10,18 @@ declare global {
             article?: boolean;
             /** Set by index pages: their items, printed after the CV. */
             appendix?: import('@mia-cx/print').Appendix;
+            /** Set by /cv: the CV a role preset gives, which printing the page prints too. */
+            cv?: import('$lib/cv/content').CV;
+            /** Set by /cv: the role it was asked for, kept in the address it shares. */
+            role?: string | null;
         }
         // interface PageState {}
-        // interface Platform {}
+        interface Platform {
+            env: {
+                /** Role presets for /cv, keyed by role: JSON `{ title, skills? }`. */
+                CV_PRESETS?: { get(key: string): Promise<string | null> };
+            };
+        }
     }
 }
 

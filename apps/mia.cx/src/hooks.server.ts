@@ -1,3 +1,4 @@
+import { building } from '$app/environment';
 import type { Handle } from '@sveltejs/kit';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { parse } from 'node-html-parser';
@@ -54,8 +55,10 @@ export const handle: Handle = async ({ event, resolve }) => {
     const page = pagePath(event.url.pathname);
     if (!page) return resolve(event);
 
-    const response = await event.fetch(page);
-    const markdown = response.ok ? toMarkdown(await response.text(), new URL(page, site.url)) : undefined;
+    // The query picks what a per-request page like /cv?role=… shows. Prerendered pages have none to read.
+    const url = new URL(page + (building ? '' : event.url.search), site.url);
+    const response = await event.fetch(url.pathname + url.search);
+    const markdown = response.ok ? toMarkdown(await response.text(), url) : undefined;
     if (!markdown) return new Response('Not found', { status: 404 });
     return new Response(markdown, { headers: { 'content-type': 'text/markdown; charset=utf-8' } });
 };
