@@ -16,7 +16,7 @@
     const bare = $derived(page.url.pathname === '/og');
 
     /*
-     * First load only: the page stays hidden while the shader compiles, then everything enters
+     * First load of the home page only: it stays hidden while the shader compiles, then everything enters
      * together. `data-boot` on <html> drives it all from CSS; it is set before paint in app.html
      * and cleared once the entrance has played, so later navigations do not animate.
      */

@@ -115,7 +115,7 @@ select {
 }
 
 /*
- * First-load entrance. `data-boot` is set on <html> before paint and moves loading → entering →
+ * First-load entrance, home page only. `data-boot` is set on <html> before paint and moves loading → entering →
  * (removed); see app.html and the root layout. While loading, the page is hidden and a ring shows
  * if the wait is long enough to notice. Entering cross-dissolves: the ring blurs out while each
  * block blurs in, staggered by its `--enter` index. Fill mode is `backwards` only, so no filter or

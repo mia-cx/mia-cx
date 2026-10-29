@@ -1117,7 +1117,7 @@ export class AtmosphereRenderer {
         );
         Object.defineProperty(self, 'gpuTimingSupported', { value: gpuTimingSupported });
         const format = navigator.gpu.getPreferredCanvasFormat();
-        const make = async (code: string, target: GPUTextureFormat) => {
+        const make = async (code: string, target: GPUColorTargetState) => {
             const module = self.device!.createShaderModule({ code });
             const info = await module.getCompilationInfo();
             const errors = info.messages.filter((message) => message.type === 'error');
@@ -1127,7 +1127,7 @@ export class AtmosphereRenderer {
             return self.device!.createRenderPipelineAsync({
                 layout: 'auto',
                 vertex: { module, entryPoint: 'vs' },
-                fragment: { module, entryPoint: 'fs', targets: [{ format: target }] },
+                fragment: { module, entryPoint: 'fs', targets: [target] },
             });
         };
         const bakedPostKinds = options.bakedPostPlan
@@ -1148,65 +1148,42 @@ export class AtmosphereRenderer {
         const compactBakedPost =
             bakedPostKinds.length > 0 && bakedPostKinds.every((kind) => [1, 2, 3, 27].includes(kind));
         const primaryPostKind = compactBakedPost ? bakedPostKinds[0] : undefined;
+        const extraPostKinds = primaryPostKind === undefined ? [] : bakedPostKinds.slice(1);
+        const maxBlend = { operation: 'max', srcFactor: 'one', dstFactor: 'one' } as const;
+        // One batch, so every pipeline compiles in parallel; the order sets each one's index.
         self.pipelines = await Promise.all([
-            make(BASE_SHADER_SOURCE, 'r16float'),
-            make(BLUR_SHADER_SOURCE, 'rgba16float'),
-            make(OCTAVE_SHADER_SOURCE, 'rgba16float'),
-            make(DISPLAY_SHADER_SOURCE, format),
-            make(BLOOM_EXTRACT_SHADER_SOURCE, BLOOM_TEXTURE_FORMAT),
-            make(BLOOM_BLUR_SHADER_SOURCE, BLOOM_TEXTURE_FORMAT),
-            make(GOD_RAYS_SHADER_SOURCE, GOD_RAYS_TEXTURE_FORMAT),
-            make(MATERIALIZE_SHADER_SOURCE, 'rgba16float'),
+            make(BASE_SHADER_SOURCE, { format: 'r16float' }),
+            make(BLUR_SHADER_SOURCE, { format: 'rgba16float' }),
+            make(OCTAVE_SHADER_SOURCE, { format: 'rgba16float' }),
+            make(DISPLAY_SHADER_SOURCE, { format }),
+            make(BLOOM_EXTRACT_SHADER_SOURCE, { format: BLOOM_TEXTURE_FORMAT }),
+            make(BLOOM_BLUR_SHADER_SOURCE, { format: BLOOM_TEXTURE_FORMAT }),
+            make(GOD_RAYS_SHADER_SOURCE, { format: GOD_RAYS_TEXTURE_FORMAT }),
+            make(MATERIALIZE_SHADER_SOURCE, { format: 'rgba16float' }),
             make(
                 primaryPostKind === undefined ? POST_EFFECT_SHADER_SOURCE : compactPostShaderSource(primaryPostKind),
-                POST_TEXTURE_FORMAT,
+                { format: POST_TEXTURE_FORMAT },
             ),
-            make(PRESENT_SHADER_SOURCE, format),
-            make(COLOUR_EFFECT_SHADER_SOURCE, 'rgba16float'),
-            make(LUT_SHADER_SOURCE, 'rgba16float'),
-            make(COPY_SHADER_SOURCE, POST_TEXTURE_FORMAT),
+            make(PRESENT_SHADER_SOURCE, { format }),
+            make(COLOUR_EFFECT_SHADER_SOURCE, { format: 'rgba16float' }),
+            make(LUT_SHADER_SOURCE, { format: 'rgba16float' }),
+            make(COPY_SHADER_SOURCE, { format: POST_TEXTURE_FORMAT }),
+            make(CURSOR_DECAY_SHADER_SOURCE, { format: CURSOR_DENSITY_FORMAT }),
+            make(CURSOR_PAINT_SHADER_SOURCE, {
+                format: CURSOR_DENSITY_FORMAT,
+                blend: { color: maxBlend, alpha: maxBlend },
+            }),
+            ...extraPostKinds.map((kind) => make(compactPostShaderSource(kind), { format: POST_TEXTURE_FORMAT })),
         ]);
-        for (const [code, blend] of [
-            [CURSOR_DECAY_SHADER_SOURCE, false],
-            [CURSOR_PAINT_SHADER_SOURCE, true],
-        ] as const) {
-            const module = self.device.createShaderModule({ code });
-            const info = await module.getCompilationInfo();
-            const errors = info.messages.filter((message) => message.type === 'error');
-            if (errors.length) throw new Error(errors.map((message) => message.message).join('\n'));
-            self.pipelines.push(
-                await self.device.createRenderPipelineAsync({
-                    layout: 'auto',
-                    vertex: { module, entryPoint: 'vs' },
-                    fragment: {
-                        module,
-                        entryPoint: 'fs',
-                        targets: [
-                            {
-                                format: CURSOR_DENSITY_FORMAT,
-                                ...(blend
-                                    ? {
-                                          blend: {
-                                              color: { operation: 'max', srcFactor: 'one', dstFactor: 'one' },
-                                              alpha: { operation: 'max', srcFactor: 'one', dstFactor: 'one' },
-                                          },
-                                      }
-                                    : {}),
-                            },
-                        ],
-                    },
-                }),
-            );
-        }
         if (primaryPostKind !== undefined) {
             self.compactPostPipelineIndices.set(primaryPostKind, 8);
             if (primaryPostKind === 27) self.compactPostHistoryPipelines.add(8);
-            for (const kind of bakedPostKinds.slice(1)) {
-                const pipelineIndex = self.pipelines.length;
-                self.pipelines.push(await make(compactPostShaderSource(kind), POST_TEXTURE_FORMAT));
+            const firstExtraIndex = self.pipelines.length - extraPostKinds.length;
+            extraPostKinds.forEach((kind, offset) => {
+                const pipelineIndex = firstExtraIndex + offset;
                 self.compactPostPipelineIndices.set(kind, pipelineIndex);
                 if (kind === 27) self.compactPostHistoryPipelines.add(pipelineIndex);
-            }
+            });
         }
         self.buffers = Array.from({ length: MAX_RENDER_PASSES }, () =>
             self.device!.createBuffer({

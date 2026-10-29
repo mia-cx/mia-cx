@@ -4,7 +4,7 @@
      * into a component so each site direction can place content over it.
      */
     import { onMount, untrack } from 'svelte';
-    import { BAKED_RENDER_OPTIONS, loadBakedRenderOptions } from './baked-settings';
+    import { BAKED_LUT_URL, BAKED_RENDER_OPTIONS, loadBakedRenderOptions } from './baked-settings';
     import { selectRenderBackend, type RenderBackend } from './render-backend';
     import { CursorState } from './cursor';
     import { CursorDensityField } from './cursor-density-field';
@@ -304,6 +304,11 @@
         };
     });
 </script>
+
+<!-- Start the LUT download with the HTML instead of after hydration; the mount's fetch reuses it. -->
+<svelte:head>
+    <link rel="preload" href={BAKED_LUT_URL} as="fetch" crossorigin="anonymous" />
+</svelte:head>
 
 <canvas
     class:ready
