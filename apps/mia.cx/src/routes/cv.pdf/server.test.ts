@@ -12,6 +12,8 @@ const browser = vi.hoisted(() => {
         tabsOpen: 0,
         browsersOpen: 0,
         launchError: undefined as string | undefined,
+        /** How many pages load; any after that never finish. */
+        loads: Infinity,
     };
     const instance = () => ({
         newPage: async () => {
@@ -19,6 +21,7 @@ const browser = vi.hoisted(() => {
             return {
                 goto: async (href: string) => {
                     state.opened.push(href);
+                    if (state.opened.length > state.loads) await new Promise(() => {});
                     return { ok: () => state.status < 400 };
                 },
                 emulateMediaType: async () => {},
@@ -48,9 +51,8 @@ const { GET } = await import('./+server');
 const store = new Map<string, Response>();
 const presets: Record<string, string> = { 'support-lead': JSON.stringify({ title: 'Support Lead' }) };
 let background: Promise<unknown>[] = [];
-/** A download, with the work it leaves running finished too. */
-async function download(query: string) {
-    const response = GET({
+const request = (query: string) =>
+    GET({
         url: new URL(`https://mia.cx/cv.pdf${query}`),
         platform: {
             env: {
@@ -60,6 +62,9 @@ async function download(query: string) {
             ctx: { waitUntil: (promise: Promise<unknown>) => void background.push(promise) },
         },
     } as never);
+/** A download, with the work it leaves running finished too. */
+async function download(query: string) {
+    const response = request(query);
     await Promise.allSettled([response, ...background]);
     await Promise.all(background);
     return response;
@@ -68,6 +73,7 @@ async function download(query: string) {
 beforeEach(() => {
     store.clear();
     background = [];
+    vi.useRealTimers();
     Object.assign(browser.state, {
         opened: [],
         status: 200,
@@ -76,6 +82,7 @@ beforeEach(() => {
         tabsOpen: 0,
         browsersOpen: 0,
         launchError: undefined,
+        loads: Infinity,
     });
     vi.stubGlobal('caches', {
         default: {
@@ -116,6 +123,14 @@ describe('/cv.pdf', () => {
         await download('?theme=print&role=support-lead');
         await download('?theme=print&role=support-lead');
         expect(browser.state.launches).toBe(2);
+    });
+
+    test('closes the browser before Cloudflare cancels a stalled second Theme', async () => {
+        vi.useFakeTimers();
+        browser.state.loads = 1;
+        await request('?theme=print');
+        await vi.advanceTimersByTimeAsync(29_000);
+        expect(browser.state.browsersOpen).toBe(0);
     });
 
     test('fails instead of printing an error page, and closes what it opened', async () => {

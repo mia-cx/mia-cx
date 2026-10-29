@@ -14,6 +14,11 @@ const RETRY_AFTER = 20;
 /** What Browser Rendering says once the day's browser time is spent. */
 const OUT_OF_TIME = /time limit exceeded/i;
 const THEMES: Theme[] = ['colour', 'print'];
+/**
+ * How long the other Theme gets after the response. Cloudflare cancels `waitUntil` work after 30
+ * seconds; this leaves time to close the browser, which would otherwise bill until it idles out.
+ */
+const BACKGROUND_DEADLINE = 25_000;
 
 /**
  * `/cv.pdf?theme=colour|print&role=<key>`: /cv with the same query, printed by Browser Rendering to an
@@ -93,10 +98,8 @@ export const GET: RequestHandler = async ({ url, platform }) => {
     const printOther = async () => {
         if (!(await cache?.match(entry(other)))) await render(other);
     };
-    ctx.waitUntil(
-        printOther()
-            .catch((cause: unknown) => console.error(`/cv.pdf ${other}:`, cause))
-            .finally(() => browser.close()),
-    );
+    const printed = printOther().catch((cause: unknown) => console.error(`/cv.pdf ${other}:`, cause));
+    const deadline = new Promise((resolve) => setTimeout(resolve, BACKGROUND_DEADLINE));
+    ctx.waitUntil(Promise.race([printed, deadline]).finally(() => browser.close()));
     return new Response(pdf, { headers });
 };
