@@ -21,10 +21,15 @@
     "observability": {
         "enabled": true,
     },
+    // Role presets for /cv?role=…, as JSON `{ title, skills? }` per key: `wrangler kv key put --remote
+    // --binding CV_PRESETS <role> '<json>'`. Staging reads the same ones.
+    "kv_namespaces": [{ "binding": "CV_PRESETS", "id": "d7d079ec11854eb98c655432d1e48b24" }],
     "env": {
         // The `mia-cx-staging` Worker: every push to main lands here before a release reaches mia.cx.
         "staging": {
             "routes": [{ "pattern": "staging.mia.cx", "custom_domain": true }],
+            // Bindings don't carry over into an environment.
+            "kv_namespaces": [{ "binding": "CV_PRESETS", "id": "d7d079ec11854eb98c655432d1e48b24" }],
         },
     },
 }
