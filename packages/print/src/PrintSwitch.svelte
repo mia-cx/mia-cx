@@ -18,6 +18,24 @@
     }: { article?: boolean; children: Snippet; paper?: Snippet } = $props();
 </script>
 
+<svelte:head>
+    {#if article}
+        <!--
+            Safari repeats no padding across printed pages, so on an Article's middle pages the text
+            would run to the paper's edge. There it prints inside page margins instead, the same as
+            <main>'s padding elsewhere; the paper stops at them. Only on Articles: CV sheets need none.
+        -->
+        <style>
+            @supports (font: -apple-system-body) {
+                /* Against print.css's margin: 0, which comes after this in the document. */
+                @page {
+                    margin: 18mm 20mm !important;
+                }
+            }
+        </style>
+    {/if}
+</svelte:head>
+
 {#if article}
     <div data-print-paper>{@render paper?.()}</div>
 {:else}

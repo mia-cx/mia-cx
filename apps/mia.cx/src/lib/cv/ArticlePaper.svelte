@@ -34,4 +34,17 @@
         height: 297mm;
         background: #fff;
     }
+    /*
+     * Safari prints Articles inside page margins (see @mia-cx/print), which clip the paper: it shifts
+     * back by the margins so its dimming still lines up with the text.
+     */
+    @supports (font: -apple-system-body) {
+        .later {
+            inset: -18mm -20mm;
+        }
+        .first {
+            top: -18mm;
+            left: -20mm;
+        }
+    }
 </style>

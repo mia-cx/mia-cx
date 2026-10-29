@@ -30,7 +30,8 @@ especially) don't matter.
 ## Pages
 
 `print.css` sets A4 pages with no margin, so anything printed can reach the paper's edge. An Article's
-`<main>` takes its margins as padding, repeated on every page it runs onto in Chromium and Firefox;
-Safari keeps them only at the Article's start and end. Mark an element `data-print-sheet` to make it
+`<main>` takes its margins as padding, repeated on every page it runs onto in Chromium and Firefox.
+Safari can't repeat padding across pages, so there an Article prints inside page margins of the same
+size instead, and its paper stops at them. Mark an element `data-print-sheet` to make it
 one whole page: a CV sheet, say. Each sheet ends its page. Mark anything that only works on screen,
 like navigation inside `<main>`, `data-print-hide`.

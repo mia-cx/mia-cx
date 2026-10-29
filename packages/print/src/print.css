@@ -67,10 +67,14 @@
         padding: 18mm 20mm;
         /*
          * Each page the Article runs onto gets the same margins, in Chromium and Firefox. Safari clones
-         * padding only on inline boxes, and prints neither named pages' margins nor a per-page repeat, so
-         * there an Article's margins hold only at its start and end.
+         * padding only on inline boxes, so PrintSwitch gives it page margins of the same size instead.
          */
         box-decoration-break: clone;
+    }
+    @supports (font: -apple-system-body) {
+        :root:has([data-print-paper]) main {
+            padding: 0;
+        }
     }
     :root:has([data-print-paper]) main,
     :root:has([data-print-paper]) main * {
