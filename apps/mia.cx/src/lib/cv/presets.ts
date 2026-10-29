@@ -22,10 +22,12 @@ function parse(raw: string): (Pick<CV, 'title'> & Partial<Pick<CV, 'skills'>>) |
     const title = value.title.trim();
     if (value.skills === undefined) return { title };
     const skills = value.skills;
+    // Areas name the CV's rows, so each appears once.
     const valid =
         Array.isArray(skills) &&
         skills.length > 0 &&
-        skills.every((skill) => isRecord(skill) && typeof skill.area === 'string' && typeof skill.items === 'string');
+        skills.every((skill) => isRecord(skill) && typeof skill.area === 'string' && typeof skill.items === 'string') &&
+        new Set(skills.map(({ area }) => area)).size === skills.length;
     return valid ? { title, skills: skills.map(({ area, items }) => ({ area, items })) } : undefined;
 }
 

@@ -13,6 +13,10 @@ describe('role presets', () => {
         ['skills that are not a list', '{"title":"Support Lead","skills":"TopDesk"}'],
         ['an empty skills list', '{"title":"Support Lead","skills":[]}'],
         ['a malformed skill', '{"title":"Support Lead","skills":[{"area":"Support"}]}'],
+        [
+            'a skill area listed twice',
+            '{"title":"Support Lead","skills":[{"area":"Support","items":"TopDesk"},{"area":"Support","items":"Excel"}]}',
+        ],
     ])('falls back to the default CV for %s', (_, raw) => {
         expect(resolveCV(raw)).toEqual(cv);
     });
