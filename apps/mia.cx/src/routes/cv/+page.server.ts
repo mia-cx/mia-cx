@@ -1,5 +1,5 @@
 import { digest } from '$lib/cv/pdf';
-import { ROLE_KEY, resolveCV } from '$lib/cv/presets';
+import { ROLE_KEY, readPreset, resolveCV } from '$lib/cv/presets';
 import type { PageServerLoad } from './$types';
 
 // Rendered per request by the Worker, since a role's preset lives in KV and changes without a deploy.
@@ -13,13 +13,7 @@ export const load: PageServerLoad = async ({ url, platform }) => {
     const key = url.searchParams.get('role');
     const role = key && ROLE_KEY.test(key) ? key : null;
     const theme = url.searchParams.get('theme') === 'colour' ? 'colour' : 'print';
-    // A failed read falls back to the default CV, like a missing preset: a shared link never breaks.
-    const raw = role
-        ? await platform?.env.CV_PRESETS?.get(role).catch((error: unknown) => {
-              console.error(`CV preset ${role}:`, error);
-              return null;
-          })
-        : null;
+    const raw = await readPreset(platform?.env.CV_PRESETS, role);
     // Published on the page, so /cv.pdf caches a render only when it shows the preset /cv.pdf read.
     const preset = raw ? await digest(raw) : '';
     return { cv: resolveCV(raw), theme, role, preset } as const;

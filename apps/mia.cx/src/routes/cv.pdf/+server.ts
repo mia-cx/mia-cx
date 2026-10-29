@@ -1,6 +1,6 @@
 import puppeteer, { type Browser } from '@cloudflare/puppeteer';
 import { error } from '@sveltejs/kit';
-import { ROLE_KEY } from '$lib/cv/presets';
+import { readPreset } from '$lib/cv/presets';
 import { cacheKey, digest, pdfDate, pdfFilename } from '$lib/cv/pdf';
 import type { Theme } from '$lib/cv/Sheet.svelte';
 import type { RequestHandler } from './$types';
@@ -33,7 +33,7 @@ export const GET: RequestHandler = async ({ url, platform }) => {
 
     const key = url.searchParams.get('role');
     const theme: Theme = url.searchParams.get('theme') === 'colour' ? 'colour' : 'print';
-    const preset = (key && ROLE_KEY.test(key) && (await env.CV_PRESETS?.get(key))) || '';
+    const preset = (await readPreset(env.CV_PRESETS, key)) || '';
     // A role without a preset is the default CV, so it renders and caches as that: made-up roles cost nothing.
     const role = preset ? key : null;
     const presetDigest = preset && (await digest(preset));
@@ -87,19 +87,18 @@ export const GET: RequestHandler = async ({ url, platform }) => {
         }
     }
 
-    let pdf: Uint8Array<ArrayBuffer>;
-    try {
-        pdf = await render(theme);
-    } catch (cause) {
-        await browser.close();
-        throw cause;
-    }
     const other = THEMES.find((each) => each !== theme)!;
     const printOther = async () => {
         if (!(await cache?.match(entry(other)))) await render(other);
     };
-    const printed = printOther().catch((cause: unknown) => console.error(`/cv.pdf ${other}:`, cause));
-    const deadline = new Promise((resolve) => setTimeout(resolve, BACKGROUND_DEADLINE));
-    ctx.waitUntil(Promise.race([printed, deadline]).finally(() => browser.close()));
-    return new Response(pdf, { headers });
+    // Everything the browser does is held by waitUntil, so it still closes if the visitor leaves mid-render.
+    const first = render(theme);
+    const rest = first.then(() => {
+        const printed = printOther().catch((cause: unknown) => console.error(`/cv.pdf ${other}:`, cause));
+        const deadline = new Promise((resolve) => setTimeout(resolve, BACKGROUND_DEADLINE));
+        return Promise.race([printed, deadline]);
+    });
+    // A failed first render is thrown to the visitor below, so here it only has to close the browser.
+    ctx.waitUntil(rest.catch(() => {}).finally(() => browser.close()));
+    return new Response(await first, { headers });
 };

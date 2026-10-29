@@ -51,13 +51,17 @@ const { GET } = await import('./+server');
 const store = new Map<string, Response>();
 const presets: Record<string, string> = { 'support-lead': JSON.stringify({ title: 'Support Lead' }) };
 let background: Promise<unknown>[] = [];
-const request = (query: string) =>
+let kvFails = false;
+const request = async (query: string) =>
     GET({
         url: new URL(`https://mia.cx/cv.pdf${query}`),
         platform: {
             env: {
                 BROWSER: {},
-                CV_PRESETS: { get: async (key: string) => presets[key] ?? null },
+                CV_PRESETS: {
+                    get: async (key: string) =>
+                        kvFails ? Promise.reject(new Error('KV GET failed: 500')) : (presets[key] ?? null),
+                },
             },
             ctx: { waitUntil: (promise: Promise<unknown>) => void background.push(promise) },
         },
@@ -65,7 +69,7 @@ const request = (query: string) =>
 /** A download, with the work it leaves running finished too. */
 async function download(query: string) {
     const response = request(query);
-    await Promise.allSettled([response, ...background]);
+    await response.catch(() => {});
     await Promise.all(background);
     return response;
 }
@@ -73,6 +77,7 @@ async function download(query: string) {
 beforeEach(() => {
     store.clear();
     background = [];
+    kvFails = false;
     vi.useRealTimers();
     Object.assign(browser.state, {
         opened: [],
@@ -123,6 +128,21 @@ describe('/cv.pdf', () => {
         await download('?theme=print&role=support-lead');
         await download('?theme=print&role=support-lead');
         expect(browser.state.launches).toBe(2);
+    });
+
+    test('hands the browser to waitUntil before the first render, so leaving mid-render still closes it', async () => {
+        browser.state.loads = 0;
+        void request('?theme=print');
+        await vi.waitFor(() => expect(browser.state.opened).toHaveLength(1));
+        expect(background).toHaveLength(1);
+    });
+
+    test('prints the default CV when the preset read fails, as /cv shows', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        kvFails = true;
+        const response = await download('?theme=print&role=support-lead');
+        expect(response.status).toBe(200);
+        expect(browser.state.opened[0]).toBe('https://mia.cx/cv?theme=print');
     });
 
     test('closes the browser before Cloudflare cancels a stalled second Theme', async () => {
