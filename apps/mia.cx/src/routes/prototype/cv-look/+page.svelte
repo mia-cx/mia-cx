@@ -203,7 +203,7 @@
         <h1>PROTOTYPE · CV look</h1>
         <!-- The CV buttons for home and the footer: Colour with a label, Print as an icon with an instant tooltip. -->
         <div class="cv-buttons" style:--icon={icon}>
-            <a href="/cv.pdf?theme=colour" download>Download CV <FileText aria-hidden="true" /></a>
+            <a href="/cv.pdf?theme=colour" download><span class="label">Download CV</span> <FileText aria-hidden="true" /></a>
             <a href="/cv.pdf?theme=print" download aria-label="Download print-friendly CV" class="icon">
                 <span class="doc" aria-hidden="true"><FileText /><span class="badge"><Printer /></span></span>
                 <span class="tip" aria-hidden="true">Print-friendly</span>
@@ -470,7 +470,10 @@
     /* Lucide draws at 2; 1.5 matches the weight of the button text. */
     .cv-buttons :global(svg *) { stroke-width: 1.5; }
     .cv-buttons .icon { position: relative; justify-content: center; width: 40px; padding: 0; }
-    .doc { position: relative; display: grid; }
+    /* The badge hangs off the bottom right; shift by half its overhang so the pair reads as centred. */
+    .doc { position: relative; display: grid; translate: calc(var(--icon) * -0.17cap) calc(var(--icon) * -0.15cap); }
+    /* Trim the label to cap height and baseline, so centring lines the icon up with the capitals. */
+    .label { text-box: trim-both cap alphabetic; }
     /* The printer sits on the document's corner, cut out of it by the button's own background. */
     .badge { position: absolute; right: calc(var(--icon) * -0.35cap); bottom: calc(var(--icon) * -0.3cap); display: grid; padding: 1px; background: var(--panel); line-height: 0; }
     .badge :global(svg) { width: calc(var(--icon) * 0.65cap); height: calc(var(--icon) * 0.65cap); }
