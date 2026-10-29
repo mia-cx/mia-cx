@@ -61,10 +61,11 @@ jobs:
                     exit 0
                   fi
                   # Ask GitHub for the newest release pull request merged from this repository, so its merge
-                  # commit is right however it was merged: merge commit, squash or rebase.
+                  # commit is right however it was merged: merge commit, squash or rebase. Like the release
+                  # check, only one that changes the site's version counts as a release.
                   sha="$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head changeset-release/main --state merged \
-                    --limit 20 --json mergeCommit,mergedAt,isCrossRepository \
-                    --jq '[.[] | select(.isCrossRepository | not)] | sort_by(.mergedAt) | last | .mergeCommit.oid // empty')"
+                    --limit 20 --json mergeCommit,mergedAt,isCrossRepository,files \
+                    --jq '[.[] | select((.isCrossRepository | not) and any(.files[]; .path == "apps/mia.cx/package.json"))] | sort_by(.mergedAt) | last | .mergeCommit.oid // empty')"
                   if [ -z "$sha" ]; then
                     echo 'No release pull request has been merged into main' >&2
                     exit 1
