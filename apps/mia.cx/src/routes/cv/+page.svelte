@@ -35,6 +35,10 @@
         justify-content: flex-end;
         margin-bottom: 24px;
     }
+    /* Until the script scales the sheets to fit (or if it never runs), they scroll here, not the page. */
+    .sheets {
+        overflow-x: auto;
+    }
     .sheets > div {
         display: grid;
         justify-content: center;
