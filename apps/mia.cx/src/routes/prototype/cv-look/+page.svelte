@@ -78,7 +78,7 @@
         const url = item.markdown ? `${site.url}/work/${item.slug}` : (item.live ?? item.source ?? site.url);
         const { data, size } = encode(url, { border: 0 });
         const path = data.flatMap((row, y) => row.flatMap((on, x) => (on ? [`M${x} ${y}h1v1h-1z`] : []))).join('');
-        return { title: item.title, tagline: item.summary, url: url.replace(/^https?:\/\//, ''), qr: { size, path } };
+        return { title: item.title, tagline: item.summary, href: url, url: url.replace(/^https?:\/\//, ''), qr: { size, path } };
     });
     // PROTOTYPE: a fixed count per sheet stands in for real page breaks.
     const PER_SHEET = 12;
@@ -272,9 +272,9 @@
                 <h1>Mia<br />Riezebos</h1>
                 <p class="role">Product Engineer &amp; Founder</p>
                 <ul class="contact">
-                    <li>hello@mia.cx</li>
-                    <li>mia.cx</li>
-                    <li>linkedin.com/in/miariezebos</li>
+                    <li><a href="mailto:hello@mia.cx">hello@mia.cx</a></li>
+                    <li><a href="https://mia.cx">mia.cx</a></li>
+                    <li><a href="https://linkedin.com/in/miariezebos">linkedin.com/in/miariezebos</a></li>
                     <li>Netherlands</li>
                 </ul>
             </header>
@@ -334,8 +334,8 @@
             <section>
                 <h2>Selected work</h2>
                 <ul class="work">
-                    <li><b>Caelestis</b>: a template overlay and shared server for groups painting together on wplace.live. <span class="url">caelestis.mia.cx</span></li>
-                    <li><b>Discord Wrapped</b>: turns a Discord data package into a report with shareable stories. <span class="url">discordwrapped.app</span></li>
+                    <li><b>Caelestis</b>: a template overlay and shared server for groups painting together on wplace.live. <a class="url" href="https://caelestis.mia.cx">caelestis.mia.cx</a></li>
+                    <li><b>Discord Wrapped</b>: turns a Discord data package into a report with shareable stories. <a class="url" href="https://discordwrapped.app">discordwrapped.app</a></li>
                     <li><b>Vesta</b>: an all-in-one platform for independent musicians, small labels and creative publishers. In development.</li>
                     <li><b>Maal</b>: meal planning for people with ADHD.</li>
                     <li><b>Logitland</b>: a Discord server where only AI agents talk. People watch, and owners adopt agents for an XP bonus. In development.</li>
@@ -362,9 +362,9 @@
                             <div>
                                 <h3>{item.title}</h3>
                                 <p>{item.tagline}</p>
-                                <p class="url">{item.url}</p>
+                                <p><a class="url" href={item.href}>{item.url}</a></p>
                             </div>
-                            <svg class="qr" viewBox="0 0 {item.qr.size} {item.qr.size}" aria-hidden="true"><path d={item.qr.path} /></svg>
+                            <a class="qr-link" href={item.href} tabindex="-1" aria-hidden="true"><svg class="qr" viewBox="0 0 {item.qr.size} {item.qr.size}" aria-hidden="true"><path d={item.qr.path} /></svg></a>
                         </li>
                     {/each}
                 </ul>
@@ -483,4 +483,15 @@
 
     /* Ink-coloured modules on bare paper: on dark paper they're light, and the paper is the quiet zone. */
     .qr { position: relative; z-index: 3; display: block; width: 15mm; height: 15mm; fill: var(--ink); shape-rendering: crispEdges; }
+
+    /*
+     * Links look exactly like the text around them, so paper shows nothing extra; the PDF still carries
+     * them as clickable link annotations. Hover only exists on screen, so it never reaches print.
+     */
+    .sheet a { color: inherit; text-decoration: none; }
+    .qr-link { display: block; }
+    @media (hover: hover) {
+        .sheet a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 0.15em; }
+        .qr-link:hover .qr { fill: var(--accent); }
+    }
 </style>
