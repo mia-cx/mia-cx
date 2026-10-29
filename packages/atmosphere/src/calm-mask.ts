@@ -293,24 +293,31 @@ export class CalmMask {
             } else canvas2d(target).clearRect(0, 0, width, height);
         // Expand every box by the radius with round corners, then blur the union: the feather. Safari
         // ships canvas filters switched off, so the blur is a shadow, which every engine draws: the
-        // shapes go one canvas-width off to the left and only their blurred shadow is offset back.
+        // shapes are drawn off the canvas to the left and only their blurred shadow is offset back.
         // A shadow blur is twice the Gaussian's standard deviation.
         const radius = RADIUS / TEXEL;
+        // Boxes are cut off past this margin, where the feather can no longer reach the view, so the
+        // shift below always clears them: nothing but the shadow lands on the canvas.
+        const margin = (RADIUS + FEATHER * 3) / TEXEL;
+        const shift = width + margin * 2;
         context.save();
-        context.translate(-width, 0);
-        context.shadowOffsetX = width;
+        context.translate(-shift, 0);
+        context.shadowOffsetX = shift;
         context.shadowBlur = (FEATHER / TEXEL) * 2;
         context.shadowColor = '#fff';
         context.fillStyle = '#fff';
         context.beginPath();
-        for (let i = 0; i < boxes.length; i += 4)
+        for (let i = 0; i < boxes.length; i += 4) {
+            const left = Math.max(boxes[i] / TEXEL - radius, -margin),
+                right = Math.min((boxes[i] + boxes[i + 2]) / TEXEL + radius, width + margin);
             context.roundRect(
-                boxes[i] / TEXEL - radius,
+                left,
                 boxes[i + 1] / TEXEL - radius,
-                boxes[i + 2] / TEXEL + radius * 2,
+                right - left,
                 boxes[i + 3] / TEXEL + radius * 2,
                 radius,
             );
+        }
         context.fill();
         // Images grow by the radius around their own outline, within what their clip shows, and blur the same way.
         if (cutouts.length) {
