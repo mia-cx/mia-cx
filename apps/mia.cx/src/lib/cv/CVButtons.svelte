@@ -76,14 +76,25 @@
     .label {
         text-box: trim-both cap alphabetic;
     }
-    /* The printer sits on the document's corner, cut out of it by the panel colour. */
+    /* The printer sits on the document's corner, cut out of it: the button behind is translucent. */
+    .doc {
+        --badge-right: calc(var(--icon) * -0.35cap);
+        --badge-bottom: calc(var(--icon) * -0.3cap);
+        --badge-size: calc(var(--icon) * 0.65cap + 2px);
+    }
+    .doc > :global(svg) {
+        mask:
+            linear-gradient(#000 0 0),
+            linear-gradient(#000 0 0) right var(--badge-right) bottom var(--badge-bottom) / var(--badge-size)
+                var(--badge-size) no-repeat;
+        mask-composite: exclude;
+    }
     .badge {
         position: absolute;
-        right: calc(var(--icon) * -0.35cap);
-        bottom: calc(var(--icon) * -0.3cap);
+        right: var(--badge-right);
+        bottom: var(--badge-bottom);
         display: grid;
         padding: 1px;
-        background: var(--panel);
         line-height: 0;
     }
     .badge :global(svg) {
