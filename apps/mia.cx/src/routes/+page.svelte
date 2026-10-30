@@ -121,8 +121,10 @@
      * On paper the intro and the social icons run over the black sweater, where ink would vanish.
      * Inverted and blended with difference, they come out as ink on paper and as paper on the
      * sweater. Difference over a grey gives the same grey, so the sweater stays solid black under
-     * them and fades out below. Controls with a fill keep normal blending, since difference would see
-     * through it. Phones put the photo under the text instead, so only wider screens need this.
+     * them and fades out below. The text is centred in the hero, so it sits lower in the photo the
+     * shorter the window: at 1280×600 the icons end at 82% of its height, so the fade starts at 85%.
+     * Controls with a fill keep normal blending, since difference would see through it. Phones put
+     * the photo under the text instead, so only wider screens need this.
      */
     @media (min-width: 821px) {
         :global(:root[data-theme='light']) .words,
@@ -131,7 +133,7 @@
             mix-blend-mode: difference;
         }
         :global(:root[data-theme='light']) .portrait {
-            --fade-from: 75%;
+            --fade-from: 85%;
         }
     }
     @media (min-width: 821px) and (prefers-color-scheme: light) {
@@ -141,7 +143,7 @@
             mix-blend-mode: difference;
         }
         :global(:root:not([data-theme])) .portrait {
-            --fade-from: 75%;
+            --fade-from: 85%;
         }
     }
     /*
