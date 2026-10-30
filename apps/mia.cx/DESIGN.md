@@ -38,7 +38,9 @@ With a mouse the hero has depth: background, portrait, text, then the field near
 mouse position on the root, and each layer follows it at once, shifting by its depth in steps of 7px by 4px
 (`app.css`): the background stays put, the portrait moves two steps, the text three, the field four.
 The text moves by relative offset, never a transform, which would cut it off from the sweater it
-blends with on paper. `P` holds the field still. Touch and reduced motion keep the hero still.
+blends with on paper. The field's drift settles to nothing as the hero scrolls away, over the same
+range as its dim, so it holds still over the rest of the page. `P` holds the field still. Touch and
+reduced motion keep the hero still.
 
 ## The field
 
