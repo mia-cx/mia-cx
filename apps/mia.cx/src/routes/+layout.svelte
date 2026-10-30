@@ -104,13 +104,34 @@
     }
     /*
      * Nearest to the mouse camera in app.css, at the depth the home page gives it (four steps), and
-     * grown past the edges by that much so the shift never shows one.
+     * grown past the edges by that much so the shift never shows one. The drift settles as the hero
+     * scrolls away, over the same range as the field's dim, so the field holds still over the rest
+     * of the page. Where scroll timelines exist, `--field-drift` runs on the root, since the canvas's
+     * own animation is the dim; elsewhere the dim's published value, 1 to 0.5, stands in.
      */
+    @property --field-drift {
+        syntax: '<number>';
+        inherits: true;
+        initial-value: 1;
+    }
     :global(canvas.field) {
         --atmosphere-bleed: 28px;
-        transform: translate(
-            calc(var(--pan-step-x, 0px) * var(--field-depth, 0)),
-            calc(var(--pan-step-y, 0px) * var(--field-depth, 0))
-        );
+        --reach: calc(var(--field-depth, 0) * var(--field-drift) * (2 * var(--atmosphere-dim, 1) - 1));
+        transform: translate(calc(var(--pan-step-x, 0px) * var(--reach)), calc(var(--pan-step-y, 0px) * var(--reach)));
+    }
+    @supports (view-timeline: --hero) and (animation-timeline: --hero) and (timeline-scope: --hero) {
+        @keyframes field-settle {
+            from {
+                --field-drift: 1;
+            }
+            to {
+                --field-drift: 0;
+            }
+        }
+        :global(:root:has([data-section='hero'])) {
+            animation: field-settle linear both;
+            animation-timeline: --hero;
+            animation-range: exit-crossing 0% exit-crossing 90%;
+        }
     }
 </style>
