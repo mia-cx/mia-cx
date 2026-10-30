@@ -149,8 +149,7 @@
      * sweater. Difference over a grey gives the same grey, so the sweater stays solid black under
      * them and fades out below. The text is centred in the hero and at most 384px tall on any
      * desktop, so the icons always end above half the photo's height plus 192px; the fade starts
-     * below that, at 85% when there is room. The gradient's positions are divided by the zoom, so
-     * the length is multiplied by it to stay in the hero's pixels.
+     * below that, at 85% when there is room, and never past 92%, so short windows keep a feather.
      * Controls with a fill keep normal blending, since difference would see through it. Phones put
      * the photo under the text instead, so only wider screens need this.
      */
@@ -161,7 +160,7 @@
             mix-blend-mode: difference;
         }
         :global(:root[data-theme='light']) .portrait {
-            --fade-from: max(85%, 50% + 200px * var(--zoom));
+            --fade-from: min(max(85cqh, 50cqh + 200px), 92cqh);
         }
     }
     @media (min-width: 821px) and (prefers-color-scheme: light) {
@@ -171,18 +170,20 @@
             mix-blend-mode: difference;
         }
         :global(:root:not([data-theme])) .portrait {
-            --fade-from: max(85%, 50% + 200px * var(--zoom));
+            --fade-from: min(max(85cqh, 50cqh + 200px), 92cqh);
         }
     }
     /*
      * The photo is rendered taller than the hero and clipped from the bottom, so the head stays just
-     * under the header and the framing lands around the shoulders. The fade lives on the container,
-     * not the image, so it always sits at the hero's bottom edge no matter how much is cropped.
+     * under the header and the framing lands around the shoulders. The portrait is a size container,
+     * so the photo's feather is measured in its height (`cqh`) and always ends at the hero's bottom
+     * edge, no matter how much is cropped.
      */
     .portrait {
+        container-type: size;
         --zoom: 1.2;
-        /* How far the photo is pushed down inside the clip, as a share of the hero height. */
-        --drop: 14%;
+        /* How far the photo is pushed down inside the clip. */
+        --drop: 14cqh;
         /* Where the centre of the photo sits, as a share of the viewport width. The text column
            starts at 50vw, so this is stable at every zoom level and window size. */
         --face: 40vw;
@@ -193,8 +194,11 @@
         --head-rx: 34%;
         --head-ry: 20%;
         --head-solid: 55%;
-        /* Where the bottom fade starts, as a share of the portrait's height; it ends at the bottom. */
-        --fade-from: 30%;
+        /* The photo's feather: an ellipse centred on the face, 1.2 times as wide as it is tall, solid
+           down to --fade-from and gone at the bottom edge. */
+        --feather-y: 28cqh;
+        --feather-wide: 1.2;
+        --fade-from: 30cqh;
         /* Spans the viewport rather than the grid column so the photo is placed in viewport terms. */
         position: absolute;
         /* Under the text and buttons without lifting them into stacking contexts of their own, which
@@ -219,11 +223,27 @@
         max-width: none;
         object-fit: contain;
         object-position: center top;
-        /* Gradient positions are in image height, so the fade ends exactly at the container's bottom. */
-        mask-image: linear-gradient(
-            to bottom,
-            #000 calc((var(--fade-from) - var(--drop)) / var(--zoom)),
-            transparent calc((100% - var(--drop)) / var(--zoom))
+        /*
+         * Stop positions run along the ellipse's horizontal radius, so each vertical depth is
+         * stretched by --feather-wide. Past the solid core, the opacity falls off as a Gaussian,
+         * exp(-4t²): it leaves the core with no visible edge and thins out in a long tail.
+         */
+        --ry: calc(100cqh - var(--feather-y));
+        --core: calc((var(--fade-from) - var(--feather-y)) * var(--feather-wide));
+        --rest: calc((100cqh - var(--fade-from)) * var(--feather-wide));
+        mask-image: radial-gradient(
+            ellipse calc(var(--ry) * var(--feather-wide)) var(--ry) at 50% calc(var(--feather-y) - var(--drop)),
+            #000 var(--core),
+            rgb(0 0 0 / 96%) calc(var(--core) + var(--rest) * 0.1),
+            rgb(0 0 0 / 85%) calc(var(--core) + var(--rest) * 0.2),
+            rgb(0 0 0 / 69%) calc(var(--core) + var(--rest) * 0.3),
+            rgb(0 0 0 / 52%) calc(var(--core) + var(--rest) * 0.4),
+            rgb(0 0 0 / 36%) calc(var(--core) + var(--rest) * 0.5),
+            rgb(0 0 0 / 22%) calc(var(--core) + var(--rest) * 0.6),
+            rgb(0 0 0 / 12%) calc(var(--core) + var(--rest) * 0.7),
+            rgb(0 0 0 / 6%) calc(var(--core) + var(--rest) * 0.8),
+            rgb(0 0 0 / 2%) calc(var(--core) + var(--rest) * 0.9),
+            transparent calc(var(--core) + var(--rest))
         );
     }
     /* Above the shader's canvas (z-index 5), below the header (20). */
@@ -417,8 +437,9 @@
            to scroll past. `--keep` is the share of the photo's height that shows. */
         .portrait {
             --zoom: 1;
-            --drop: 0%;
+            --drop: 0px;
             --keep: 0.62;
+            --feather-y: 19cqh;
             position: relative;
             top: auto;
             bottom: auto;
@@ -435,11 +456,6 @@
             translate: none;
             width: 100%;
             height: auto;
-            mask-image: linear-gradient(
-                to bottom,
-                #000 calc(var(--keep) * var(--fade-from)),
-                transparent calc(var(--keep) * 100%)
-            );
         }
         .portrait-top img {
             mask-image: var(--head);
