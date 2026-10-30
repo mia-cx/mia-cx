@@ -33,5 +33,5 @@ the field multiplied in like ink. `/cv` and `/cv.pdf` are the only Worker-render
 KV. The print mechanism is the workspace package `@mia-cx/print`, kept free of CV specifics so Svartz can adopt it. All
 of it shipped in 0.1.1 (PRD #86). `/cv.pdf` prints through Cloudflare Browser Rendering on the free plan's daily browser
 time, so each render is cached for the day. Safari prints Articles inside page margins, because it can't repeat padding
-across pages, and there the field stops at those margins. Next: a light theme for the whole site (#90), reusing the ink
-treatment.
+across pages, and there the field stops at those margins. The site's light theme (#90) reuses the Print theme's ink
+treatment: white paper with the field multiplied in.

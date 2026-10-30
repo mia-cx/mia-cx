@@ -336,6 +336,8 @@
         pointer-events: none;
         opacity: 0;
         background: transparent;
+        /* A site on light paper multiplies the field in like ink. */
+        mix-blend-mode: var(--field-blend, normal);
     }
     canvas.front {
         z-index: 5;
