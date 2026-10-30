@@ -114,15 +114,39 @@
         justify-items: start;
     }
     .words {
-        position: relative;
-        z-index: 1;
         display: grid;
         justify-items: start;
     }
-    /* Above the portrait, which is positioned and would otherwise paint over the icons and buttons. */
-    .reach {
-        position: relative;
-        z-index: 1;
+    /*
+     * On paper the intro and the social icons run over the black sweater, where ink would vanish.
+     * Inverted and blended with difference, they come out as ink on paper and as paper on the
+     * sweater. Difference over a grey gives the same grey, so the sweater stays solid black under
+     * them and fades out below. The text is centred in the hero and at most 384px tall on any
+     * desktop, so the icons always end above half the photo's height plus 192px; the fade starts
+     * below that, at 85% when there is room. The gradient's positions are divided by the zoom, so
+     * the length is multiplied by it to stay in the hero's pixels.
+     * Controls with a fill keep normal blending, since difference would see through it. Phones put
+     * the photo under the text instead, so only wider screens need this.
+     */
+    @media (min-width: 821px) {
+        :global(:root[data-theme='light']) .words,
+        :global(:root[data-theme='light']) .reach :global(.socials > ul) {
+            filter: invert(1);
+            mix-blend-mode: difference;
+        }
+        :global(:root[data-theme='light']) .portrait {
+            --fade-from: max(85%, 50% + 200px * var(--zoom));
+        }
+    }
+    @media (min-width: 821px) and (prefers-color-scheme: light) {
+        :global(:root:not([data-theme])) .words,
+        :global(:root:not([data-theme])) .reach :global(.socials > ul) {
+            filter: invert(1);
+            mix-blend-mode: difference;
+        }
+        :global(:root:not([data-theme])) .portrait {
+            --fade-from: max(85%, 50% + 200px * var(--zoom));
+        }
     }
     /*
      * The photo is rendered taller than the hero and clipped from the bottom, so the head stays just
@@ -147,6 +171,9 @@
         --fade-from: 30%;
         /* Spans the viewport rather than the grid column so the photo is placed in viewport terms. */
         position: absolute;
+        /* Under the text and buttons without lifting them into stacking contexts of their own, which
+           would cut them off from the photo they blend with on paper. */
+        z-index: -1;
         top: calc(var(--header-height) + 24px);
         bottom: 0;
         left: calc(50% - 50vw);

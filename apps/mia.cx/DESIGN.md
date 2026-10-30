@@ -38,7 +38,8 @@ and vertical offset. On phones the text comes first and the portrait goes full-b
 
 `ShaderCanvas` is fixed, full viewport, transparent, `pointer-events: none`, `z-index: 5`. Its
 presentation pass derives alpha from luminance, so dark parts of the field are transparent and only the
-bright lobes wash over the page. The renderer files are identical to `apps/shaderdemo`.
+bright lobes wash over the page; on light paper it multiplies in as ink instead. The renderer files are
+identical to `apps/shaderdemo`.
 
 The site touches the field in two ways only:
 
@@ -92,19 +93,24 @@ the footer, contact, the routes, and the layout tokens (`--header-height`, `--co
 
 ## Palette
 
-Defined in `@mia-cx/ui/tokens.css`. Dark only: a light theme was tried, and the inverted shader and
-the hero text over the black sweater both suffered, so it was removed.
+Defined in `@mia-cx/ui/tokens.css`, one `light-dark()` value per token. The site follows the system
+preference until a visitor picks a theme with the header's toggle, which `app.html` restores before
+paint; `/og` is always dark. Light is the printed CV's Print theme: white paper, plum ink, and the field
+multiplied in like ink (`--field-blend`), so text stays black and the paper stays white between the
+lobes. On wider screens the hero's intro and social icons run over the black sweater, so in light they
+invert and blend with `difference`: ink on paper, paper on the sweater. The sweater stays solid under
+them, since difference over its grey fade would match the grey.
 
-| Token          | Value         | Role                                           |
-| -------------- | ------------- | ---------------------------------------------- |
-| `--haze`       | `#221820`     | page and header tint                           |
-| `--bg`         | `var(--haze)` | page; matches the field before its first frame |
-| `--panel-line` | `#1a1c22`     | hairlines, control borders                     |
-| `--ink`        | `#e9e5dd`     | text                                           |
-| `--ink-dim`    | `#8f8b85`     | labels, metadata                               |
-| `--ink-faint`  | `#4d4a47`     | quiet details                                  |
-| `--accent`     | `#ff3d8a`     | hover, status, current page                    |
-| `--violet`     | `#5b4ddc`     | focus rings                                    |
+| Token          | Light         | Dark          | Role                                           |
+| -------------- | ------------- | ------------- | ---------------------------------------------- |
+| `--haze`       | `#fff`        | `#221820`     | page and header tint                           |
+| `--bg`         | `var(--haze)` | `var(--haze)` | page; matches the field before its first frame |
+| `--panel-line` | `#dcd8d3`     | `#1a1c22`     | hairlines, control borders                     |
+| `--ink`        | `#1c161a`     | `#e9e5dd`     | text                                           |
+| `--ink-dim`    | `#6e6862`     | `#8f8b85`     | labels, metadata                               |
+| `--ink-faint`  | `#b3ada6`     | `#4d4a47`     | quiet details                                  |
+| `--accent`     | `#d61f6f`     | `#ff3d8a`     | hover, status, current page                    |
+| `--violet`     | `#4b3fc9`     | `#5b4ddc`     | focus rings                                    |
 
 ## Type
 
