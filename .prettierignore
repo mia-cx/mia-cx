@@ -11,6 +11,9 @@
 **/apps/**
 **/packages/**
 
+# Changesets copies each file into a changelog as is, so a format pragma would land there too.
+.changeset
+
 **/package-lock.json
 **/pnpm-lock.yaml
 **/yarn.lock
