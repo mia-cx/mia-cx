@@ -189,21 +189,16 @@
         grid-template-columns: 110mm 1fr;
         gap: 0 6mm;
     }
-    /* Skills and Languages run the timeline's height, so the column ends where it does: the skill areas spread out. */
+    /* Languages sits at the foot of the column, so it ends where the timeline does. */
     .columns > div {
         display: flex;
         flex-direction: column;
     }
-    .columns > div > section:first-child {
-        display: flex;
-        flex: 1;
-        flex-direction: column;
+    .columns > div > section:last-child {
+        margin-top: auto;
     }
     .skills {
-        display: flex;
-        flex: 1;
-        flex-direction: column;
-        justify-content: space-between;
+        display: grid;
         gap: 4mm;
     }
     dl {
