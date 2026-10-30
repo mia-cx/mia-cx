@@ -1,5 +1,16 @@
 # @mia-cx/mia.cx
 
+## 0.2.0
+
+### Minor Changes
+
+- 4cf4dc5: mia.cx has a light theme again, on white paper with the field's light over it. It follows the system setting, and the button in the header switches it.
+
+### Patch Changes
+
+- 8414b09: The printed CV's skills sit closer together, and Languages lines up with the end of the timeline.
+- 33ccee3: The home page has depth: with a mouse, the portrait, the text and the light over them drift apart, the nearest the most.
+
 ## 0.1.1
 
 ### Patch Changes
