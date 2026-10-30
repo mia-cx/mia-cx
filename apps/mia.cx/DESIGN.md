@@ -97,7 +97,9 @@ Defined in `@mia-cx/ui/tokens.css`, one `light-dark()` value per token. The site
 preference until a visitor picks a theme with the header's toggle, which `app.html` restores before
 paint; `/og` is always dark. Light is the printed CV's Print theme: white paper, plum ink, and the field
 multiplied in like ink (`--field-blend`), so text stays black and the paper stays white between the
-lobes. The hero's portrait fades out before the text column, so the sweater never sits under the text.
+lobes. On wider screens the hero's intro and social icons run over the black sweater, so in light they
+invert and blend with `difference`: ink on paper, paper on the sweater. The sweater stays solid under
+them, since difference over its grey fade would match the grey.
 
 | Token          | Light         | Dark          | Role                                           |
 | -------------- | ------------- | ------------- | ---------------------------------------------- |

@@ -114,15 +114,35 @@
         justify-items: start;
     }
     .words {
-        position: relative;
-        z-index: 1;
         display: grid;
         justify-items: start;
     }
-    /* Above the portrait, which is positioned and would otherwise paint over the icons and buttons. */
-    .reach {
-        position: relative;
-        z-index: 1;
+    /*
+     * On paper the intro and the social icons run over the black sweater, where ink would vanish.
+     * Inverted and blended with difference, they come out as ink on paper and as paper on the
+     * sweater. Difference over a grey gives the same grey, so the sweater stays solid black under
+     * them and fades out below. Controls with a fill keep normal blending, since difference would see
+     * through it. Phones put the photo under the text instead, so only wider screens need this.
+     */
+    @media (min-width: 821px) {
+        :global(:root[data-theme='light']) .words,
+        :global(:root[data-theme='light']) .reach :global(.socials > ul) {
+            filter: invert(1);
+            mix-blend-mode: difference;
+        }
+        :global(:root[data-theme='light']) .portrait {
+            --fade-from: 75%;
+        }
+    }
+    @media (min-width: 821px) and (prefers-color-scheme: light) {
+        :global(:root:not([data-theme])) .words,
+        :global(:root:not([data-theme])) .reach :global(.socials > ul) {
+            filter: invert(1);
+            mix-blend-mode: difference;
+        }
+        :global(:root:not([data-theme])) .portrait {
+            --fade-from: 75%;
+        }
     }
     /*
      * The photo is rendered taller than the hero and clipped from the bottom, so the head stays just
@@ -147,16 +167,15 @@
         --fade-from: 30%;
         /* Spans the viewport rather than the grid column so the photo is placed in viewport terms. */
         position: absolute;
+        /* Under the text and buttons without lifting them into stacking contexts of their own, which
+           would cut them off from the photo they blend with on paper. */
+        z-index: -1;
         top: calc(var(--header-height) + 24px);
         bottom: 0;
         left: calc(50% - 50vw);
         width: 100vw;
         /* Clip the bottom only. */
         overflow: visible clip;
-        /* Fade out before the middle, where the text column starts, so the photo never sits under the
-           text: on paper the sweater would swallow the ink. A soft edge rather than a clip, so no seam
-           shows in the hair when a lobe passes. The face is centred at 40vw. */
-        mask-image: linear-gradient(to right, #000 calc(50% - 48px), transparent 50%);
         pointer-events: none;
     }
     .portrait img {
@@ -180,6 +199,10 @@
     /* Above the shader's canvas (z-index 5), below the header (20). */
     .portrait-top {
         z-index: 6;
+        /* The container spans the viewport; fade it out before the middle, where the text column
+           starts, so on tall screens the clean layer can never sit over the name. A soft edge rather
+           than a clip, so no seam shows in the hair when a lobe passes. The face is centred at 40vw. */
+        mask-image: linear-gradient(to right, #000 calc(50% - 48px), transparent 50%);
     }
     .portrait-top img {
         mask-image: var(--head);
@@ -205,8 +228,6 @@
         height: calc(100% * var(--zoom));
         aspect-ratio: 2105 / 3475;
         background: rgb(221 138 231);
-        /* On paper the field multiplies into the photo, so its stand-in does too. */
-        mix-blend-mode: var(--field-blend, normal);
         /* Without scroll timelines, the field publishes its dim for this; with them, the animation below runs. */
         opacity: calc(0.14 * var(--atmosphere-dim, 1));
         mask-image: var(--photo), var(--head);
@@ -331,7 +352,7 @@
 
     @media (max-width: 820px) {
         /* The portrait sits below the text here, full-bleed, so nothing needs clipping. */
-        .portrait {
+        .portrait-top {
             mask-image: none;
         }
         .hero {
