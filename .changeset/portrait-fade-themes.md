@@ -2,4 +2,4 @@
 '@mia-cx/mia.cx': patch
 ---
 
-The home portrait holds solid on the dark theme and starts fading just under the face on the light one.
+The home portrait fades at the same height on both themes, low enough to keep the intro readable over it.

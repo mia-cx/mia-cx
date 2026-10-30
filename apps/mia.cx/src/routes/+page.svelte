@@ -163,15 +163,6 @@
             mix-blend-mode: difference;
         }
     }
-    /* On paper the black sweater is stark, so it starts fading just under the face. */
-    :global(:root[data-theme='light']) .portrait {
-        --fade-from: 30cqh;
-    }
-    @media (prefers-color-scheme: light) {
-        :global(:root:not([data-theme])) .portrait {
-            --fade-from: 30cqh;
-        }
-    }
     /*
      * The photo is rendered taller than the hero and clipped from the bottom, so the head stays just
      * under the header and the framing lands around the shoulders. The portrait is a size container,
@@ -197,7 +188,7 @@
            down to --fade-from and gone at the bottom edge. */
         --feather-y: 28cqh;
         --feather-wide: 1.2;
-        --fade-from: 85cqh;
+        --fade-from: 75cqh;
         /* Spans the viewport rather than the grid column so the photo is placed in viewport terms. */
         position: absolute;
         /* Under the text and buttons without lifting them into stacking contexts of their own, which
