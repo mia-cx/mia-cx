@@ -1,5 +1,12 @@
 # @mia-cx/mia.cx
 
+## 0.2.1
+
+### Patch Changes
+
+- 6b22029: The home portrait fades at the same height on both themes, low enough to keep the intro readable over it.
+- 70bc64a: The home portrait feathers out in a soft ellipse instead of a straight fade.
+
 ## 0.2.0
 
 ### Minor Changes
