@@ -1,5 +1,11 @@
 # @mia-cx/mia.cx
 
+## 0.1.1
+
+### Patch Changes
+
+- 45a7677: The changelog reads as plain notes, without formatting markers.
+
 ## 0.1.0
 
 ### Minor Changes
