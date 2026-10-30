@@ -44,7 +44,7 @@ blends with on paper. `P` holds the field still. Touch and reduced motion keep t
 
 `ShaderCanvas` is fixed, full viewport, transparent, `pointer-events: none`, `z-index: 5`. Its
 presentation pass derives alpha from luminance, so dark parts of the field are transparent and only the
-bright lobes wash over the page; on light paper it multiplies in as ink instead. The renderer files are
+bright lobes wash over the page, in both themes. The renderer files are
 identical to `apps/shaderdemo`.
 
 The site touches the field in two ways only:
@@ -102,9 +102,8 @@ the footer, contact, the routes, and the layout tokens (`--header-height`, `--co
 
 Defined in `@mia-cx/ui/tokens.css`, one `light-dark()` value per token. The site follows the system
 preference until a visitor picks a theme with the header's toggle, which `app.html` restores before
-paint; `/og` is always dark. Light is the printed CV's Print theme: white paper, plum ink, and the field
-multiplied in like ink (`--field-blend`), so text stays black and the paper stays white between the
-lobes. On wider screens the hero's intro and social icons run over the black sweater, so in light they
+paint; `/og` is always dark. Light takes the printed CV's Print palette, white paper and plum ink, with
+the field still washing over the page as light. On wider screens the hero's intro and social icons run over the black sweater, so in light they
 invert and blend with `difference`: ink on paper, paper on the sweater. The sweater stays solid under
 them, since difference over its grey fade would match the grey.
 
