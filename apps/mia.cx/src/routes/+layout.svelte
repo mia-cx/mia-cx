@@ -58,6 +58,7 @@
 {#if !stills}
     <!-- /cv's sheets carry their own field, so the site's stays behind them there. -->
     <ShaderCanvas
+        class="field"
         dims={hasHero}
         opacity={hasHero || bare ? 1 : 0.5}
         layer={page.url.pathname === '/cv' ? 'back' : 'front'}
@@ -100,5 +101,16 @@
          */
         position: relative;
         min-height: 60svh;
+    }
+    /*
+     * Nearest to the mouse camera in app.css, at the depth the home page gives it (four steps), and
+     * grown past the edges by that much so the shift never shows one.
+     */
+    :global(canvas.field) {
+        --atmosphere-bleed: 28px;
+        transform: translate(
+            calc(var(--pan-step-x, 0px) * var(--field-depth, 0)),
+            calc(var(--pan-step-y, 0px) * var(--field-depth, 0))
+        );
     }
 </style>

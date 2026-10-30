@@ -34,6 +34,12 @@ menu. The portrait is cropped from the bottom with a soft mask fade. Its centre 
 keeps its place at every window size and zoom level. `--zoom` and `--drop` on `.portrait` set its scale
 and vertical offset. On phones the text comes first and the portrait goes full-bleed underneath.
 
+With a mouse the hero has depth: background, portrait, text, then the field nearest. The page puts the
+mouse position on the root, which eases it, and each layer shifts by its depth in steps of 7px by 4px
+(`app.css`): the background stays put, the portrait moves two steps, the text three, the field four.
+The text moves by relative offset, never a transform, which would cut it off from the sweater it
+blends with on paper. `P` holds the field still. Touch and reduced motion keep the hero still.
+
 ## The field
 
 `ShaderCanvas` is fixed, full viewport, transparent, `pointer-events: none`, `z-index: 5`. Its
@@ -51,7 +57,8 @@ The site touches the field in two ways only:
 The field sometimes covers the hero text. That is accepted: a glyph-mask imprint was tried and dropped.
 
 `prefers-reduced-motion` pauses the field, hidden tabs pause rendering, unmount destroys the renderer.
-`F` toggles the frame counter.
+`F` toggles the frame counter. `--atmosphere-bleed` grows the canvas past the viewport's edges, so the
+hero's camera can move it.
 
 ## First load
 
