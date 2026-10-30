@@ -149,7 +149,7 @@
      * sweater. Difference over a grey gives the same grey, so the sweater stays solid black under
      * them and fades out below. The text is centred in the hero and at most 384px tall on any
      * desktop, so the icons always end above half the photo's height plus 192px; the fade starts
-     * below that, at 85% when there is room.
+     * below that, at 85% when there is room, and never past 92%, so short windows keep a feather.
      * Controls with a fill keep normal blending, since difference would see through it. Phones put
      * the photo under the text instead, so only wider screens need this.
      */
@@ -160,7 +160,7 @@
             mix-blend-mode: difference;
         }
         :global(:root[data-theme='light']) .portrait {
-            --fade-from: max(85cqh, 50cqh + 200px);
+            --fade-from: min(max(85cqh, 50cqh + 200px), 92cqh);
         }
     }
     @media (min-width: 821px) and (prefers-color-scheme: light) {
@@ -170,7 +170,7 @@
             mix-blend-mode: difference;
         }
         :global(:root:not([data-theme])) .portrait {
-            --fade-from: max(85cqh, 50cqh + 200px);
+            --fade-from: min(max(85cqh, 50cqh + 200px), 92cqh);
         }
     }
     /*
