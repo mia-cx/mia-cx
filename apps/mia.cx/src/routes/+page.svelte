@@ -246,6 +246,7 @@
         mask-image: var(--photo), var(--head);
         mask-size: 100% 100%;
         mask-composite: intersect;
+        mix-blend-mode: var(--field-blend, normal);
         transition: opacity 600ms ease;
     }
     /*
