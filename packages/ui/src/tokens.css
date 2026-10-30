@@ -3,7 +3,7 @@
  * `light-dark(light, dark)`, so `color-scheme` picks the palette: the system preference, unless a site
  * sets `data-theme` on <html> to force one. Dark comes from the Chromatic Atmosphere field: near-black
  * plum base, bloom magenta, bokeh violet, warm off-white ink. Light is the printed CV's: white paper
- * and plum ink, with the field multiplied in like ink.
+ * and plum ink.
  * Another site can reuse the token names with its own values and every component follows.
  */
 :root {
@@ -30,27 +30,16 @@
     --pre: light-dark(rgb(0 0 0 / 5%), rgb(0 0 0 / 45%));
     --menu-shadow: light-dark(rgb(0 0 0 / 25%), rgb(0 0 0 / 90%));
 
-    /* The field: its flat stand-in without graphics, and how it composites over the page. */
+    /* The field's flat stand-in without graphics. */
     --atmosphere-fallback: light-dark(#fff, #3b2736);
-    --field-blend: normal;
 
     --font-sans: 'Archivo Variable', Archivo, system-ui, sans-serif;
     --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
     color-scheme: dark light;
 }
-/*
- * On paper the field is ink, not light: multiplied in, text stays black and the paper stays white
- * between the lobes. A blend mode is not a colour, so light-dark() can't pick it.
- */
 :root[data-theme='light'] {
-    --field-blend: multiply;
     color-scheme: light;
-}
-@media (prefers-color-scheme: light) {
-    :root:not([data-theme]) {
-        --field-blend: multiply;
-    }
 }
 :root[data-theme='dark'] {
     color-scheme: dark;
