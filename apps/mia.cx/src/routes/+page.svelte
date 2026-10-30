@@ -153,6 +153,10 @@
         width: 100vw;
         /* Clip the bottom only. */
         overflow: visible clip;
+        /* Fade out before the middle, where the text column starts, so the photo never sits under the
+           text: on paper the sweater would swallow the ink. A soft edge rather than a clip, so no seam
+           shows in the hair when a lobe passes. The face is centred at 40vw. */
+        mask-image: linear-gradient(to right, #000 calc(50% - 48px), transparent 50%);
         pointer-events: none;
     }
     .portrait img {
@@ -176,10 +180,6 @@
     /* Above the shader's canvas (z-index 5), below the header (20). */
     .portrait-top {
         z-index: 6;
-        /* The container spans the viewport; fade it out before the middle, where the text column
-           starts, so on tall screens the clean layer can never sit over the name. A soft edge rather
-           than a clip, so no seam shows in the hair when a lobe passes. The face is centred at 40vw. */
-        mask-image: linear-gradient(to right, #000 calc(50% - 48px), transparent 50%);
     }
     .portrait-top img {
         mask-image: var(--head);
@@ -205,6 +205,8 @@
         height: calc(100% * var(--zoom));
         aspect-ratio: 2105 / 3475;
         background: rgb(221 138 231);
+        /* On paper the field multiplies into the photo, so its stand-in does too. */
+        mix-blend-mode: var(--field-blend, normal);
         /* Without scroll timelines, the field publishes its dim for this; with them, the animation below runs. */
         opacity: calc(0.14 * var(--atmosphere-dim, 1));
         mask-image: var(--photo), var(--head);
@@ -329,7 +331,7 @@
 
     @media (max-width: 820px) {
         /* The portrait sits below the text here, full-bleed, so nothing needs clipping. */
-        .portrait-top {
+        .portrait {
             mask-image: none;
         }
         .hero {
