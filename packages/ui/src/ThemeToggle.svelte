@@ -28,6 +28,17 @@
         return () => media.removeEventListener('change', read);
     });
 
+    /*
+     * The browser chrome follows the chosen theme too. Each `theme-color` meta names its theme in
+     * `data-scheme`; an override shows only that theme's, and none restores the system's media queries.
+     */
+    $effect(() => {
+        for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"][data-scheme]')) {
+            const scheme = meta.dataset.scheme;
+            meta.media = override ? (scheme === override ? 'all' : 'not all') : `(prefers-color-scheme: ${scheme})`;
+        }
+    });
+
     function toggle() {
         override = nextIsSystem ? null : next;
         if (override) document.documentElement.dataset.theme = override;

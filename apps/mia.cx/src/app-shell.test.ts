@@ -10,10 +10,10 @@ describe('app shell', () => {
         expect(app).toContain('viewport-fit=cover');
         // Prettier may break the tag across lines, so match its attributes loosely.
         expect(app).toMatch(
-            /<meta\s+name="theme-color"\s+content="#221820"\s+media="\(prefers-color-scheme: dark\)"\s*\/>/,
+            /<meta\s+name="theme-color"\s+content="#221820"\s+media="\(prefers-color-scheme: dark\)"\s+data-scheme="dark"\s*\/>/,
         );
         expect(app).toMatch(
-            /<meta\s+name="theme-color"\s+content="#ffffff"\s+media="\(prefers-color-scheme: light\)"\s*\/>/,
+            /<meta\s+name="theme-color"\s+content="#ffffff"\s+media="\(prefers-color-scheme: light\)"\s+data-scheme="light"\s*\/>/,
         );
         expect(css).toContain("@import '@mia-cx/ui/tokens.css'");
         expect(tokens).toContain('--haze: light-dark(#fff, #221820)');
