@@ -11,7 +11,16 @@
     import { featuredWork } from '$lib/content/vault';
 
     const featured = featuredWork;
+
+    /** Where the mouse sits across the viewport, from -1 to 1 on each axis; the portrait drifts with it. */
+    let pan = $state({ x: 0, y: 0 });
+    function follow(event: PointerEvent) {
+        if (event.pointerType !== 'mouse') return;
+        pan = { x: (event.clientX / innerWidth) * 2 - 1, y: (event.clientY / innerHeight) * 2 - 1 };
+    }
 </script>
+
+<svelte:window onpointermove={follow} />
 
 <svelte:head>
     <title>{site.name} — {site.role}</title>
@@ -21,7 +30,7 @@
 </svelte:head>
 
 <main class="container">
-    <section data-section="hero" class="hero">
+    <section data-section="hero" class="hero" style:--pan-x={pan.x} style:--pan-y={pan.y}>
         <div class="identity">
             <div class="words">
                 <p class="lead" data-enter style:--enter="1">I'm</p>
@@ -238,6 +247,24 @@
         mask-size: 100% 100%;
         mask-composite: intersect;
         transition: opacity 600ms ease;
+    }
+    /*
+     * The portrait sits a little behind the text. Moving the mouse pans the camera, so the photo
+     * drifts with the pointer while the text, at the screen, holds still. Each layer of the photo
+     * moves inside its own clip, so the bottom crop stays on the fold. The text never moves: a
+     * transform on it would cut it off from the photo it blends with on paper.
+     */
+    @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+        .portrait img,
+        .haze {
+            transform: translate(calc(var(--pan-x, 0) * 14px), calc(var(--pan-y, 0) * 8px));
+            transition: transform 1200ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .haze {
+            transition:
+                transform 1200ms cubic-bezier(0.22, 1, 0.36, 1),
+                opacity 600ms ease;
+        }
     }
     /* Nothing below is washed until the field is up, or ever, without graphics. */
     :global(html:not(:has(canvas.ready))) .haze {
