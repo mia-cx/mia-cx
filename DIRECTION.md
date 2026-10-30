@@ -30,5 +30,8 @@ current when materially changing the published terms.
 Every page that isn't an Article prints Mia's CV; Articles print themselves, and index pages add an Appendix (terms in
 `CONTEXT.md`). The CV is two A4 pages in the site's own look, in two Themes: Colour on dark paper, Print on white with
 the field multiplied in like ink. `/cv` and `/cv.pdf` are the only Worker-rendered routes; role presets live in Workers
-KV. The print mechanism is the workspace package `@mia-cx/print`, kept free of CV specifics so Svartz can adopt it.
-The plan is the PRD in issue #86; a light theme for the whole site follows it, reusing the ink treatment.
+KV. The print mechanism is the workspace package `@mia-cx/print`, kept free of CV specifics so Svartz can adopt it. All
+of it shipped in 0.1.1 (PRD #86). `/cv.pdf` prints through Cloudflare Browser Rendering on the free plan's daily browser
+time, so each render is cached for the day. Safari prints Articles inside page margins, because it can't repeat padding
+across pages, and there the field stops at those margins. Next: a light theme for the whole site (#90), reusing the ink
+treatment.
