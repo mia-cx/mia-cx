@@ -325,14 +325,16 @@
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
 
 <style>
+    /* `--atmosphere-bleed` grows the canvas past every edge, for a site that moves it. */
     canvas {
+        --bleed: var(--atmosphere-bleed, 0px);
         position: fixed;
-        inset: 0;
+        inset: calc(-1 * var(--bleed));
         display: block;
-        width: 100%;
-        height: 100%;
-        width: 100lvw;
-        height: 100lvh;
+        width: calc(100% + 2 * var(--bleed));
+        height: calc(100% + 2 * var(--bleed));
+        width: calc(100lvw + 2 * var(--bleed));
+        height: calc(100lvh + 2 * var(--bleed));
         pointer-events: none;
         opacity: 0;
         background: transparent;

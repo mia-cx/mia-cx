@@ -12,15 +12,32 @@
 
     const featured = featuredWork;
 
-    /** Where the mouse sits across the viewport, from -1 to 1 on each axis; the portrait drifts with it. */
+    /** Where the mouse sits across the viewport, from -1 to 1 on each axis; the hero's layers drift with it. */
     let pan = $state({ x: 0, y: 0 });
+    /** Debug: `P` holds the field still, so only the photo and the text drift. */
+    let fieldDrifts = $state(true);
     function follow(event: PointerEvent) {
         if (event.pointerType !== 'mouse') return;
         pan = { x: (event.clientX / innerWidth) * 2 - 1, y: (event.clientY / innerHeight) * 2 - 1 };
     }
+    function toggleFieldDrift(event: KeyboardEvent) {
+        if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || event.key.toLowerCase() !== 'p') return;
+        if (event.target instanceof HTMLElement && event.target.closest('input, textarea, [contenteditable]')) return;
+        fieldDrifts = !fieldDrifts;
+    }
+
+    // The field lives in the layout, outside this page, so the camera sits on the root (see app.css).
+    const CAMERA = ['--pan-x', '--pan-y', '--field-depth'];
+    $effect(() => {
+        const root = document.documentElement.style;
+        root.setProperty('--pan-x', String(pan.x));
+        root.setProperty('--pan-y', String(pan.y));
+        root.setProperty('--field-depth', fieldDrifts ? '4' : '0');
+    });
+    $effect(() => () => CAMERA.forEach((property) => document.documentElement.style.removeProperty(property)));
 </script>
 
-<svelte:window onpointermove={follow} />
+<svelte:window onpointermove={follow} onkeydown={toggleFieldDrift} />
 
 <svelte:head>
     <title>{site.name} — {site.role}</title>
@@ -30,7 +47,7 @@
 </svelte:head>
 
 <main class="container">
-    <section data-section="hero" class="hero" style:--pan-x={pan.x} style:--pan-y={pan.y}>
+    <section data-section="hero" class="hero">
         <div class="identity">
             <div class="words">
                 <p class="lead" data-enter style:--enter="1">I'm</p>
@@ -250,22 +267,19 @@
         transition: opacity 600ms ease;
     }
     /*
-     * The portrait sits a little behind the text. Moving the mouse pans the camera, so the photo
-     * drifts with the pointer while the text, at the screen, holds still. Each layer of the photo
-     * moves inside its own clip, so the bottom crop stays on the fold. The text never moves: a
-     * transform on it would cut it off from the photo it blends with on paper.
+     * Depth for the mouse camera in app.css: the portrait two steps, the text three. Each layer of
+     * the photo moves inside its own clip, so the bottom crop stays on the fold. The text moves by
+     * relative offset rather than a transform, which would make a stacking context and cut it off
+     * from the photo it blends with on paper.
      */
-    @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-        .portrait img,
-        .haze {
-            transform: translate(calc(var(--pan-x, 0) * 14px), calc(var(--pan-y, 0) * 8px));
-            transition: transform 1200ms cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        .haze {
-            transition:
-                transform 1200ms cubic-bezier(0.22, 1, 0.36, 1),
-                opacity 600ms ease;
-        }
+    .portrait img,
+    .haze {
+        transform: translate(calc(var(--pan-step-x, 0px) * 2), calc(var(--pan-step-y, 0px) * 2));
+    }
+    .identity {
+        position: relative;
+        left: calc(var(--pan-step-x, 0px) * 3);
+        top: calc(var(--pan-step-y, 0px) * 3);
     }
     /* Nothing below is washed until the field is up, or ever, without graphics. */
     :global(html:not(:has(canvas.ready))) .haze {
