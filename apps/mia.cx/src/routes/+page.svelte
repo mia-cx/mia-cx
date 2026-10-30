@@ -146,21 +146,14 @@
     /*
      * On paper the intro and the social icons run over the black sweater, where ink would vanish.
      * Inverted and blended with difference, they come out as ink on paper and as paper on the
-     * sweater. Difference over a grey gives the same grey, so the sweater stays solid black under
-     * them and fades out below. The text is centred in the hero and at most 384px tall on any
-     * desktop, so the icons always end above half the photo's height plus 192px; the fade starts
-     * below that, at 85% when there is room, and never past 92%, so short windows keep a feather.
-     * Controls with a fill keep normal blending, since difference would see through it. Phones put
-     * the photo under the text instead, so only wider screens need this.
+     * sweater. Controls with a fill keep normal blending, since difference would see through it.
+     * Phones put the photo under the text instead, so only wider screens need this.
      */
     @media (min-width: 821px) {
         :global(:root[data-theme='light']) .words,
         :global(:root[data-theme='light']) .reach :global(.socials > ul) {
             filter: invert(1);
             mix-blend-mode: difference;
-        }
-        :global(:root[data-theme='light']) .portrait {
-            --fade-from: min(max(85cqh, 50cqh + 200px), 92cqh);
         }
     }
     @media (min-width: 821px) and (prefers-color-scheme: light) {
@@ -169,8 +162,14 @@
             filter: invert(1);
             mix-blend-mode: difference;
         }
+    }
+    /* On paper the black sweater is stark, so it starts fading just under the face. */
+    :global(:root[data-theme='light']) .portrait {
+        --fade-from: 30cqh;
+    }
+    @media (prefers-color-scheme: light) {
         :global(:root:not([data-theme])) .portrait {
-            --fade-from: min(max(85cqh, 50cqh + 200px), 92cqh);
+            --fade-from: 30cqh;
         }
     }
     /*
@@ -198,7 +197,7 @@
            down to --fade-from and gone at the bottom edge. */
         --feather-y: 28cqh;
         --feather-wide: 1.2;
-        --fade-from: 30cqh;
+        --fade-from: 85cqh;
         /* Spans the viewport rather than the grid column so the photo is placed in viewport terms. */
         position: absolute;
         /* Under the text and buttons without lifting them into stacking contexts of their own, which
