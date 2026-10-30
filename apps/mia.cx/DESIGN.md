@@ -30,7 +30,8 @@ Below each page, "View as Markdown" opens the twin and "Copy as Markdown" copies
 
 The hero fills the viewport. The portrait sits in the left half and the text in the right: "I'm", the
 name, the short bio with a Read more link to `/about`, pronouns, then the featured socials and a `+N`
-menu. The portrait is cropped from the bottom with a soft mask fade. Its centre is pinned to `40vw` so it
+menu. The portrait feathers out in an ellipse around the face, a little wider than tall, with a
+Gaussian falloff that ends at the hero's bottom edge. Its centre is pinned to `40vw` so it
 keeps its place at every window size and zoom level. `--zoom` and `--drop` on `.portrait` set its scale
 and vertical offset. On phones the text comes first and the portrait goes full-bleed underneath.
 
