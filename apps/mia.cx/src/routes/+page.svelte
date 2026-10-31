@@ -7,7 +7,7 @@
     import { ArrowLink, Socials } from '@mia-cx/ui';
     import Contact from '$lib/components/Contact.svelte';
     import CVButtons from '$lib/cv/CVButtons.svelte';
-    import { intro, otherSocials, primarySocials, site } from '$lib/content/site';
+    import { intro, otherSocials, primarySocials, site, summary } from '$lib/content/site';
     import { featuredWork } from '$lib/content/vault';
 
     const featured = featuredWork;
@@ -41,9 +41,9 @@
 
 <svelte:head>
     <title>{site.name} — {site.role}</title>
-    <meta name="description" content={site.description} />
+    <meta name="description" content={summary} />
     <meta property="og:title" content="{site.name} — {site.role}" />
-    <meta property="og:description" content={site.description} />
+    <meta property="og:description" content={summary} />
 </svelte:head>
 
 <main class="container">
