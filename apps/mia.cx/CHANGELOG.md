@@ -1,5 +1,11 @@
 # @mia-cx/mia.cx
 
+## 0.2.3
+
+### Patch Changes
+
+- ebbe9f3: /llms.txt carries the About page's bio and contact links, not only a list of pages.
+
 ## 0.2.2
 
 ### Patch Changes
