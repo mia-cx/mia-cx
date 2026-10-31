@@ -1,5 +1,11 @@
 # @mia-cx/mia.cx
 
+## 0.2.2
+
+### Patch Changes
+
+- 65e4161: The about page calls Wplace a pixel art MMO, not an MMORPG.
+
 ## 0.2.1
 
 ### Patch Changes
