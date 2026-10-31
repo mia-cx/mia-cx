@@ -3,13 +3,13 @@
     import '$lib/styles/prose.css';
     import Contact from '$lib/components/Contact.svelte';
     import PageMarkdown from '$lib/components/PageMarkdown.svelte';
-    import { about, biography, site } from '$lib/content/site';
+    import { biography, site, summary } from '$lib/content/site';
 </script>
 
 <svelte:head>
     <title>About — {site.domain}</title>
     <meta property="og:title" content="About — {site.domain}" />
-    <meta name="description" content={about[0]} />
+    <meta name="description" content={summary} />
 </svelte:head>
 
 <main class="container">
