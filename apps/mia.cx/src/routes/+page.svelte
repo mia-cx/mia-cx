@@ -102,8 +102,8 @@
             {#each featured as item (item.slug)}
                 <li>
                     <a
-                        href={item.markdown ? `/work/${item.slug}` : (item.live ?? item.source)}
-                        rel={item.markdown ? undefined : 'external'}
+                        href={item.hasPage ? `/work/${item.slug}` : (item.live ?? item.source)}
+                        rel={item.hasPage ? undefined : 'external'}
                     >
                         <span class="title">{item.title}</span>
                         <span class="note">{item.summary}</span>

@@ -19,7 +19,8 @@
     font-stretch: 86%;
     scroll-margin-top: 24px;
 }
-.prose h4 {
+.prose h4,
+.prose h5 {
     margin: 24px 0 8px;
     font-size: 18px;
     font-weight: 580;

@@ -57,20 +57,37 @@ test('work links through to a project page', async ({ page }) => {
     await page.getByRole('link', { name: /Vesta/ }).first().click();
     await expect(page).toHaveURL(/\/work\/vesta$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Vesta');
+    await expect(page.locator('main .prose p').first()).toBeVisible();
 });
 
-test('blog is a coming-soon page linking to Svartz', async ({ page }) => {
+test('a project keeps its URL and its filename as its title', async ({ page }) => {
+    await page.goto('/work/hypertrance-eu');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('hypertrance.eu');
+});
+
+test('blog lists posts newest first, linking out to those hosted elsewhere', async ({ page }) => {
     await page.goto('/blog');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Blog');
-    await expect(page.getByText('Coming soon')).toBeVisible();
-    await expect(page.locator('main').getByRole('link', { name: 'Svartz' })).toHaveAttribute(
+    const posts = page.locator('main ul a');
+    await expect(posts).toHaveCount(6);
+    await expect(posts.first()).toHaveAttribute('href', /linkedin\.com/);
+    await expect(page.getByRole('link', { name: /My Approach to Mastering/ })).toHaveAttribute(
         'href',
-        'https://github.com/mia-cx/svartz',
+        '/blog/my-approach-to-mastering',
     );
 });
 
-test('posts have no pages while the blog is off', async ({ page }) => {
-    const response = await page.goto('/blog/crunch-time');
+test('a post renders its body from the vault', async ({ page }) => {
+    await page.goto('/blog/my-approach-to-mastering');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('My Approach to Mastering');
+    await expect(page.getByText('8 September 2023')).toBeVisible();
+    await page.locator('main .prose').getByRole('link', { name: 'Stereo Imaging', exact: true }).first().click();
+    await expect(page).toHaveURL(/#stereo-imaging$/);
+    await expect(page.locator('#stereo-imaging')).toBeInViewport();
+});
+
+test('a post hosted elsewhere has no page', async ({ page }) => {
+    const response = await page.goto('/blog/the-quiet-cost-of-carelessness');
     expect(response?.status()).toBe(404);
 });
 

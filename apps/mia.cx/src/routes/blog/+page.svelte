@@ -1,46 +1,33 @@
 <script lang="ts">
-    import { ArrowLink } from '@mia-cx/ui';
     import { formatDate, posts } from '$lib/content/vault';
-    import { SECTIONS } from '$lib/content/sections';
-    import { SVARTZ_REPO, site } from '$lib/content/site';
+    import { site } from '$lib/content/site';
 </script>
 
 <svelte:head>
     <title>Blog — {site.domain}</title>
     <meta property="og:title" content="Blog — {site.domain}" />
-    <meta
-        name="description"
-        content={SECTIONS.blog.published ? `Writing by ${site.name}.` : `Writing by ${site.name}. Coming soon.`}
-    />
+    <meta name="description" content="Writing by {site.name}." />
 </svelte:head>
 
 <main class="container">
     <h1>Blog</h1>
 
-    {#if SECTIONS.blog.published}
-        <ul>
-            {#each posts as post (post.slug)}
-                <li>
-                    <a href={post.external ?? `/blog/${post.slug}`} rel={post.external ? 'external' : undefined}>
-                        <span class="title"
-                            >{post.title}{#if post.external}<span class="away"> ↗</span>{/if}</span
-                        >
-                        <span class="summary">{post.summary}</span>
-                        <span class="meta mono">
-                            <time datetime={post.date}>{formatDate(post.date)}</time>
-                            {#if post.external}<span>{new URL(post.external).hostname.replace('www.', '')}</span>{/if}
-                        </span>
-                    </a>
-                </li>
-            {/each}
-        </ul>
-    {:else}
-        <p class="soon">
-            Coming soon, once
-            <ArrowLink class="svartz" href={SVARTZ_REPO}>Svartz</ArrowLink>
-            is ready to publish it.
-        </p>
-    {/if}
+    <ul>
+        {#each posts as post (post.slug)}
+            <li>
+                <a href={post.external ?? `/blog/${post.slug}`} rel={post.external ? 'external' : undefined}>
+                    <span class="title"
+                        >{post.title}{#if post.external}<span class="away"> ↗</span>{/if}</span
+                    >
+                    <span class="summary">{post.summary}</span>
+                    <span class="meta mono">
+                        <time datetime={post.date}>{formatDate(post.date)}</time>
+                        {#if post.external}<span>{new URL(post.external).hostname.replace('www.', '')}</span>{/if}
+                    </span>
+                </a>
+            </li>
+        {/each}
+    </ul>
 </main>
 
 <style>
@@ -55,14 +42,6 @@
         font-stretch: 72%;
         line-height: 0.9;
         letter-spacing: -0.025em;
-    }
-    .soon {
-        max-width: 46ch;
-        font-size: clamp(17px, 1.5vw, 20px);
-        line-height: 1.55;
-    }
-    .soon :global(.svartz) {
-        font-weight: 600;
     }
     ul {
         display: grid;

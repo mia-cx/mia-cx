@@ -7,3 +7,4 @@ pnpm-lock.yaml
 .wrangler
 # Written by Changesets on release.
 CHANGELOG.md
+.svartz

@@ -9,6 +9,7 @@
         },
         "@mia-cx/mia.cx#build": {
             "dependsOn": ["^build"],
+            "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/vaults/**"],
             "outputs": [".svelte-kit/cloudflare/**"]
         },
         "deploy": {
