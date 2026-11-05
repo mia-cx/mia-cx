@@ -70,7 +70,9 @@ test('blog lists posts newest first, linking out to those hosted elsewhere', asy
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Blog');
     const posts = page.locator('main ul a');
     await expect(posts).toHaveCount(6);
-    await expect(posts.first()).toHaveAttribute('href', /linkedin\.com/);
+    const external = new URL((await posts.first().getAttribute('href')) ?? '');
+    expect(external.protocol).toBe('https:');
+    expect(external.hostname).toBe('www.linkedin.com');
     await expect(page.getByRole('link', { name: /My Approach to Mastering/ })).toHaveAttribute(
         'href',
         '/blog/my-approach-to-mastering',

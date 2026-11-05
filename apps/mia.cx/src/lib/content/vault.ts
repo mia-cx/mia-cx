@@ -193,9 +193,10 @@ export const formatDate = (iso: string, month: 'short' | 'long' = 'short') =>
 
 /** GitHub's heading ids, which Svartz uses for `[[Note#Heading]]` links: "Slope & Tilt" is `slope--tilt`. */
 function headingId(text: string) {
+    // Strip tags to a fixed point before normalising the heading id.
+    while (/<[^>]*>/.test(text)) text = text.replace(/<[^>]*>/g, '');
     return text
         .toLowerCase()
-        .replace(/<[^>]*>/g, '')
         .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '')
         .replace(/ /g, '-');
 }
