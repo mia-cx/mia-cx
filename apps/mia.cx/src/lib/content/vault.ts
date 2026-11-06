@@ -101,6 +101,9 @@ function toEntry(section: SectionId, entry: IndexEntry): VaultEntry {
     if (!entry.description) throw new Error(`${where} has no \`description\``);
     const createdAt = isoDay(entry.createdAt);
     if (section === 'blog' && !createdAt) throw new Error(`${where} has no valid \`created_at\` date`);
+    // A post with neither a body nor an outside link would list a dead entry.
+    if (section === 'blog' && !hasBody && !entry.properties.external)
+        throw new Error(`${where} has no body and no \`external\` link`);
     return {
         slug: entry.slug,
         title: entry.title,
