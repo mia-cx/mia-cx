@@ -290,11 +290,11 @@ importers:
         specifier: ^1.63.0
         version: 1.63.0
       '@svartz/config':
-        specifier: ^2.2.0
-        version: 2.2.0(@types/node@26.6.2)
+        specifier: ^2.3.0
+        version: 2.3.0(@types/node@26.6.2)
       '@svartz/vite':
-        specifier: ^2.2.0
-        version: 2.2.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: ^2.3.0
+        version: 2.3.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       '@sveltejs/adapter-cloudflare':
         specifier: ^7.2.9
         version: 7.2.9(@sveltejs/kit@2.70.3(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(svelte@5.57.1(@typescript-eslint/types@8.70.1))(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(wrangler@4.138.0(@types/node@26.6.2))
@@ -335,8 +335,8 @@ importers:
         specifier: ^4.1.1
         version: 4.1.1(prettier@3.9.9)(svelte@5.57.1(@typescript-eslint/types@8.70.1))
       svartz:
-        specifier: ^2.2.0
-        version: 2.2.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(@types/node@26.6.2)(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))(tailwindcss@4.3.4)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+        specifier: ^2.3.0
+        version: 2.3.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(@types/node@26.6.2)(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))(tailwindcss@4.3.4)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       svelte:
         specifier: 5.57.1
         version: 5.57.1(@typescript-eslint/types@8.70.1)
@@ -2894,32 +2894,32 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@svartz/config@2.2.0':
-    resolution: {integrity: sha512-NfiAdFge7XNlipVlsEeWJbpPEJ7qP4WBCTMlo6Q3OdyvYTE2vCrmqSlJvKpVtfglKdn3J6r3uIbaxgjXrqJkeA==}
+  '@svartz/config@2.3.0':
+    resolution: {integrity: sha512-ADAnN3bqrYLVZYUXpFGotr9S1ypI8lAGfSlQVtnOU7fsm1qyXzFHwhY1ku9EcVLNUropKbMvz6AEtNXSv5wEHg==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@svartz/core@2.2.0':
-    resolution: {integrity: sha512-urNfII48F5HqLbSvQi7kruYc6uWoVBXERV3R5CxbRo1ULCrNXkeYX4Oh/sY8gJsB+9cO3UBHcsgjmEu6XekYgg==}
+  '@svartz/core@2.3.0':
+    resolution: {integrity: sha512-Zc81BSHiy20pbp5nIcpM4mPiNXD2YmbKLgrxaaBU6osq3qAB5b4APjEnlAgkYUdARc6vxcvg1iKmaPr11YYoGw==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@svartz/plugins@2.2.0':
-    resolution: {integrity: sha512-e/CFXN5eTHON931fGAhgkabLJ01PgoVxYAm9eMULXnpskYw4DYTJIszDwf2Q0L246WrwR1F3X9r92CMuUjso1A==}
+  '@svartz/plugins@2.3.0':
+    resolution: {integrity: sha512-5niAT8uK2Pr79UezxrqGNepc7gWbxqYNAHApKq7UMydK+EvMYnXQv8LGFSFxCH+IOyYot1jX1OfXM5Of06/32w==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@svartz/theme-minimal@2.2.0':
-    resolution: {integrity: sha512-VEGYgXyzjp3rC95XhtO0ySIZ2d1cUpqBsPKfMETJtg0Ir8GpbyEFktsjNtA7gAyU6p55nxQHKxWMuWnpLdQrXg==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    peerDependencies:
-      svelte: ^5.0.0
-
-  '@svartz/ui@2.2.0':
-    resolution: {integrity: sha512-JaCHpA+rkOxOblX4dsLdixlQhVQ9fd+gLgB81tp1qpS3PGYSW69yBwLbNFc0qQT3E0iEkb+VtOw95ntZYQtXPQ==}
+  '@svartz/theme-minimal@2.3.0':
+    resolution: {integrity: sha512-9nAODSypw3VZzL31odTVQ+nrbI55D/t0dX74+LCaRtvViQFGmX9A2iD1J4QsjiuQdOsbYzBx8uAsIFmcJHHFEQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     peerDependencies:
       svelte: ^5.0.0
 
-  '@svartz/vite@2.2.0':
-    resolution: {integrity: sha512-OYlzdL57XLcAgEXQqij5HNZgxwVWpzimFctp5re+R+TmpVEzSC2MsEIK3fw3YoA2leJea3wIw2jmYBoiEmirQw==}
+  '@svartz/ui@2.3.0':
+    resolution: {integrity: sha512-RpgUX0A2sufBmgq0pHLs3DsmaNAXkudsJTFtMEtoPRdzVsMLRCA9Lx5iD43dqJplevAzVwH9yHNgo8N9jSISxQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      svelte: ^5.0.0
+
+  '@svartz/vite@2.3.0':
+    resolution: {integrity: sha512-7FzwbkDLp1eCYRsQwUgyJjigw+mJYz2aMd3MEhRkiYpOiqwZWjXs005IkzKENN8RFZzTa7TBJ4nCmy6AKXZVMg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     peerDependencies:
       '@sveltejs/vite-plugin-svelte': ^6.2.4 || ^7.0.0
@@ -6431,8 +6431,8 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
-  svartz@2.2.0:
-    resolution: {integrity: sha512-HaBM8sOSsO1HaXl3V6oXzXnXvp8x7eqvWtXXEHnRJTRS7oGdOP+bzYQKrB+4o2d3Pf8TUZwru99qkDMZSaFgtQ==}
+  svartz@2.3.0:
+    resolution: {integrity: sha512-Pxc7sRXUOeKpvaUgYUWZBKVo6pwXcQMPp/p7QNHzI5uWzH3FySAsQFJUrjtJs7iIAjvd+sEyNAPqgylUK2WJCA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
@@ -8819,9 +8819,9 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@svartz/config@2.2.0(@types/node@26.6.2)':
+  '@svartz/config@2.3.0(@types/node@26.6.2)':
     dependencies:
-      '@svartz/core': 2.2.0
+      '@svartz/core': 2.3.0
       effect: 3.22.4
       jiti: 2.7.0
       semver: 7.8.5
@@ -8832,15 +8832,15 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@svartz/core@2.2.0':
+  '@svartz/core@2.3.0':
     dependencies:
       effect: 3.22.4
       unified: 11.0.5
 
-  '@svartz/plugins@2.2.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))':
+  '@svartz/plugins@2.3.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))':
     dependencies:
       '@humanwhocodes/ico-to-png': 1.1.0
-      '@svartz/core': 2.2.0
+      '@svartz/core': 2.3.0
       effect: 3.22.4
       github-slugger: 2.0.0
       gray-matter: 4.0.3
@@ -8879,11 +8879,11 @@ snapshots:
       - supports-color
       - svelte
 
-  '@svartz/theme-minimal@2.2.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))':
+  '@svartz/theme-minimal@2.3.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))':
     dependencies:
       '@lucide/svelte': 1.67.0(svelte@5.57.1(@typescript-eslint/types@8.70.1))
-      '@svartz/core': 2.2.0
-      '@svartz/ui': 2.2.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))
+      '@svartz/core': 2.3.0
+      '@svartz/ui': 2.3.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))
       d3-force: 3.0.0
       d3-selection: 3.0.0
       d3-zoom: 3.0.0
@@ -8895,15 +8895,15 @@ snapshots:
       - react
       - supports-color
 
-  '@svartz/ui@2.2.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))':
+  '@svartz/ui@2.3.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))':
     dependencies:
       '@floating-ui/dom': 1.7.4
       '@fontsource-variable/archivo': 5.3.0
       '@fontsource/monaspace-argon': 5.3.0
       '@lucide/svelte': 1.67.0(svelte@5.57.1(@typescript-eslint/types@8.70.1))
       '@nanostores/persistent': 1.3.5(nanostores@1.5.3)
-      '@svartz/core': 2.2.0
-      '@svartz/plugins': 2.2.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))
+      '@svartz/core': 2.3.0
+      '@svartz/plugins': 2.3.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))
       '@types/d3': 7.4.3
       d3: 7.9.0
       minisearch: 7.2.0
@@ -8917,11 +8917,11 @@ snapshots:
       - react
       - supports-color
 
-  '@svartz/vite@2.2.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))':
+  '@svartz/vite@2.3.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
-      '@svartz/core': 2.2.0
-      '@svartz/plugins': 2.2.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))
-      '@svartz/theme-minimal': 2.2.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))
+      '@svartz/core': 2.3.0
+      '@svartz/plugins': 2.3.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))
+      '@svartz/theme-minimal': 2.3.0(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))
       '@sveltejs/vite-plugin-svelte': 7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/vite': 4.3.4(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       effect: 3.22.4
@@ -13142,10 +13142,10 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
-  svartz@2.2.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(@types/node@26.6.2)(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))(tailwindcss@4.3.4)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
+  svartz@2.3.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(@types/node@26.6.2)(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))(tailwindcss@4.3.4)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:
-      '@svartz/config': 2.2.0(@types/node@26.6.2)
-      '@svartz/vite': 2.2.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      '@svartz/config': 2.3.0(@types/node@26.6.2)
+      '@svartz/vite': 2.3.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(preact-render-to-string@6.6.2)(svelte@5.57.1(@typescript-eslint/types@8.70.1))(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.93.2)(sass@1.93.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/forms': 0.5.11(tailwindcss@4.3.4)
       '@tailwindcss/typography': 0.5.20(tailwindcss@4.3.4)
       chokidar: 5.0.0
