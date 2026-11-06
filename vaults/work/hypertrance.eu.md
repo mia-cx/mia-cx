@@ -1,4 +1,5 @@
 ---
+slug: hypertrance-eu
 tags:
   - work/code
 listed: true

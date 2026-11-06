@@ -1,4 +1,5 @@
 ---
+slug: nuphory-com
 tags:
   - work/code
 listed: true

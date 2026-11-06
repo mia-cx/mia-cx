@@ -12,6 +12,13 @@ Releases follow Caelestis: GitHub Actions deploys every push to `main` to `https
 Changesets release pull request deploys to production. Visitor-facing changes carry a `@mia-cx/mia.cx` changeset. CI
 uses the organisation's Cloudflare account variable and token rather than Cloudflare's own Git builds.
 
+## Content
+
+Work and posts live in two Obsidian vaults, `vaults/work` and `vaults/blog`, mounted at `/work` and `/blog` by
+`apps/mia.cx/svartz.config.ts`. Svartz indexes them and hands over each body as Markdown; the site renders and styles
+everything itself, and its pages and layout stay in `apps/mia.cx`. Fix gaps in what Svartz publishes in `mia-cx/svartz`
+rather than working around them here where you can.
+
 ## Textile policies
 
 Host Textile's public terms at `/textile/terms` and privacy policy at `/textile/privacy`. Keep both reachable from the

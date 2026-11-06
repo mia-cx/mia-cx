@@ -1,4 +1,5 @@
 /// <reference types="unplugin-icons/types/svelte" />
+/// <reference types="@svartz/vite/virtual-modules" />
 // See https://kit.svelte.dev/docs/types#app
 // for information about these interfaces
 declare global {

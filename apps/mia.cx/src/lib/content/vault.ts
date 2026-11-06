@@ -1,34 +1,31 @@
 /**
- * The site's view of the vault. `vault.generated.ts` is produced by scripts/generate-content.ts;
- * everything Obsidian-specific has already been resolved by the time it gets here.
+ * The site's view of the vaults, read from the index Svartz publishes for each mount
+ * (svartz.config.ts). Svartz resolves everything Obsidian-specific and hands over each body as
+ * plain Markdown; this module adds what mia.cx needs on top (cards, kinds, outside links,
+ * mentions) and renders the Markdown with the site's own renderer.
  */
 import { marked } from 'marked';
-import { slugifyHeading, type SectionId } from './sections';
-import { index as generatedIndex } from './vault.generated';
+import { vaults } from 'virtual:svartz/host';
+
+/** A vault in svartz.config.ts, by id, and the section of the site it fills. */
+export type SectionId = 'work' | 'blog';
 
 export type Kind = 'code' | 'audio' | 'visual';
 const KINDS: readonly string[] = ['code', 'audio', 'visual'];
 
-/**
- * One published note in a mia.cx section. The first block borrows the names of Svartz's `IndexEntry`
- * (packages/core/src/types.ts) but not its types: dates are ISO strings, links are slugs, and
- * `content` is renderable Markdown. When Svartz becomes a dependency, the generator turns its index
- * into this one; the rest is what mia.cx adds.
- */
+type IndexEntry = (typeof vaults)[number]['artifacts']['index']['entries'][number];
+
+/** One published note in a mia.cx section. */
 export interface VaultEntry {
     /** Svartz's canonical slug: the vault-relative path, normalised. */
     slug: string;
-    path: string;
     title: string;
     tags: string[];
-    aliases: string[];
     description: string;
-    /** The note's own properties, minus those promoted to fields above. */
-    frontmatter: Record<string, unknown>;
-    /** Markdown with wikilinks and embeds already turned into site links. */
-    content: string;
-    /** Canonical slugs of the section notes this one links to. */
-    links: string[];
+    /** The note's published properties. */
+    properties: Record<string, unknown>;
+    /** The body as Markdown, links resolved by Svartz. Empty for a bare entry with no page of its own. */
+    markdown: string;
     createdAt?: string;
     modifiedAt?: string;
 
@@ -39,14 +36,6 @@ export interface VaultEntry {
     href?: string;
     kinds: string[];
 }
-
-export interface VaultIndex {
-    entries: VaultEntry[];
-    /** Canonical slug → the canonical slugs of the notes linking to it. */
-    backlinks: Record<string, string[]>;
-}
-
-export const index: VaultIndex = generatedIndex;
 
 export interface Post {
     slug: string;
@@ -60,7 +49,6 @@ export interface Post {
     external?: string;
     /** Where a vendored copy came from. */
     source?: string;
-    markdown: string;
     entry: VaultEntry;
 }
 
@@ -74,8 +62,8 @@ export interface WorkNote {
     stack: string[];
     live?: string;
     source?: string;
-    /** Empty when the note is a bare entry with no write-up, so it gets no page of its own. */
-    markdown: string;
+    /** Whether the note has a write-up; a bare entry gets no page of its own. */
+    hasPage: boolean;
     /** Shown on the home page. */
     featured: boolean;
     /** Shown on /work; everything else stays in the vault. */
@@ -86,6 +74,54 @@ export interface WorkNote {
 
 const text = (value: unknown) => (value === undefined || value === null || value === '' ? undefined : String(value));
 const list = (value: unknown) => (Array.isArray(value) ? value.map(String) : value ? [String(value)] : []);
+/** Dates are calendar days at UTC midnight. */
+const isoDay = (date: Date | undefined) => date?.toISOString().slice(0, 10);
+
+function sectionVault(section: SectionId) {
+    const vault = vaults.find((candidate) => candidate.id === section);
+    if (!vault) throw new Error(`svartz.config.ts has no "${section}" vault`);
+    return vault;
+}
+
+/** Where a note lives on the site, or nowhere when it has no page of its own. */
+function hrefOf(section: SectionId, name: string, entry: IndexEntry, hasBody: boolean): string | undefined {
+    const { properties } = entry;
+    if (section === 'blog' && properties.external) return String(properties.external);
+    // A work entry with no write-up is a card that links straight out.
+    if (!hasBody) return text(properties.live) ?? text(properties.source);
+    return `/${section}/${name}`;
+}
+
+function toEntry(section: SectionId, entry: IndexEntry): VaultEntry {
+    // Svartz's href is `/<mount>/<name>/`; mia.cx serves the same page without the trailing slash.
+    const name = entry.href.replace(/\/+$/, '').split('/').pop()!;
+    const markdown = entry.markdown?.trim() ?? '';
+    const hasBody = markdown !== '';
+    const where = `${section}/${entry.path}`;
+    if (!entry.description) throw new Error(`${where} has no \`description\``);
+    const createdAt = isoDay(entry.createdAt);
+    if (section === 'blog' && !createdAt) throw new Error(`${where} has no valid \`created_at\` date`);
+    // A post with neither a body nor an outside link would list a dead entry.
+    if (section === 'blog' && !hasBody && !entry.properties.external)
+        throw new Error(`${where} has no body and no \`external\` link`);
+    return {
+        slug: entry.slug,
+        title: entry.title,
+        tags: [...entry.tags],
+        description: entry.description,
+        properties: entry.properties,
+        markdown,
+        createdAt,
+        modifiedAt: isoDay(entry.modifiedAt),
+        section,
+        name,
+        href: hrefOf(section, name, entry, hasBody),
+        kinds: entry.tags.filter((tag) => tag.startsWith('work/')).map((tag) => tag.slice('work/'.length)),
+    };
+}
+
+const entriesOf = (section: SectionId) =>
+    sectionVault(section).artifacts.index.entries.map((entry) => toEntry(section, entry));
 
 const toPost = (entry: VaultEntry): Post => ({
     slug: entry.name,
@@ -93,9 +129,8 @@ const toPost = (entry: VaultEntry): Post => ({
     summary: entry.description,
     date: entry.createdAt ?? '',
     updated: entry.modifiedAt && entry.modifiedAt !== entry.createdAt ? entry.modifiedAt : undefined,
-    external: text(entry.frontmatter.external),
-    source: text(entry.frontmatter.source),
-    markdown: entry.frontmatter.external ? '' : entry.content,
+    external: text(entry.properties.external),
+    source: text(entry.properties.source),
     entry,
 });
 
@@ -104,25 +139,23 @@ const toWork = (entry: VaultEntry): WorkNote => ({
     title: entry.title,
     summary: entry.description,
     kinds: entry.kinds.filter((kind): kind is Kind => KINDS.includes(kind)),
-    status: text(entry.frontmatter.status),
+    status: text(entry.properties.status),
     // The year on the card falls back to the note's date, so it need not be typed twice.
-    year: text(entry.frontmatter.year) ?? entry.createdAt?.slice(0, 4),
-    stack: list(entry.frontmatter.stack),
-    live: text(entry.frontmatter.live),
-    source: text(entry.frontmatter.source),
-    markdown: entry.content,
-    featured: entry.frontmatter.featured === true,
-    listed: entry.frontmatter.listed === true,
+    year: text(entry.properties.year) ?? entry.createdAt?.slice(0, 4),
+    stack: list(entry.properties.stack),
+    live: text(entry.properties.live),
+    source: text(entry.properties.source),
+    hasPage: entry.markdown !== '',
+    featured: entry.properties.featured === true,
+    listed: entry.properties.listed === true,
     date: entry.createdAt ?? '',
     entry,
 });
 
-const inSection = (section: SectionId) => index.entries.filter((entry) => entry.section === section);
-
-export const posts: Post[] = inSection('blog')
+export const posts: Post[] = entriesOf('blog')
     .map(toPost)
     .sort((a, b) => b.date.localeCompare(a.date));
-export const work: WorkNote[] = inSection('work')
+export const work: WorkNote[] = entriesOf('work')
     .map(toWork)
     .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
 
@@ -130,16 +163,21 @@ export const postBySlug = (slug: string) => posts.find((post) => post.slug === s
 export const workBySlug = (slug: string) => work.find((note) => note.slug === slug);
 
 /** Only notes with a body get a page; the rest are cards that link straight out. */
-export const workWithPages = work.filter((note) => note.markdown !== '');
+export const workWithPages = work.filter((note) => note.hasPage);
 export const featuredWork = work.filter((note) => note.featured);
 export const listedWork = work.filter((note) => note.listed);
 
-const bySlug = new Map(index.entries.map((entry) => [entry.slug, entry]));
+const bySlug = new Map(
+    [...work.map((note) => note.entry), ...posts.map((post) => post.entry)].map((entry) => [
+        `${entry.section}:${entry.slug}`,
+        entry,
+    ]),
+);
 
-/** Notes on the site that link to this one, for a "Mentioned in" list. */
+/** Notes on the site that link to this one, for a "Mentioned in" list. Svartz links within one vault. */
 export const mentionsOf = (entry: VaultEntry) =>
-    (index.backlinks[entry.slug] ?? [])
-        .map((slug) => bySlug.get(slug))
+    (sectionVault(entry.section).artifacts.index.backlinks[entry.slug] ?? [])
+        .map((slug) => bySlug.get(`${entry.section}:${slug}`))
         .filter((linking): linking is VaultEntry & { href: string } => !!linking?.href);
 
 export const kindLabels: Record<Kind | 'all', string> = {
@@ -152,33 +190,34 @@ export const kindLabels: Record<Kind | 'all', string> = {
 export const countByKind = (kind: Kind | 'all') =>
     kind === 'all' ? work.length : work.filter((note) => note.kinds.includes(kind)).length;
 
-/** A fragment that is already a heading id stays as it is, so `foo---bar` for "Foo - Bar" survives. */
-const anchor = (fragment: string) =>
-    slugifyHeading(fragment) === fragment ? fragment : slugifyHeading(fragment.replace(/-/g, ' '));
-
-/** Mixed-case in-page anchors, and a couple that lost their leading '#', still need to resolve. */
-function normaliseAnchors(markdown: string): string {
-    return markdown
-        .replace(/\]\(#([^)]+)\)/g, (_, fragment: string) => `](#${anchor(fragment)})`)
-        .replace(/\]\((?!https?:|\/|#|mailto:)([\w-]+)\)/g, (_, fragment: string) => `](#${anchor(fragment)})`);
-}
-
-export function render(markdown: string): string {
-    const renderer = new marked.Renderer();
-    const seen = new Map<string, number>();
-    renderer.heading = ({ text: plain, tokens, depth }) => {
-        const text = renderer.parser.parseInline(tokens);
-        const base = slugifyHeading(plain);
-        const count = seen.get(base) ?? 0;
-        seen.set(base, count + 1);
-        const id = count === 0 ? base : `${base}-${count}`;
-        // The page renders its own H1, so everything in the body starts a level down.
-        const level = Math.min(depth + 1, 6);
-        return `<h${level} id="${id}">${text}</h${level}>`;
-    };
-    return marked.parse(normaliseAnchors(markdown), { renderer, async: false, gfm: true }) as string;
-}
-
 /** Dates are calendar days, read as UTC midnight, so they are formatted in UTC to stay on that day. */
 export const formatDate = (iso: string, month: 'short' | 'long' = 'short') =>
     new Date(iso).toLocaleDateString('en-GB', { year: 'numeric', month, day: 'numeric', timeZone: 'UTC' });
+
+/** GitHub's heading ids, which Svartz uses for `[[Note#Heading]]` links: "Slope & Tilt" is `slope--tilt`. */
+function headingId(text: string) {
+    // Strip tags to a fixed point before normalising the heading id.
+    while (/<[^>]*>/.test(text)) text = text.replace(/<[^>]*>/g, '');
+    return text
+        .toLowerCase()
+        .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '')
+        .replace(/ /g, '-');
+}
+
+/** Svartz links to canonical URLs, `/work/vesta/`; the site serves them without the trailing slash. */
+const sitePath = (href: string) => href.replace(/^(\/[^?#]*?)\/+(?=[?#]|$)/, '$1');
+
+export function render(markdown: string): string {
+    const renderer = new marked.Renderer();
+    const link = renderer.link.bind(renderer);
+    const seen = new Map<string, number>();
+    renderer.heading = ({ text: plain, tokens, depth }) => {
+        const base = headingId(plain);
+        const count = seen.get(base) ?? 0;
+        seen.set(base, count + 1);
+        const id = count === 0 ? base : `${base}-${count}`;
+        return `<h${depth} id="${id}">${renderer.parser.parseInline(tokens)}</h${depth}>`;
+    };
+    renderer.link = (token) => link({ ...token, href: sitePath(token.href) });
+    return marked.parse(markdown, { renderer, async: false, gfm: true }) as string;
+}

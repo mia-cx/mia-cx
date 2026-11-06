@@ -17,7 +17,7 @@ export const site = {
 };
 
 /** TODO(mia): paste your server invite here and the Discord icon appears in the header row. */
-/** Where the vault-to-site pipeline lives; the blog and project write-ups wait on it. */
+/** Where the vault-to-site pipeline lives: it publishes the work and blog vaults. */
 export const SVARTZ_REPO = 'https://github.com/mia-cx/svartz';
 
 export const DISCORD_INVITE = 'https://discord.gg/bePPwYJk2u';

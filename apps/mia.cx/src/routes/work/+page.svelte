@@ -19,9 +19,9 @@
         {#each listedWork as item (item.slug)}
             <li>
                 <svelte:element
-                    this={item.markdown || item.live || item.source ? 'a' : 'div'}
-                    href={item.markdown ? `/work/${item.slug}` : (item.live ?? item.source)}
-                    rel={!item.markdown && (item.live || item.source) ? 'external' : undefined}
+                    this={item.hasPage || item.live || item.source ? 'a' : 'div'}
+                    href={item.hasPage ? `/work/${item.slug}` : (item.live ?? item.source)}
+                    rel={!item.hasPage && (item.live || item.source) ? 'external' : undefined}
                 >
                     <span class="title">{item.title}</span>
                     <span class="note">{item.summary}</span>
@@ -36,9 +36,8 @@
     </ul>
 
     <p class="more">
-        More projects and details are coming soon, once
-        <ArrowLink class="svartz" href={SVARTZ_REPO}>Svartz</ArrowLink>
-        is ready to publish them.
+        Published from an Obsidian vault by
+        <ArrowLink class="svartz" href={SVARTZ_REPO}>Svartz</ArrowLink>.
     </p>
 </main>
 

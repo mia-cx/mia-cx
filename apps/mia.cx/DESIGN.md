@@ -12,7 +12,8 @@ reserved for controls.
 | `/work`            | The curated shortlist (`listed: true` in the vault), then a note linking to Svartz |
 | `/work/[slug]`     | A write-up for any work note with a body; unlisted ones are reachable by URL only  |
 | `/about`           | Mia's approved biography, followed by contact                                      |
-| `/blog`            | Coming soon, linking to Svartz; post pages are parked in `parked/`                 |
+| `/blog`            | Every post, newest first; posts hosted elsewhere link straight out                 |
+| `/blog/[slug]`     | A post, for every post with a body that isn't hosted elsewhere                     |
 | `/textile/terms`   | Terms for Textile and its hosted Discord MCP relay                                 |
 | `/textile/privacy` | Data handling, retention, and privacy rights for Textile                           |
 
@@ -129,9 +130,11 @@ and the footer share `.container`: 880px maximum with responsive gutters.
 
 ## Content
 
-Work and posts come from the Obsidian vault at the repo root; see `vault/README.md` for its properties.
-`scripts/generate-content.ts` turns published notes into `vault.generated.ts` at build time, resolving
-wikilinks and failing the build on a broken one. Svartz will replace this once it can publish the vault.
+Work and posts come from two Obsidian vaults at the repo root, `vaults/work` and `vaults/blog`; see
+`vaults/README.md` for their properties. Svartz is only the backend (`svartz.config.ts`): `svartz build`
+and `svartz dev` index each vault, with every body as Markdown whose links Svartz has resolved.
+`src/lib/content/vault.ts` reads that index, and `render()` turns the Markdown into the page with the
+site's own renderer and `prose.css`. No Svartz component or CSS reaches the pages.
 
 ## Screenshots
 
