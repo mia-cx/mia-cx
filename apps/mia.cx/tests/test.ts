@@ -65,14 +65,12 @@ test('a project keeps its URL and its filename as its title', async ({ page }) =
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('hypertrance.eu');
 });
 
-test('blog lists posts newest first, linking out to those hosted elsewhere', async ({ page }) => {
+test('blog lists posts newest first', async ({ page }) => {
     await page.goto('/blog');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Blog');
     const posts = page.locator('main ul a');
     await expect(posts).toHaveCount(6);
-    const external = new URL((await posts.first().getAttribute('href')) ?? '');
-    expect(external.protocol).toBe('https:');
-    expect(external.hostname).toBe('www.linkedin.com');
+    await expect(posts.first()).toHaveAttribute('href', '/blog/the-quiet-cost-of-carelessness');
     await expect(page.getByRole('link', { name: /My Approach to Mastering/ })).toHaveAttribute(
         'href',
         '/blog/my-approach-to-mastering',
@@ -88,9 +86,10 @@ test('a post renders its body from the vault', async ({ page }) => {
     await expect(page.locator('#stereo-imaging')).toBeInViewport();
 });
 
-test('a post hosted elsewhere has no page', async ({ page }) => {
-    const response = await page.goto('/blog/the-quiet-cost-of-carelessness');
-    expect(response?.status()).toBe(404);
+test('a post vendored from elsewhere links to where it first appeared', async ({ page }) => {
+    await page.goto('/blog/the-quiet-cost-of-carelessness');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Quiet Cost of Carelessness');
+    await expect(page.getByRole('link', { name: /here/ })).toHaveAttribute('href', /linkedin\.com/);
 });
 
 test('every page carries the sticky header and the sitemap', async ({ page }) => {
