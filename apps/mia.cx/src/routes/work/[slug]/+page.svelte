@@ -15,14 +15,12 @@
 </svelte:head>
 
 <main class="container">
-    <div class="page-actions">
-        <a class="back mono" href="/work" data-print-hide>← Work</a>
-        <PageMarkdown />
-    </div>
+    <a class="back mono" href="/work" data-print-hide>← Work</a>
 
     <header>
         <h1>{note.title}</h1>
         <p class="summary">{note.summary}</p>
+        <div class="page-actions"><PageMarkdown /></div>
     </header>
 
     <!-- Mia's own note body, from the vault. -->
@@ -66,7 +64,7 @@
     }
     .back {
         display: inline-block;
-        margin-right: auto;
+        margin-top: 16px;
         color: var(--ink-dim);
         text-decoration: none;
     }
@@ -85,6 +83,9 @@
         font-size: clamp(18px, 2vw, 22px);
         font-weight: 480;
         line-height: 1.35;
+    }
+    .page-actions {
+        margin-top: 18px;
     }
     .facts {
         display: grid;

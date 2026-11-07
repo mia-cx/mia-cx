@@ -15,10 +15,12 @@
 </svelte:head>
 
 <main class="container">
-    <div class="page-actions"><PageMarkdown /></div>
     <article>
         <h1>Textile {title.toLowerCase()}</h1>
-        <p class="effective">Effective <time datetime="2026-10-19">19 October 2026</time></p>
+        <div class="page-actions">
+            <p class="effective">Effective <time datetime="2026-10-19">19 October 2026</time></p>
+            <PageMarkdown />
+        </div>
         <nav aria-label="Textile policies" data-print-hide>
             <a href="/textile/terms" aria-current={page.url.pathname === '/textile/terms' ? 'page' : undefined}>
                 Terms of service
@@ -47,8 +49,11 @@
         line-height: 0.95;
         letter-spacing: -0.035em;
     }
-    .effective {
+    .page-actions {
         margin-top: 24px;
+    }
+    .effective {
+        margin-right: auto;
     }
     nav {
         display: flex;

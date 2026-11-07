@@ -11,8 +11,8 @@
 </svelte:head>
 
 <main class="container">
-    <div class="page-actions"><PageMarkdown /></div>
     <h1>Blog</h1>
+    <div class="page-actions"><PageMarkdown /></div>
 
     <ul>
         {#each posts as post (post.slug)}
@@ -38,12 +38,15 @@
         padding-bottom: clamp(64px, 16vh, 160px);
     }
     h1 {
-        margin: clamp(24px, 6vh, 56px) 0 clamp(24px, 5vh, 48px);
+        margin: clamp(24px, 6vh, 56px) 0 16px;
         font-size: clamp(40px, 7.5vw, 96px);
         font-weight: 640;
         font-stretch: 72%;
         line-height: 0.9;
         letter-spacing: -0.025em;
+    }
+    .page-actions {
+        margin-bottom: clamp(16px, 3vh, 32px);
     }
     ul {
         display: grid;
