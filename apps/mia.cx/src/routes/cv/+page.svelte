@@ -33,6 +33,7 @@
         padding-top: calc(var(--header-height) + clamp(28px, 7vh, 72px));
     }
     .page-actions {
+        justify-content: flex-end;
         margin-bottom: 24px;
     }
     /* Until the script scales the sheets to fit (or if it never runs), they scroll here, not the page. */

@@ -1,6 +1,5 @@
 <script lang="ts">
     import { ArrowLink } from '@mia-cx/ui';
-    import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import { listedWork } from '$lib/content/vault';
     import { SVARTZ_REPO, site } from '$lib/content/site';
 </script>
@@ -13,7 +12,6 @@
 
 <main class="container">
     <h1>Work</h1>
-    <div class="page-actions"><PageMarkdown /></div>
 
     <ul class="grid">
         {#each listedWork as item (item.slug)}
@@ -45,10 +43,8 @@
     main {
         padding-top: calc(var(--header-height) + clamp(28px, 7vh, 72px));
     }
-    .page-actions {
-        margin: 16px 0 18px;
-    }
     h1 {
+        margin-bottom: 18px;
         font-size: clamp(38px, 7vw, 92px);
         font-weight: 660;
         font-stretch: 70%;

@@ -109,12 +109,11 @@ select {
     text-transform: uppercase;
 }
 
-/* A page's top row: its buttons sit right, after a back link when there is one. */
+/* A row of a page's details, such as its dates, followed by its buttons, all centred on one line. */
 .page-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: flex-end;
     gap: 12px;
 }
 
