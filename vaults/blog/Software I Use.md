@@ -4,6 +4,7 @@ tags:
 description: "The list, by platform and purpose."
 created_at: "2023-03-26T00:00"
 source: "https://github.com/mia-riezebos/mia-riezebos/wiki/Blog:-Software-I-Use"
+draft: true
 ---
 
 *you can use [Ninite](https://ninite.com) to get a generalized installer on windows.*

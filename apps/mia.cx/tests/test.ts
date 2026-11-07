@@ -69,7 +69,7 @@ test('blog lists posts newest first', async ({ page }) => {
     await page.goto('/blog');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Blog');
     const posts = page.locator('main ul a');
-    await expect(posts).toHaveCount(6);
+    await expect(posts).toHaveCount(5);
     await expect(posts.first()).toHaveAttribute('href', '/blog/the-quiet-cost-of-carelessness');
     await expect(page.getByRole('link', { name: /My Approach to Mastering/ })).toHaveAttribute(
         'href',
@@ -89,7 +89,7 @@ test('a post renders its body from the vault', async ({ page }) => {
 test('a post shows an update date only when it states one', async ({ page }) => {
     await page.goto('/blog/the-quiet-cost-of-carelessness');
     await expect(page.getByText('Updated 6 November 2026')).toBeVisible();
-    await page.goto('/blog/software-i-use');
+    await page.goto('/blog/streaming-gear-recommendations');
     await expect(page.getByText(/^Updated/)).toHaveCount(0);
 });
 
@@ -111,4 +111,9 @@ test('the first-load entrance clears itself', async ({ page }) => {
     await page.goto('/');
     // Revealed when the first shader frame is on screen, when graphics fail, or after the failsafe.
     await expect(page.locator('html')).not.toHaveAttribute('data-boot', /.+/, { timeout: 16000 });
+});
+
+test('a draft stays off the site', async ({ page }) => {
+    const response = await page.goto('/blog/software-i-use');
+    expect(response?.status()).toBe(404);
 });
