@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { Snippet } from 'svelte';
     import { page } from '$app/state';
+    import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
     import '$lib/styles/prose.css';
 
@@ -14,6 +15,7 @@
 </svelte:head>
 
 <main class="container">
+    <div class="page-actions"><PageMarkdown /></div>
     <article>
         <h1>Textile {title.toLowerCase()}</h1>
         <p class="effective">Effective <time datetime="2026-10-19">19 October 2026</time></p>

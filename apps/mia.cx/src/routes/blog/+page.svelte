@@ -1,4 +1,5 @@
 <script lang="ts">
+    import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import { formatDate, posts } from '$lib/content/vault';
     import { site } from '$lib/content/site';
 </script>
@@ -10,6 +11,7 @@
 </svelte:head>
 
 <main class="container">
+    <div class="page-actions"><PageMarkdown /></div>
     <h1>Blog</h1>
 
     <ul>

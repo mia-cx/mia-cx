@@ -1,6 +1,7 @@
 <script lang="ts">
     import '$lib/styles/prose.css';
     import Mentions from '$lib/components/Mentions.svelte';
+    import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
 
     let { data } = $props();
@@ -14,7 +15,10 @@
 </svelte:head>
 
 <main class="container">
-    <a class="back mono" href="/work" data-print-hide>← Work</a>
+    <div class="page-actions">
+        <a class="back mono" href="/work" data-print-hide>← Work</a>
+        <PageMarkdown />
+    </div>
 
     <header>
         <h1>{note.title}</h1>
@@ -62,6 +66,7 @@
     }
     .back {
         display: inline-block;
+        margin-right: auto;
         color: var(--ink-dim);
         text-decoration: none;
     }
