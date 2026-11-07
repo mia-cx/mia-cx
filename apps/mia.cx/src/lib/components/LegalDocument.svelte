@@ -50,10 +50,12 @@
         letter-spacing: -0.035em;
     }
     .page-actions {
+        column-gap: 20px;
         margin-top: 24px;
     }
+    /* Trimmed to cap height and baseline, so the date centres on the buttons. */
     .effective {
-        margin-right: auto;
+        text-box: trim-both cap alphabetic;
     }
     nav {
         display: flex;

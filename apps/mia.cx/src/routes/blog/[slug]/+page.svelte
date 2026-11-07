@@ -66,15 +66,16 @@
         letter-spacing: -0.02em;
     }
     .page-actions {
+        column-gap: 20px;
         margin-top: 18px;
     }
-    /* The dates take the bar's left, the Markdown buttons its right. */
     .meta {
         display: flex;
         flex-wrap: wrap;
         gap: 8px 20px;
-        margin-right: auto;
         color: var(--ink-dim);
+        /* Trimmed to cap height and baseline, so the dates centre on the buttons. */
+        text-box: trim-both cap alphabetic;
     }
 
     .source {
