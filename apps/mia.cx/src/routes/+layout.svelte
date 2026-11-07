@@ -9,7 +9,7 @@
     import CV from '$lib/cv/CV.svelte';
     import Header from '$lib/components/Header.svelte';
     import Footer from '$lib/components/Footer.svelte';
-    import PageMarkdown from '$lib/components/PageMarkdown.svelte';
+    import { markdownHref } from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
 
     let { children }: { children: Snippet } = $props();
@@ -43,6 +43,8 @@
     which is the portrait; static/og.jpg is rendered by scripts/share-card.ts instead.
 -->
 <svelte:head>
+    <!-- Every page's Markdown twin, which is also how the crawler finds the twins to prerender. -->
+    {#if !page.error && !bare}<link rel="alternate" type="text/markdown" href={markdownHref(page.url)} />{/if}
     <meta property="og:site_name" content={site.domain} />
     <meta property="og:type" content="website" />
     <!-- A role link keeps its role: crawlers that re-read og:url would otherwise show the plain CV. -->
@@ -76,8 +78,6 @@
     <div class="page">
         {@render children()}
     </div>
-
-    {#if !page.error}<PageMarkdown />{/if}
 
     <Footer />
 {/if}

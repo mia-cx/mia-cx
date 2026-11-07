@@ -2,6 +2,7 @@
     import { marked } from 'marked';
     import '$lib/styles/prose.css';
     import Contact from '$lib/components/Contact.svelte';
+    import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import { about, biography, site } from '$lib/content/site';
 </script>
 
@@ -12,6 +13,7 @@
 </svelte:head>
 
 <main class="container">
+    <div class="page-actions"><PageMarkdown /></div>
     <h1>About me</h1>
     <div class="prose">
         {#each biography as paragraph (paragraph)}

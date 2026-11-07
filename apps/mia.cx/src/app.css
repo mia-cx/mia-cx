@@ -109,6 +109,15 @@ select {
     text-transform: uppercase;
 }
 
+/* A page's top row: its buttons sit right, after a back link when there is one. */
+.page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
 .visually-hidden {
     position: absolute;
     width: 1px;

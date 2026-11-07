@@ -1,6 +1,7 @@
 <script lang="ts">
     import '$lib/styles/prose.css';
     import Mentions from '$lib/components/Mentions.svelte';
+    import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import { formatDate } from '$lib/content/vault';
     import { site } from '$lib/content/site';
 
@@ -16,7 +17,10 @@
 </svelte:head>
 
 <main class="container">
-    <a class="back mono" href="/blog" data-print-hide>← Blog</a>
+    <div class="page-actions">
+        <a class="back mono" href="/blog" data-print-hide>← Blog</a>
+        <PageMarkdown />
+    </div>
 
     <article>
         <header>
@@ -45,9 +49,12 @@
     main {
         padding-top: calc(var(--header-height) + clamp(20px, 4vh, 40px));
     }
+    .page-actions {
+        margin-top: 16px;
+    }
     .back {
         display: inline-block;
-        margin-top: 16px;
+        margin-right: auto;
         color: var(--ink-dim);
         text-decoration: none;
     }

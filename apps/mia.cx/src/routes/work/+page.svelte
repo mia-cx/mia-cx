@@ -1,5 +1,6 @@
 <script lang="ts">
     import { ArrowLink } from '@mia-cx/ui';
+    import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import { listedWork } from '$lib/content/vault';
     import { SVARTZ_REPO, site } from '$lib/content/site';
 </script>
@@ -11,6 +12,7 @@
 </svelte:head>
 
 <main class="container">
+    <div class="page-actions"><PageMarkdown /></div>
     <header>
         <h1>Work</h1>
     </header>

@@ -1,6 +1,7 @@
 <script lang="ts">
     import CV from '$lib/cv/CV.svelte';
     import CVButtons from '$lib/cv/CVButtons.svelte';
+    import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
 
     let { data } = $props();
@@ -19,7 +20,7 @@
 </svelte:head>
 
 <main class="container">
-    <div class="actions"><CVButtons /></div>
+    <div class="page-actions"><PageMarkdown /><CVButtons /></div>
     <div class="sheets" bind:clientWidth={width}>
         <div style:zoom>
             <CV cv={data.cv} theme={data.theme} />
@@ -31,9 +32,7 @@
     main {
         padding-top: calc(var(--header-height) + clamp(28px, 7vh, 72px));
     }
-    .actions {
-        display: flex;
-        justify-content: flex-end;
+    .page-actions {
         margin-bottom: 24px;
     }
     /* Until the script scales the sheets to fit (or if it never runs), they scroll here, not the page. */
