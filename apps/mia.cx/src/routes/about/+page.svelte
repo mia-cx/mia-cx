@@ -13,8 +13,8 @@
 </svelte:head>
 
 <main class="container">
-    <div class="page-actions"><PageMarkdown /></div>
     <h1>About me</h1>
+    <div class="page-actions"><PageMarkdown /></div>
     <div class="prose">
         {#each biography as paragraph (paragraph)}
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- the biography is authored in this repo -->
@@ -29,12 +29,14 @@
         padding-top: calc(var(--header-height) + clamp(28px, 7vh, 72px));
     }
     h1 {
-        margin-bottom: 28px;
         font-size: clamp(38px, 7vw, 92px);
         font-weight: 660;
         font-stretch: 70%;
         line-height: 0.9;
         letter-spacing: -0.035em;
+    }
+    .page-actions {
+        margin: 16px 0 28px;
     }
     .prose {
         margin-bottom: 40px;

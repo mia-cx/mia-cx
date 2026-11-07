@@ -17,18 +17,18 @@
 </svelte:head>
 
 <main class="container">
-    <div class="page-actions">
-        <a class="back mono" href="/blog" data-print-hide>← Blog</a>
-        <PageMarkdown />
-    </div>
+    <a class="back mono" href="/blog" data-print-hide>← Blog</a>
 
     <article>
         <header>
             <h1>{post.title}</h1>
-            <p class="meta mono">
-                <time datetime={post.date}>{formatted(post.date)}</time>
-                {#if post.updated}<span>Updated {formatted(post.updated)}</span>{/if}
-            </p>
+            <div class="page-actions">
+                <p class="meta mono">
+                    <time datetime={post.date}>{formatted(post.date)}</time>
+                    {#if post.updated}<span>Updated {formatted(post.updated)}</span>{/if}
+                </p>
+                <PageMarkdown />
+            </div>
         </header>
 
         <!-- Mia's own markdown, from the vault. -->
@@ -49,12 +49,9 @@
     main {
         padding-top: calc(var(--header-height) + clamp(20px, 4vh, 40px));
     }
-    .page-actions {
-        margin-top: 16px;
-    }
     .back {
         display: inline-block;
-        margin-right: auto;
+        margin-top: 16px;
         color: var(--ink-dim);
         text-decoration: none;
     }
@@ -68,11 +65,15 @@
         line-height: 0.95;
         letter-spacing: -0.02em;
     }
+    .page-actions {
+        margin-top: 18px;
+    }
+    /* The dates take the bar's left, the Markdown buttons its right. */
     .meta {
         display: flex;
         flex-wrap: wrap;
         gap: 8px 20px;
-        margin-top: 18px;
+        margin-right: auto;
         color: var(--ink-dim);
     }
 

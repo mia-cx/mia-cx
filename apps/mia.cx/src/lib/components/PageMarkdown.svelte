@@ -1,7 +1,7 @@
 <!--
     The current page as Markdown, joined like the CV's split button: "View as Markdown" opens the
     page's `.md` twin, then an icon button copies it, named by a popover that shows at once on hover
-    or focus. Each page places it at the top; the layout links every twin from the head.
+    or focus. Each page places it in a bar under its heading; the layout links every twin from the head.
 -->
 <script lang="ts" module>
     import { building } from '$app/environment';

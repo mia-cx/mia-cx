@@ -12,10 +12,8 @@
 </svelte:head>
 
 <main class="container">
+    <h1>Work</h1>
     <div class="page-actions"><PageMarkdown /></div>
-    <header>
-        <h1>Work</h1>
-    </header>
 
     <ul class="grid">
         {#each listedWork as item (item.slug)}
@@ -47,13 +45,8 @@
     main {
         padding-top: calc(var(--header-height) + clamp(28px, 7vh, 72px));
     }
-    header {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: end;
-        justify-content: space-between;
-        gap: 20px;
-        padding-bottom: 18px;
+    .page-actions {
+        margin: 16px 0 18px;
     }
     h1 {
         font-size: clamp(38px, 7vw, 92px);
