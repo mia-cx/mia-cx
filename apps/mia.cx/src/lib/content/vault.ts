@@ -74,8 +74,11 @@ export interface WorkNote {
 
 const text = (value: unknown) => (value === undefined || value === null || value === '' ? undefined : String(value));
 const list = (value: unknown) => (Array.isArray(value) ? value.map(String) : value ? [String(value)] : []);
-/** Dates are calendar days at UTC midnight. */
-const isoDay = (date: Date | undefined) => date?.toISOString().slice(0, 10);
+/** Svartz's timestamp for a date the note doesn't state: the Unix epoch. */
+const UNSTATED = 0;
+/** Dates are calendar days at UTC midnight; an unstated date is none. */
+const isoDay = (date: Date | undefined) =>
+    date && date.getTime() !== UNSTATED ? date.toISOString().slice(0, 10) : undefined;
 
 function sectionVault(section: SectionId) {
     const vault = vaults.find((candidate) => candidate.id === section);
