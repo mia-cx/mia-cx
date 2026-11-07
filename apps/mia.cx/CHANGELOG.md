@@ -1,5 +1,18 @@
 # @mia-cx/mia.cx
 
+## 0.3.0
+
+### Minor Changes
+
+- a8590c6: The blog is live: Svartz publishes the work and blog vaults, and every post with a body has its own page.
+
+### Patch Changes
+
+- ebbe9f3: /llms.txt carries the About page's bio and contact links, not only a list of pages.
+- 39b2f8c: "View as Markdown" and a copy button sit at the top of each page as one split button, like the CV downloads.
+- c26c81e: "The Quiet Cost of Carelessness" has its own page on the blog, linking back to where it first appeared on LinkedIn.
+- d86e5dc: A post without an `updated_at` date no longer shows "Updated 1 January 1970".
+
 ## 0.2.2
 
 ### Patch Changes
