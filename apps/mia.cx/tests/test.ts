@@ -86,6 +86,13 @@ test('a post renders its body from the vault', async ({ page }) => {
     await expect(page.locator('#stereo-imaging')).toBeInViewport();
 });
 
+test('a post shows an update date only when it states one', async ({ page }) => {
+    await page.goto('/blog/the-quiet-cost-of-carelessness');
+    await expect(page.getByText('Updated 6 November 2026')).toBeVisible();
+    await page.goto('/blog/software-i-use');
+    await expect(page.getByText(/^Updated/)).toHaveCount(0);
+});
+
 test('a post vendored from elsewhere links to where it first appeared', async ({ page }) => {
     await page.goto('/blog/the-quiet-cost-of-carelessness');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('The Quiet Cost of Carelessness');
