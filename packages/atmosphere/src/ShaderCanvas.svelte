@@ -331,7 +331,12 @@
 ></canvas>
 <!-- A layer of its own, so a lost device's last frame can never show over it. -->
 {#if failed}<div class="fallback" aria-hidden="true"></div>{/if}
-{#if ready && fpsVisible}<output class="fps" aria-label="Render statistics">{frameStats}{#if gpuStats}<br />{gpuStats}{/if}</output>{/if}
+{#if ready && fpsVisible}
+    <output class="fps" aria-label="Render statistics">
+        {frameStats}
+        {#if gpuStats}<br />{gpuStats}{/if}
+    </output>
+{/if}
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
 
 <style>

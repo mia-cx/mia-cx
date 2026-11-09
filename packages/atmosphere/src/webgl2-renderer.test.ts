@@ -201,9 +201,7 @@ describe('WebGL2 parity backend', () => {
 
     it('uses internal base resolution except for native presentation and god rays', () => {
         const implementation = WebGL2Renderer.toString();
-        expect(implementation).toContain(
-            'const internalResolution = [targets[0].width, targets[0].height]',
-        );
+        expect(implementation).toContain('const internalResolution = [targets[0].width, targets[0].height]');
         // The test runner's transform may wrap imports, so match the call loosely.
         expect(implementation.match(/packUniform\)?\(internalResolution/g)).toHaveLength(2);
         expect(implementation).toContain('data[0] = this.godRays.width');

@@ -361,9 +361,9 @@ describe('field configuration', () => {
         };
         const run = (first: number, last: number) => ({ kind: 'octaves', first, last });
         // The shipped settings: 1 × 4 × 3 × 1 reads, one pass.
-        expect(plan({ 2: [0.005, 0, 1, 0], 3: [0.01, 0, 1, 0.3], 4: [0.01, 0, 0.67, 0.5], 5: [0.005, 0, 0, 1.8] })).toEqual([
-            run(1, 4),
-        ]);
+        expect(
+            plan({ 2: [0.005, 0, 1, 0], 3: [0.01, 0, 1, 0.3], 4: [0.01, 0, 0.67, 0.5], 5: [0.005, 0, 0, 1.8] }),
+        ).toEqual([run(1, 4)]);
         // Inactive stages inside a run are identities and do not split it.
         expect(plan({ 1: [0.01, 0, 0, 0], 4: [0.01, 0, 0, 0] })).toEqual([run(0, 3)]);
         // 4 × 4 = 16 fits; a third four-read stage starts a new pass.

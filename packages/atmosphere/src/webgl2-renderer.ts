@@ -1,7 +1,6 @@
 import type { RenderBackend } from './render-backend';
 import {
     COLOUR_KIND_INDEX,
-    OCTAVE_COUNT,
     POST_KIND_INDEX,
     POST_PARAMETER_SCHEMA,
     packUniform,
@@ -902,7 +901,14 @@ export class WebGL2Renderer implements RenderBackend {
                 data[29] = step.last;
                 this.upload(data);
                 this.specialized('OCTAVE', step.last);
-                this.draw(`OCTAVE:${step.last}`, destination, source.texture, undefined, undefined, `octave${step.last}`);
+                this.draw(
+                    `OCTAVE:${step.last}`,
+                    destination,
+                    source.texture,
+                    undefined,
+                    undefined,
+                    `octave${step.last}`,
+                );
             } else {
                 data[29] = step.last;
                 data[57] = step.first;
