@@ -1853,7 +1853,8 @@ export class AtmosphereRenderer {
             POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
         );
-        if (postStages.some((effect) => effect.kind === 'datamosh') && !this.historyValid && this.historyTexture) {
+        const datamosh = postStages.some((effect) => effect.kind === 'datamosh');
+        if (datamosh && !this.historyValid && this.historyTexture) {
             draw(this.textureViews[4], 12, rgbaCurrent, false, 'history-initialize');
             enc.copyTextureToTexture({ texture: this.textures[4] }, { texture: this.historyTexture }, [
                 this.textures[4].width,
@@ -1898,7 +1899,10 @@ export class AtmosphereRenderer {
             rgbaCurrent = destination;
             postRan = true;
         }
-        if (postRan && !this.paused && this.historyTexture) {
+        // Only datamosh reads the history. Without it the copy is wasted, and the history is stale by the
+        // time datamosh returns, so it is marked for re-initialisation instead.
+        if (!datamosh) this.historyValid = false;
+        else if (postRan && !this.paused && this.historyTexture) {
             enc.copyTextureToTexture({ texture: this.textures[rgbaCurrent] }, { texture: this.historyTexture }, [
                 this.textures[rgbaCurrent].width,
                 this.textures[rgbaCurrent].height,

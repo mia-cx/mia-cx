@@ -837,7 +837,8 @@ export class WebGL2Renderer implements RenderBackend {
         }
         const postStages = this.cachedPostPlan;
         let source: Target = this.colourTargets[current];
-        if (ablation?.kind !== 'all-post' && postStages.some((e) => e.kind === 'datamosh') && !this.historyValid) {
+        const datamosh = postStages.some((e) => e.kind === 'datamosh');
+        if (ablation?.kind !== 'all-post' && datamosh && !this.historyValid) {
             this.upload(data);
             this.draw('COPY', this.history!, source.texture, undefined, undefined, 'post:history-copy');
             this.historyValid = true;
@@ -888,7 +889,9 @@ export class WebGL2Renderer implements RenderBackend {
             postIndex = 1 - postIndex;
             postRan = true;
         }
-        if (postRan && !this.paused) {
+        // Only datamosh reads the history; see the WebGPU renderer.
+        if (!datamosh) this.historyValid = false;
+        else if (postRan && !this.paused) {
             this.copy(source, this.history!, 'post:history-copy');
             this.historyValid = true;
         }

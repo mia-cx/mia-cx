@@ -216,6 +216,8 @@ describe('WebGL2 parity backend', () => {
         expect(shaders.COPY).toContain('texelFetch');
         expect(shaders.COPY).not.toContain('texture(');
         expect(implementation).toContain('if (postRan && !this.paused)');
+        // Only datamosh reads the history, so other Post plans skip the per-frame copy and re-initialise later.
+        expect(implementation).toContain('if (!datamosh) this.historyValid = false');
     });
 
     it('adapts only from available, non-disjoint GPU elapsed queries with captured attribution', () => {
