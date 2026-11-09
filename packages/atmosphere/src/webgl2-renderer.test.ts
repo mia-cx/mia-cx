@@ -10,6 +10,7 @@ import {
     WEBGL2_SUPPORTED_COLOUR,
     WEBGL2_SUPPORTED_POST,
     WebGL2Renderer,
+    octaveChainRows,
     specializeWebGL2Shader,
 } from './webgl2-renderer';
 import * as shaders from './webgl2-shaders';
@@ -69,6 +70,7 @@ describe('WebGL2 parity backend', () => {
                 'GOD_RAYS',
                 'LUT',
                 'OCTAVE',
+                'OCTAVE_CHAIN',
                 'POST_EFFECT',
                 'PRESENT',
             ].sort(),
@@ -269,5 +271,13 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).not.toContain('1000 / 30');
         expect(implementation).not.toContain('lastPresented');
         expect(implementation).toContain('Math.max(0, (now - this.lastTick) / 1e3) * p.animationSpeed');
+    });
+
+    it('mirrors the fused octave chain into the rows each per-octave pass worked in', () => {
+        // Regenerating OCTAVE_CHAIN must keep the identity this rewrite anchors on, or WebGL2 would
+        // draw the chain unmirrored and stop matching its per-octave passes.
+        expect(octaveChainRows(shaders.OCTAVE_CHAIN)).toMatch(
+            /ivec2 passPixel\(ivec2 (\w+), ivec2 (\w+)\) \{\n {4}return ivec2\(\1\.x, \2\.y - 1 - \1\.y\);/,
+        );
     });
 });

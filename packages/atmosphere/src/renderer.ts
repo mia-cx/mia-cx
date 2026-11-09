@@ -84,8 +84,9 @@ const PIPELINE = {
     copy: 11,
     cursorDecay: 12,
     cursorPaint: 13,
+    octaveChain: 14,
 } as const;
-const PIPELINE_COUNT = 14;
+const PIPELINE_COUNT = 15;
 /** Render-target indices: the linear-light ping-pong pair, the display-space post pair, then god rays. */
 const TEXTURE = { rgbaA: 0, rgbaB: 1, postA: 2, postB: 3, godRays: 4 } as const;
 const TEXTURE_COUNT = 5;
@@ -470,6 +471,27 @@ export function octaveBlurIsActive(parameters: ShaderParameters, index: number) 
     return parameters[OCTAVE_BLUR_SCHEMA[index].key] > 0;
 }
 
+/**
+ * How many sample paths the fused octave chain walks, or undefined when the per-octave passes must
+ * run instead: no octave active, any blur or pixelation (the per-pass loop blurs even an inactive
+ * octave), any threshold, or more than OCTAVE_CHAIN_MAX_LEAVES paths. The fused chain keeps full
+ * precision where the passes round to half floats in between; a threshold turns that rounding into
+ * flipped pixels along its edge, so thresholds stay on the per-octave passes.
+ */
+export function fusedOctaveLeaves(parameters: ShaderParameters): number | undefined {
+    const octaves = Array.from({ length: OCTAVE_COUNT }, (_, index) => index);
+    const active = octaves.filter((index) => octaveEffectIsActive(parameters, index));
+    if (!active.length) return undefined;
+    if (octaves.some((index) => octaveBlurIsActive(parameters, index))) return undefined;
+    if (OCTAVE_PIXELATE_SCHEMA.some(({ key }) => parameters[key] >= 0.5)) return undefined;
+    if (OCTAVE_PARAMETER_SCHEMA.some(([, threshold]) => parameters[threshold.key] !== 0)) return undefined;
+    const leaves = active.reduce((product, index) => {
+        const [, , smoothness, distance] = OCTAVE_PARAMETER_SCHEMA[index];
+        return product * (parameters[distance.key] < 0.5 ? 1 : Math.round(1 + 3 * parameters[smoothness.key]));
+    }, 1);
+    return leaves <= OCTAVE_CHAIN_MAX_LEAVES ? leaves : undefined;
+}
+
 export function godRaysIsActive(parameters: ShaderParameters) {
     return parameters.godRaysEnabled >= 0.5 && parameters.godRaysAmount !== 0 && parameters.godRaysIntensity !== 0;
 }
@@ -694,10 +716,8 @@ export const BLUR_SHADER_SOURCE =
     return vec4f(value,1.);
 }`;
 
-export const OCTAVE_SHADER_SOURCE =
-    COMMON_SHADER_SOURCE +
-    /* wgsl */ `
-@group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
+/** Hash and Frosted Glass scatter shared by the per-octave pass and the fused octave chain. */
+const OCTAVE_SCATTER_SOURCE = /* wgsl */ `
 fn avalanche(value: u32) -> u32 {
     var x=value;
     x^=x>>16u; x*=0x7feb352du; x^=x>>15u; x*=0x846ca68bu; x^=x>>16u;
@@ -717,7 +737,14 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     let bits=tileHash(tile,octaveFrameSalt ^ (sampleIndex*0x165667b1u));
     let radius=f32(bits>>8u)*(1./16777215.)*distance;
     return directions[bits&15u]*radius;
-}
+}`;
+
+export const OCTAVE_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;` +
+    OCTAVE_SCATTER_SOURCE +
+    /* wgsl */ `
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let sourceSize=vec2f(textureDimensions(src));
@@ -766,6 +793,63 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,luminance);
     let scale=select(0.,thresholded/max(luminance,.000001),luminance>0.);
     return vec4f(injected*scale,1.);
+}`;
+
+/** Most sample paths the fused octave chain walks per pixel; past this the per-octave passes are cheaper. */
+export const OCTAVE_CHAIN_MAX_LEAVES = 16;
+/**
+ * Every active octave in one pass. A separate octave pass averages whole-texel displaced reads of the
+ * one before and adds tile noise, so the chain is a mean over every combination of per-octave sample
+ * choices (a "leaf"), each one texel load plus the noise met along its walk. Only runs while no
+ * octave blurs, pixelates or thresholds: see fusedOctaveLeaves.
+ */
+export const OCTAVE_CHAIN_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1) var src: texture_2d<f32>;` +
+    OCTAVE_SCATTER_SOURCE +
+    /* wgsl */ `
+// The pixel a separate pass for one octave works in, given the texel it writes. WebGPU stores rows
+// top-down, so it is the same texel; WebGL2 rewrites this to mirror rows (see octaveChainRows).
+fn passPixel(texel: vec2i, size: vec2i) -> vec2i { return texel; }
+fn octaveIsActive(s: vec4f) -> bool { return s.x!=0. || s.y!=0. || s.w!=0.; }
+fn sampleCount(s: vec4f) -> u32 {
+    // Offsets round r*direction with r below the distance: under half a texel every sample is the same.
+    if(s.w<.5) { return 1u; }
+    return u32(round(mix(1.,4.,s.z)));
+}
+@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let size=vec2i(textureDimensions(src));
+    let frame=u32(u.frameIndex);
+    var leaves=1u;
+    for(var o=0u;o<5u;o++) { if(octaveIsActive(u.octaves[o])) { leaves*=sampleCount(u.octaves[o]); } }
+    var sum=vec3f(0.);
+    for(var leaf=0u;leaf<leaves;leaf++) {
+        var texel=vec2i(pos.xy); var rest=leaf; var noise=0.;
+        // Walk from the last octave applied back to the first, as each pass reads the one before it.
+        for(var k=0u;k<5u;k++) {
+            let octave=4u-k;
+            let s=u.octaves[octave];
+            if(!octaveIsActive(s)) { continue; }
+            let pixel=passPixel(texel,size);
+            let tileShift=4u-octave;
+            let tile=vec2u(pixel)>>vec2u(tileShift);
+            if(s.x!=0.) {
+                let noiseSalt=(octave*0x27d4eb2du) ^ (frame*0x165667b1u) ^ 0xa511e9b3u;
+                noise+=(f32(tileHash(tile,noiseSalt))*(1./4294967295.)-.5)*s.x;
+            }
+            var offset=vec2i(0);
+            if(s.w>0.) {
+                let count=sampleCount(s);
+                let sampleIndex=rest%count; rest/=count;
+                let octaveFrameSalt=(octave*0x27d4eb2du) ^ (frame*0x9e3779b9u);
+                offset=vec2i(round(scatterOffset(tile,sampleIndex,s.w,octaveFrameSalt)))*i32(1u<<tileShift);
+            }
+            texel=clamp(pixel+offset,vec2i(0),size-vec2i(1));
+        }
+        sum+=textureLoad(src,texel,0).rgb+noise;
+    }
+    return vec4f(sum/f32(leaves),1.);
 }`;
 
 export const GOD_RAYS_TEXTURE_FORMAT: GPUTextureFormat = 'rgba16float';
@@ -1213,6 +1297,7 @@ export class AtmosphereRenderer {
                 format: CURSOR_DENSITY_FORMAT,
                 blend: { color: maxBlend, alpha: maxBlend },
             }),
+            make(OCTAVE_CHAIN_SHADER_SOURCE, { format: 'rgba16float' }),
             ...extraPostKinds.map((kind) => make(compactPostShaderSource(kind), { format: POST_TEXTURE_FORMAT })),
         ]);
         if (primaryPostKind !== undefined) {
@@ -1980,17 +2065,23 @@ export class AtmosphereRenderer {
             ]);
             this.historyValid = true;
         }
-        for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
-            data[29] = octave;
-            if (octaveBlurIsActive(this.options.parameters, octave)) {
-                const destination = rgbaDestination(rgbaCurrent);
-                draw(this.textureViews[destination], PIPELINE.blur, rgbaCurrent, true, `blur${octave + 1}`);
-                rgbaCurrent = destination;
-            }
-            if (octaveEffectIsActive(this.options.parameters, octave)) {
-                const destination = rgbaDestination(rgbaCurrent);
-                draw(this.textureViews[destination], PIPELINE.octave, rgbaCurrent, true, `octave${octave + 1}`);
-                rgbaCurrent = destination;
+        if (fusedOctaveLeaves(this.options.parameters) !== undefined) {
+            const destination = rgbaDestination(rgbaCurrent);
+            draw(this.textureViews[destination], PIPELINE.octaveChain, rgbaCurrent, false, 'octaves');
+            rgbaCurrent = destination;
+        } else {
+            for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
+                data[29] = octave;
+                if (octaveBlurIsActive(this.options.parameters, octave)) {
+                    const destination = rgbaDestination(rgbaCurrent);
+                    draw(this.textureViews[destination], PIPELINE.blur, rgbaCurrent, true, `blur${octave + 1}`);
+                    rgbaCurrent = destination;
+                }
+                if (octaveEffectIsActive(this.options.parameters, octave)) {
+                    const destination = rgbaDestination(rgbaCurrent);
+                    draw(this.textureViews[destination], PIPELINE.octave, rgbaCurrent, true, `octave${octave + 1}`);
+                    rgbaCurrent = destination;
+                }
             }
         }
         data[0] = this.canvas.width;

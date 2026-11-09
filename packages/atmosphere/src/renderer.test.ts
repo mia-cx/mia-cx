@@ -39,6 +39,7 @@ import {
     bindGroupCacheKey,
     defaultParameters,
     fullResolutionPassSizes,
+    fusedOctaveLeaves,
     godRaysIsActive,
     octavePixelSizes,
     octaveBlurIsActive,
@@ -684,5 +685,29 @@ describe('field configuration', () => {
         expect(DISPLAY_SHADER_SOURCE).toContain('if(u.post[9].x>.5 && u.post[6].z!=0.)');
         expect(DISPLAY_SHADER_SOURCE).toContain('if(u.post[9].w>.5 && u.post[7].z!=0.)');
         expect(DISPLAY_SHADER_SOURCE).toContain('if(dispersionEnabled)');
+    });
+    it('fuses the octave chain only where it reproduces the per-octave passes', () => {
+        const baked = defaultShaderSettings().parameters;
+        const silent = Object.fromEntries(
+            OCTAVE_PARAMETER_SCHEMA.flatMap((group) => group.map(({ key }) => [key, 0])),
+        ) as Partial<typeof baked>;
+        const cases: [string, Partial<typeof baked>, number | undefined][] = [
+            // Octave 4 takes round(1 + 3 × 0.67) = 3 samples; octaves 3 and 5 scatter by one sample.
+            ['the baked chain walks three paths', {}, 3],
+            ['a blur on an active octave', { octave2BlurRadius: 0.5 }, undefined],
+            // The per-pass loop blurs octave 1 although its scatter is off.
+            ['a blur on an inactive octave', { octave1BlurRadius: 0.5 }, undefined],
+            ['pixelation', { octave4Pixelate: 1 }, undefined],
+            // Even on the last octave: the fused chain's extra precision flips pixels along the edge.
+            ['a threshold', { octave5Threshold: 0.1 }, undefined],
+            [
+                'more than sixteen paths',
+                { octave2Distance: 0.6, octave4Smoothness: 1, octave5Smoothness: 1 },
+                undefined,
+            ],
+            ['no active octave', silent, undefined],
+        ];
+        for (const [name, overrides, leaves] of cases)
+            expect(fusedOctaveLeaves({ ...baked, ...overrides }), name).toBe(leaves);
     });
 });

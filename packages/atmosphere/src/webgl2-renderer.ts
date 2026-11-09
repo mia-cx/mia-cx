@@ -5,6 +5,7 @@ import {
     POST_KIND_INDEX,
     POST_PARAMETER_SCHEMA,
     packUniform,
+    fusedOctaveLeaves,
     octaveBlurIsActive,
     octaveEffectIsActive,
     renderSize,
@@ -190,12 +191,27 @@ function compile(gl: WebGL2RenderingContext, type: number, source: string) {
     return value;
 }
 /**
- * Every top-left pass reads its source through `pos / resolution`, which lands on the row mirrored
- * from where the source pass wrote: each such read flips the field once. BASE used to be read by a
- * separate materialise pass; it now keeps GL's own bottom-left rows instead, so the flip that pass
- * contributed still happens and the field is stored exactly where materialise left it.
+ * The fused octave chain stands in for one top-left pass per active octave, and each of those
+ * worked in rows mirrored from the texel it wrote. Mirror the chain's `passPixel` the same way.
  */
-const STORED_ROW_PROGRAMS: ReadonlySet<ProgramKey> = new Set(['BASE']);
+export function octaveChainRows(source: string) {
+    const mirrored = source.replace(
+        /(ivec2 passPixel\(ivec2 (\w+), ivec2 (\w+)\) \{\n {4}return )\2;/,
+        '$1ivec2($2.x, $3.y - 1 - $2.y);',
+    );
+    if (mirrored === source) throw new Error('OCTAVE_CHAIN GLSL no longer has the passPixel identity to mirror.');
+    return mirrored;
+}
+/**
+ * Every top-left pass reads its source through `pos / resolution`, which lands on the row mirrored
+ * from where the source pass wrote: each such read flips the field once. These programs work in
+ * GL's own bottom-left rows instead. BASE used to be read by a separate materialise pass, so keeping
+ * GL rows keeps the flip that pass contributed and stores the field exactly where materialise did.
+ */
+const STORED_ROW_PROGRAMS: Partial<Record<ProgramKey, (source: string) => string>> = {
+    BASE: (source) => source,
+    OCTAVE_CHAIN: octaveChainRows,
+};
 function program(gl: WebGL2RenderingContext, fragment: string) {
     const vs = compile(gl, gl.VERTEX_SHADER, VERTEX),
         fs = compile(gl, gl.FRAGMENT_SHADER, fragment),
@@ -436,7 +452,8 @@ export class WebGL2Renderer implements RenderBackend {
     }
     private installProgram(key: ProgramKey, source: string) {
         const gl = this.gl,
-            p = program(gl, STORED_ROW_PROGRAMS.has(key) ? source : topLeftFragmentCoordinates(source));
+            storedRows = STORED_ROW_PROGRAMS[key],
+            p = program(gl, storedRows ? storedRows(source) : topLeftFragmentCoordinates(source));
         this.programs.set(key, p);
         const i = gl.getUniformBlockIndex(p, 'U_block_0Fragment');
         if (i !== gl.INVALID_INDEX) gl.uniformBlockBinding(p, i, 0);
@@ -909,23 +926,34 @@ export class WebGL2Renderer implements RenderBackend {
             this.copy(source, this.history, 'post:history-copy');
             this.historyValid = true;
         }
-        for (let i = 0; i < OCTAVE_COUNT; i++) {
-            data[29] = i;
-            if (ablation?.kind === 'all-octaves' || (ablation?.kind === 'octave' && ablation.index === i)) continue;
-            if (octaveBlurIsActive(p, i)) {
+        // Ablation drops one octave at a time, which only the per-octave passes can do.
+        if (ablation?.kind !== 'octave' && fusedOctaveLeaves(p) !== undefined) {
+            if (ablation?.kind !== 'all-octaves') {
                 const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
                 this.upload(data);
-                this.draw('BLUR', destination, source.texture, undefined, undefined, `blur${i}`);
+                this.draw('OCTAVE_CHAIN', destination, source.texture, undefined, undefined, 'octaves');
                 source = destination;
             }
-            if (octaveEffectIsActive(p, i)) {
-                const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
-                this.upload(data);
-                this.specialized('OCTAVE', i);
-                this.draw(`OCTAVE:${i}`, destination, source.texture, undefined, undefined, `octave${i}`);
-                source = destination;
+        } else
+            for (let i = 0; i < OCTAVE_COUNT; i++) {
+                data[29] = i;
+                if (ablation?.kind === 'all-octaves' || (ablation?.kind === 'octave' && ablation.index === i)) continue;
+                if (octaveBlurIsActive(p, i)) {
+                    const destination =
+                        source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
+                    this.upload(data);
+                    this.draw('BLUR', destination, source.texture, undefined, undefined, `blur${i}`);
+                    source = destination;
+                }
+                if (octaveEffectIsActive(p, i)) {
+                    const destination =
+                        source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
+                    this.upload(data);
+                    this.specialized('OCTAVE', i);
+                    this.draw(`OCTAVE:${i}`, destination, source.texture, undefined, undefined, `octave${i}`);
+                    source = destination;
+                }
             }
-        }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
         this.upload(data);
