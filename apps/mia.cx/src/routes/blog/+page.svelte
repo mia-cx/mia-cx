@@ -47,13 +47,14 @@
         display: grid;
     }
     li {
-        border-top: 1px solid var(--panel-line);
+        padding: 24px 0;
     }
+    /* Only the text is the link, not the row around it. */
     a {
         display: grid;
         justify-items: start;
         gap: 8px;
-        padding: 24px 0;
+        width: fit-content;
         text-decoration: none;
     }
     a:hover .title,

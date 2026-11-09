@@ -56,16 +56,14 @@
         display: grid;
     }
     .grid > li {
-        border-top: 1px solid var(--panel-line);
+        padding: 20px 0;
     }
-    .grid > li:last-child {
-        border-bottom: 1px solid var(--panel-line);
-    }
+    /* Only the text is the link, not the row around it. */
     .grid > li > :global(*) {
         display: grid;
         justify-items: start;
         gap: 6px;
-        padding: 20px 0;
+        width: fit-content;
         text-decoration: none;
     }
     .grid > li > :global(a:hover .title),
