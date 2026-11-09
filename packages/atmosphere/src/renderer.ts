@@ -68,9 +68,31 @@ export const MAX_CURSOR_DENSITY_PASSES = 2;
 export const MAX_TIMESTAMPED_PASSES = MAX_RENDER_PASSES + MAX_CURSOR_DENSITY_PASSES;
 export const CURSOR_DENSITY_UNIFORM_BYTES = 32;
 const GPU_QUERY_COUNT = MAX_TIMESTAMPED_PASSES * 2;
-const PIPELINE_COUNT = 15;
-const CURSOR_DECAY_PIPELINE = 13;
-const CURSOR_PAINT_PIPELINE = 14;
+/** Render-pipeline indices, in the order create() compiles them; compact post variants follow. */
+const PIPELINE = {
+    base: 0,
+    blur: 1,
+    octave: 2,
+    display: 3,
+    bloomExtract: 4,
+    bloomBlur: 5,
+    godRays: 6,
+    post: 7,
+    present: 8,
+    colour: 9,
+    lut: 10,
+    copy: 11,
+    cursorDecay: 12,
+    cursorPaint: 13,
+} as const;
+const PIPELINE_COUNT = 14;
+/** Render-target indices: the linear-light ping-pong pair, the display-space post pair, then god rays. */
+const TEXTURE = { rgbaA: 0, rgbaB: 1, postA: 2, postB: 3, godRays: 4 } as const;
+const TEXTURE_COUNT = 5;
+/** The linear-light slot a pass reading `current` writes to; a post-space source folds back into the pair. */
+function rgbaDestination(current: number) {
+    return current === TEXTURE.rgbaA ? TEXTURE.rgbaB : TEXTURE.rgbaA;
+}
 export const GPU_FRAME_TIMING_RING_SIZE = 3;
 export const MAX_IN_FLIGHT_SUBMISSIONS = 3;
 export const GPU_TIMING_WATCHDOG_MS = 1_000;
@@ -117,7 +139,7 @@ export function aggregateGpuTimestamps(timestamps: ArrayLike<bigint>, labels: re
     });
     const sum = (...prefixes: string[]) =>
         passes.reduce((n, pass) => n + (prefixes.some((prefix) => pass.label.startsWith(prefix)) ? pass.ms : 0), 0);
-    const fieldMs = sum('base', 'field-materialize');
+    const fieldMs = sum('base');
     const cursorMs = sum('CURSOR:');
     const colourMs = sum('colour:');
     const postMs = sum('post:');
@@ -580,6 +602,13 @@ struct CursorUniform { parameters:array<vec4f,1> }
 // Feathered text and image regions from the page; alpha is the share of light taken away there.
 @group(0) @binding(6) var calmField:texture_2d<f32>;
 fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
+// Rounds the scalar to half precision first, as the r16float target of the former separate
+// materialise pass did, so fusing the two passes leaves every pixel as it was. Through
+// pack2x16float, which rounds like a texture store; quantizeToF16 does not on every driver.
+fn materialized(field:f32)->vec4f {
+    let stored=unpack2x16float(pack2x16float(vec2f(field,0.))).x;
+    return vec4f(vec3f(pow(clamp(stored,0.,1.),u.finalContrast)),1.);
+}
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
@@ -638,10 +667,11 @@ fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
     let densityResponse=select(pow(max(1.-clamp(natural,0.,1.),1e-6),darkBias),1.,darkBias==0.);
     natural+=cursorDensity*densityResponse;
     // Field shaping finishes here; recursive scatter/noise is the next destructive stage on top.
-    if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }
+    // The field leaves as linear-light grey, final contrast applied, ready for the Colour pipeline.
+    if(u.thresholdEnabled<.5) { return materialized(natural); }
     let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
     let thresholded=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
-    return vec4f(thresholded,0.,0.,1.);
+    return materialized(thresholded);
 }`;
 
 export const BLUR_SHADER_SOURCE =
@@ -828,13 +858,6 @@ export const BLOOM_BLUR_SHADER_SOURCE =
     /* wgsl */ `
 @group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let o=(1.+u.post[5].y*3.)/vec2f(textureDimensions(src)); var rgb=textureSample(src,samp,uv+o).rgb+textureSample(src,samp,uv-o).rgb+textureSample(src,samp,uv+vec2f(-o.x,o.y)).rgb+textureSample(src,samp,uv+vec2f(o.x,-o.y)).rgb; return vec4f(rgb*.25,1); }`;
-
-/** Scalar-to-RGBA materialization before the Colour pipeline. */
-export const MATERIALIZE_SHADER_SOURCE =
-    COMMON_SHADER_SOURCE +
-    /* wgsl */ `
-@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
-@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let v=pow(clamp(textureSample(src,samp,pos.xy/u.resolution).r,0.,1.),u.finalContrast); return vec4f(vec3f(v),1.); }`;
 
 /** A single literal post item; u.blurRadii[1].z selects its kind. */
 export const POST_EFFECT_SHADER_SOURCE =
@@ -1171,14 +1194,13 @@ export class AtmosphereRenderer {
         const maxBlend = { operation: 'max', srcFactor: 'one', dstFactor: 'one' } as const;
         // One batch, so every pipeline compiles in parallel; the order sets each one's index.
         self.pipelines = await Promise.all([
-            make(BASE_SHADER_SOURCE, { format: 'r16float' }),
+            make(BASE_SHADER_SOURCE, { format: 'rgba16float' }),
             make(BLUR_SHADER_SOURCE, { format: 'rgba16float' }),
             make(OCTAVE_SHADER_SOURCE, { format: 'rgba16float' }),
             make(DISPLAY_SHADER_SOURCE, { format }),
             make(BLOOM_EXTRACT_SHADER_SOURCE, { format: BLOOM_TEXTURE_FORMAT }),
             make(BLOOM_BLUR_SHADER_SOURCE, { format: BLOOM_TEXTURE_FORMAT }),
             make(GOD_RAYS_SHADER_SOURCE, { format: GOD_RAYS_TEXTURE_FORMAT }),
-            make(MATERIALIZE_SHADER_SOURCE, { format: 'rgba16float' }),
             make(primaryPostKind === undefined ? POST_EFFECT_SHADER_SOURCE : compactPostShaderSource(primaryPostKind), {
                 format: POST_TEXTURE_FORMAT,
             }),
@@ -1194,8 +1216,8 @@ export class AtmosphereRenderer {
             ...extraPostKinds.map((kind) => make(compactPostShaderSource(kind), { format: POST_TEXTURE_FORMAT })),
         ]);
         if (primaryPostKind !== undefined) {
-            self.compactPostPipelineIndices.set(primaryPostKind, 8);
-            if (primaryPostKind === 27) self.compactPostHistoryPipelines.add(8);
+            self.compactPostPipelineIndices.set(primaryPostKind, PIPELINE.post);
+            if (primaryPostKind === 27) self.compactPostHistoryPipelines.add(PIPELINE.post);
             const firstExtraIndex = self.pipelines.length - extraPostKinds.length;
             extraPostKinds.forEach((kind, offset) => {
                 const pipelineIndex = firstExtraIndex + offset;
@@ -1328,7 +1350,7 @@ export class AtmosphereRenderer {
         this.textureViews = [];
         this.bindGroups.clear();
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
-        // Scalar field, linear Colour/Octaves, and display-space Post ping-pong.
+        // Laid out as TEXTURE: linear Field/Colour/Octaves and display-space Post ping-pong, then god rays.
         // A paused redraw is deliberately a one-off quality pass.  Do not move the adaptive controller:
         // its effective scale is the scale to which we return when animation resumes.
         const targetScale = this.paused
@@ -1336,9 +1358,6 @@ export class AtmosphereRenderer {
             : this.adaptiveResolution.effectiveScale;
         const size = scaledSize(this.canvas.width, this.canvas.height, targetScale);
         this.textures = [
-            ...Array.from({ length: 2 }, () =>
-                this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage }),
-            ),
             ...Array.from({ length: 2 }, () =>
                 this.device!.createTexture({
                     size: [size.width, size.height],
@@ -1400,9 +1419,9 @@ export class AtmosphereRenderer {
         if (changed) this.recreateTargets();
         else if (resetHistory) {
             // Datamosh switched on while running: allocate its history at the current target size.
-            if (this.postPlanHasDatamosh() && !this.historyTexture && this.device && this.textures.length >= 6) {
+            if (this.postPlanHasDatamosh() && !this.historyTexture && this.device && this.textures.length) {
                 this.historyTexture = this.device.createTexture({
-                    size: [this.textures[4].width, this.textures[4].height],
+                    size: [this.textures[TEXTURE.postA].width, this.textures[TEXTURE.postA].height],
                     format: POST_TEXTURE_FORMAT,
                     usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
                 });
@@ -1632,8 +1651,8 @@ export class AtmosphereRenderer {
             buffers.length < MAX_RENDER_PASSES ||
             !s ||
             this.pipelines.length < PIPELINE_COUNT ||
-            this.textures.length < 7 ||
-            this.textureViews.length < 7
+            this.textures.length < TEXTURE_COUNT ||
+            this.textureViews.length < TEXTURE_COUNT
         )
             return;
         const enc = d.createCommandEncoder();
@@ -1656,7 +1675,7 @@ export class AtmosphereRenderer {
         );
         const gpuLabels: string[] | undefined = sampleGpu ? [] : undefined;
         const data = packUniform(
-            [this.textures[0].width, this.textures[0].height],
+            [this.textures[TEXTURE.rgbaA].width, this.textures[TEXTURE.rgbaA].height],
             this.simTime,
             this.options.seed,
             this.options.parameters,
@@ -1682,7 +1701,7 @@ export class AtmosphereRenderer {
             let bindGroup = this.bindGroups.get(cacheKey);
             if (!bindGroup) {
                 const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer } }];
-                if (pipelineIndex === 0)
+                if (pipelineIndex === PIPELINE.base)
                     entries.push(
                         { binding: 1, resource: { buffer: this.cursorBuffer! } },
                         { binding: 2, resource: this.densityViews[this.densityActive] },
@@ -1692,15 +1711,15 @@ export class AtmosphereRenderer {
                 if (sourceTextureIndex !== undefined) {
                     entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
                     if (usesSampler) entries.push({ binding: 2, resource: s });
-                    if (pipelineIndex === 3) {
+                    if (pipelineIndex === PIPELINE.display) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
-                        entries.push({ binding: 4, resource: this.textureViews[3] });
-                        entries.push({ binding: 5, resource: this.textureViews[4] });
-                    } else if (pipelineIndex === 4) {
+                        entries.push({ binding: 4, resource: this.textureViews[TEXTURE.rgbaB] });
+                        entries.push({ binding: 5, resource: this.textureViews[TEXTURE.postA] });
+                    } else if (pipelineIndex === PIPELINE.bloomExtract) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
-                        entries.push({ binding: 4, resource: this.textureViews[4] });
+                        entries.push({ binding: 4, resource: this.textureViews[TEXTURE.postA] });
                     } else if (
-                        (pipelineIndex === 8 && this.compactPostPipelineIndices.size === 0) ||
+                        (pipelineIndex === PIPELINE.post && this.compactPostPipelineIndices.size === 0) ||
                         this.compactPostHistoryPipelines.has(pipelineIndex)
                     ) {
                         entries.push({
@@ -1710,7 +1729,7 @@ export class AtmosphereRenderer {
                                     ? (this.historyView ?? this.historyPlaceholder())
                                     : this.textureViews[auxiliaryTextureIndex],
                         });
-                    } else if (pipelineIndex === 11 && lutId) {
+                    } else if (pipelineIndex === PIPELINE.lut && lutId) {
                         entries.push({
                             binding: 3,
                             resource:
@@ -1792,7 +1811,7 @@ export class AtmosphereRenderer {
         }
         if (this.densityMayBeNonzero && this.densityDecay < 0.999999) {
             const next = 1 - this.densityActive,
-                pipeline = this.pipelines[CURSOR_DECAY_PIPELINE];
+                pipeline = this.pipelines[PIPELINE.cursorDecay];
             d.queue.writeBuffer(this.densityParamsBuffer!, 0, new Float32Array([this.densityDecay, 0, 0, 0]));
             const group = d.createBindGroup({
                 layout: pipeline.getBindGroupLayout(0),
@@ -1802,7 +1821,7 @@ export class AtmosphereRenderer {
                     { binding: 2, resource: this.densitySampler! },
                 ],
             });
-            cursorPass(CURSOR_DECAY_PIPELINE, this.densityViews[next], group, 3, 1, 'CURSOR:DECAY', 'clear');
+            cursorPass(PIPELINE.cursorDecay, this.densityViews[next], group, 3, 1, 'CURSOR:DECAY', 'clear');
             this.densityActive = next;
             this.densityDecay = 1;
             this.bindGroups.clear();
@@ -1817,7 +1836,7 @@ export class AtmosphereRenderer {
                 0,
                 new Float32Array([this.densityWidth / this.densityHeight, 0, 0, 0]),
             );
-            const pipeline = this.pipelines[CURSOR_PAINT_PIPELINE],
+            const pipeline = this.pipelines[PIPELINE.cursorPaint],
                 group = d.createBindGroup({
                     layout: pipeline.getBindGroupLayout(0),
                     entries: [
@@ -1826,7 +1845,7 @@ export class AtmosphereRenderer {
                     ],
                 });
             cursorPass(
-                CURSOR_PAINT_PIPELINE,
+                PIPELINE.cursorPaint,
                 this.densityViews[this.densityActive],
                 group,
                 6,
@@ -1838,11 +1857,8 @@ export class AtmosphereRenderer {
             this.densityMayBeNonzero = true;
             this.bindGroups.clear();
         }
-        draw(this.textureViews[0], 0, undefined, false, 'base');
-        data[0] = this.textures[2].width;
-        data[1] = this.textures[2].height;
-        draw(this.textureViews[2], 7, 0, true, 'field-materialize');
-        let rgbaCurrent = 2;
+        draw(this.textureViews[TEXTURE.rgbaA], PIPELINE.base, undefined, false, 'base');
+        let rgbaCurrent: number = TEXTURE.rgbaA;
         data.set(
             this.options.bakedPostParameters ?? POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
@@ -1851,8 +1867,15 @@ export class AtmosphereRenderer {
         if (this.adjustmentLutActive) {
             data.fill(0, 60, UNIFORM_FLOATS);
             data.set([0, 0, 0, 1, 1, 1, 1], 60);
-            const destination = rgbaCurrent === 2 ? 3 : 2;
-            draw(this.textureViews[destination], 11, rgbaCurrent, true, 'colour:adjustments', 'internal-adjustments');
+            const destination = rgbaDestination(rgbaCurrent);
+            draw(
+                this.textureViews[destination],
+                PIPELINE.lut,
+                rgbaCurrent,
+                true,
+                'colour:adjustments',
+                'internal-adjustments',
+            );
             rgbaCurrent = destination;
         }
         const colourOccurrences = new Map<string, number>();
@@ -1870,8 +1893,8 @@ export class AtmosphereRenderer {
                     if (!lut) continue;
                     data.fill(0, 60, UNIFORM_FLOATS);
                     data.set([...lut.asset.domainMin, ...lut.asset.domainMax, effect.values[0]], 60);
-                    const destination = rgbaCurrent === 2 ? 3 : 2;
-                    draw(this.textureViews[destination], 11, rgbaCurrent, true, timingLabel, effect.assetId);
+                    const destination = rgbaDestination(rgbaCurrent);
+                    draw(this.textureViews[destination], PIPELINE.lut, rgbaCurrent, true, timingLabel, effect.assetId);
                     rgbaCurrent = destination;
                     continue;
                 }
@@ -1897,8 +1920,8 @@ export class AtmosphereRenderer {
             data.fill(0, 60, UNIFORM_FLOATS);
             data.set(values.slice(0, 40), 60);
             data[58] = kind;
-            const destination = rgbaCurrent === 2 ? 3 : 2;
-            draw(this.textureViews[destination], 10, rgbaCurrent, true, timingLabel);
+            const destination = rgbaDestination(rgbaCurrent);
+            draw(this.textureViews[destination], PIPELINE.colour, rgbaCurrent, true, timingLabel);
             rgbaCurrent = destination;
         }
         data.set(
@@ -1906,25 +1929,25 @@ export class AtmosphereRenderer {
             60,
         );
         if (postStages.some((effect) => effect.kind === 'datamosh') && !this.historyValid && this.historyTexture) {
-            draw(this.textureViews[4], 12, rgbaCurrent, false, 'history-initialize');
-            enc.copyTextureToTexture({ texture: this.textures[4] }, { texture: this.historyTexture }, [
-                this.textures[4].width,
-                this.textures[4].height,
+            draw(this.textureViews[TEXTURE.postA], PIPELINE.copy, rgbaCurrent, false, 'history-initialize');
+            enc.copyTextureToTexture({ texture: this.textures[TEXTURE.postA] }, { texture: this.historyTexture }, [
+                this.textures[TEXTURE.postA].width,
+                this.textures[TEXTURE.postA].height,
             ]);
             this.historyValid = true;
         }
         let postRan = false;
         for (const effect of postStages) {
             if (effect.kind === 'datamosh' && !this.historyValid) continue;
-            const destination = !postRan ? 4 : rgbaCurrent === 4 ? 5 : 4;
+            const destination = postRan && rgbaCurrent === TEXTURE.postA ? TEXTURE.postB : TEXTURE.postA;
             if (effect.kind === 'god-rays') {
-                data[0] = this.textures[6].width;
-                data[1] = this.textures[6].height;
-                draw(this.textureViews[6], 6, rgbaCurrent, true, `${effect.label}:rays`);
-                data[0] = this.textures[4].width;
-                data[1] = this.textures[4].height;
+                data[0] = this.textures[TEXTURE.godRays].width;
+                data[1] = this.textures[TEXTURE.godRays].height;
+                draw(this.textureViews[TEXTURE.godRays], PIPELINE.godRays, rgbaCurrent, true, `${effect.label}:rays`);
+                data[0] = this.textures[TEXTURE.postA].width;
+                data[1] = this.textures[TEXTURE.postA].height;
                 data[58] = 27;
-                const pipelineIndex = this.compactPostPipelineIndices.get(27) ?? 8;
+                const pipelineIndex = this.compactPostPipelineIndices.get(27) ?? PIPELINE.post;
                 draw(
                     this.textureViews[destination],
                     pipelineIndex,
@@ -1932,7 +1955,7 @@ export class AtmosphereRenderer {
                     true,
                     `${effect.label}:composite`,
                     undefined,
-                    6,
+                    TEXTURE.godRays,
                 );
                 rgbaCurrent = destination;
                 postRan = true;
@@ -1945,7 +1968,7 @@ export class AtmosphereRenderer {
                       ? 26
                       : POST_KIND_INDEX[effect.kind];
             const postKind = data[58];
-            const pipelineIndex = this.compactPostPipelineIndices.get(postKind) ?? 8;
+            const pipelineIndex = this.compactPostPipelineIndices.get(postKind) ?? PIPELINE.post;
             draw(this.textureViews[destination], pipelineIndex, rgbaCurrent, true, effect.label);
             rgbaCurrent = destination;
             postRan = true;
@@ -1960,19 +1983,19 @@ export class AtmosphereRenderer {
         for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
             data[29] = octave;
             if (octaveBlurIsActive(this.options.parameters, octave)) {
-                const destination = rgbaCurrent >= 4 ? 2 : rgbaCurrent === 2 ? 3 : 2;
-                draw(this.textureViews[destination], 1, rgbaCurrent, true, `blur${octave + 1}`);
+                const destination = rgbaDestination(rgbaCurrent);
+                draw(this.textureViews[destination], PIPELINE.blur, rgbaCurrent, true, `blur${octave + 1}`);
                 rgbaCurrent = destination;
             }
             if (octaveEffectIsActive(this.options.parameters, octave)) {
-                const destination = rgbaCurrent >= 4 ? 2 : rgbaCurrent === 2 ? 3 : 2;
-                draw(this.textureViews[destination], 2, rgbaCurrent, true, `octave${octave + 1}`);
+                const destination = rgbaDestination(rgbaCurrent);
+                draw(this.textureViews[destination], PIPELINE.octave, rgbaCurrent, true, `octave${octave + 1}`);
                 rgbaCurrent = destination;
             }
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), 9, rgbaCurrent, true, 'display');
+        draw(c.getCurrentTexture().createView(), PIPELINE.present, rgbaCurrent, true, 'display');
         if (frameTimingSlot) {
             const timingEnd = enc.beginComputePass({
                 timestampWrites: {

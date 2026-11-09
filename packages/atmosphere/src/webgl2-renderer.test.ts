@@ -68,7 +68,6 @@ describe('WebGL2 parity backend', () => {
                 'DISPLAY',
                 'GOD_RAYS',
                 'LUT',
-                'MATERIALIZE',
                 'OCTAVE',
                 'POST_EFFECT',
                 'PRESENT',
@@ -81,17 +80,18 @@ describe('WebGL2 parity backend', () => {
     });
 
     it('takes the calm mask off the field before the threshold on both backends', () => {
-        const calmed = (source: string, sample: string, multiply: string) => {
+        const calmed = (source: string, sample: string, multiply: RegExp) => {
             expect(source).toContain(sample);
-            expect(source).toContain(multiply);
-            expect(source.indexOf(multiply)).toBeLessThan(source.indexOf('threshold', source.indexOf(multiply)));
+            const at = source.search(multiply);
+            expect(at).toBeGreaterThan(-1);
+            expect(at).toBeLessThan(source.indexOf('threshold', at));
         };
         calmed(
             BASE_SHADER_SOURCE,
             'textureSample(calmField,densitySampler,pos.xy/u.resolution).a',
-            'natural*=1.-calm;',
+            /natural\*=1\.-calm;/,
         );
-        calmed(shaders.BASE, 'texture(_group_0_binding_6_fs,', 'natural = (_calm_natural * (1.0 - calm));');
+        calmed(shaders.BASE, 'texture(_group_0_binding_6_fs,', /natural = \(_e\d+ \* \(1\.0 - calm\)\);/);
     });
 
     it('samples the persistent density texture with generated GLSL parity', () => {
@@ -198,9 +198,7 @@ describe('WebGL2 parity backend', () => {
 
     it('uses internal base resolution except for native presentation and god rays', () => {
         const implementation = WebGL2Renderer.toString();
-        expect(implementation).toContain(
-            'const internalResolution = [this.baseTargets[0].width, this.baseTargets[0].height]',
-        );
+        expect(implementation).toContain('const internalResolution = [targets[0].width, targets[0].height]');
         // The test runner's transform may wrap imports, so match the call loosely.
         expect(implementation.match(/packUniform\)?\(internalResolution/g)).toHaveLength(2);
         expect(implementation).toContain('data[0] = this.godRays.width');

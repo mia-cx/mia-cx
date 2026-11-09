@@ -154,7 +154,7 @@ const ABLATION_WARMUPS = 3,
 const FENCE_POLL_MS = 4;
 const FENCE_EMERGENCY_MS = 750;
 const TIMER_QUERY_WATCHDOG_MS = 1_000;
-export type WebGL2TargetKind = 'base' | 'colour' | 'post' | 'god-rays';
+export type WebGL2TargetKind = 'colour' | 'post' | 'god-rays';
 type Target = {
     texture: WebGLTexture;
     framebuffer: WebGLFramebuffer;
@@ -163,7 +163,6 @@ type Target = {
     kind: WebGL2TargetKind;
 };
 export const WEBGL2_TARGET_FORMATS = {
-    base: 'R16F',
     colour: 'RGBA16F',
     post: 'RGBA8',
     history: 'RGBA8',
@@ -190,9 +189,16 @@ function compile(gl: WebGL2RenderingContext, type: number, source: string) {
     }
     return value;
 }
+/**
+ * Every top-left pass reads its source through `pos / resolution`, which lands on the row mirrored
+ * from where the source pass wrote: each such read flips the field once. BASE used to be read by a
+ * separate materialise pass; it now keeps GL's own bottom-left rows instead, so the flip that pass
+ * contributed still happens and the field is stored exactly where materialise left it.
+ */
+const STORED_ROW_PROGRAMS: ReadonlySet<ProgramKey> = new Set(['BASE']);
 function program(gl: WebGL2RenderingContext, fragment: string) {
     const vs = compile(gl, gl.VERTEX_SHADER, VERTEX),
-        fs = compile(gl, gl.FRAGMENT_SHADER, topLeftFragmentCoordinates(fragment)),
+        fs = compile(gl, gl.FRAGMENT_SHADER, fragment),
         p = gl.createProgram();
     if (!p) throw new Error('Could not allocate a WebGL2 program.');
     gl.attachShader(p, vs);
@@ -261,7 +267,6 @@ export class WebGL2Renderer implements RenderBackend {
         this.lostHandler?.(message);
     }
     private programs = new Map<ProgramKey, WebGLProgram>();
-    private baseTargets: Target[] = [];
     private colourTargets: Target[] = [];
     private postTargets: Target[] = [];
     private godRays?: Target;
@@ -431,7 +436,7 @@ export class WebGL2Renderer implements RenderBackend {
     }
     private installProgram(key: ProgramKey, source: string) {
         const gl = this.gl,
-            p = program(gl, source);
+            p = program(gl, STORED_ROW_PROGRAMS.has(key) ? source : topLeftFragmentCoordinates(source));
         this.programs.set(key, p);
         const i = gl.getUniformBlockIndex(p, 'U_block_0Fragment');
         if (i !== gl.INVALID_INDEX) gl.uniformBlockBinding(p, i, 0);
@@ -469,16 +474,15 @@ export class WebGL2Renderer implements RenderBackend {
             gl.texParameteri(gl.TEXTURE_2D, key, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        const single = kind === 'base',
-            post = kind === 'post';
+        const post = kind === 'post';
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
-            single ? gl.R16F : post ? gl.RGBA8 : gl.RGBA16F,
+            post ? gl.RGBA8 : gl.RGBA16F,
             width,
             height,
             0,
-            single ? gl.RED : gl.RGBA,
+            gl.RGBA,
             post ? gl.UNSIGNED_BYTE : gl.HALF_FLOAT,
             null,
         );
@@ -593,7 +597,6 @@ export class WebGL2Renderer implements RenderBackend {
     }
     private allTargets() {
         return [
-            ...this.baseTargets,
             ...this.colourTargets,
             ...this.postTargets,
             ...(this.godRays ? [this.godRays] : []),
@@ -617,10 +620,6 @@ export class WebGL2Renderer implements RenderBackend {
         // become its continuous workload.  Its effective scale remains the resume scale.
         const targetScale = this.paused ? (this.pinnedScale ?? this.options.renderScale) : this.adaptive.effectiveScale;
         const size = scaledSize(this.canvas.width, this.canvas.height, targetScale);
-        this.baseTargets = [
-            this.makeTarget('base', size.width, size.height),
-            this.makeTarget('base', size.width, size.height),
-        ];
         this.colourTargets = [
             this.makeTarget('colour', size.width, size.height),
             this.makeTarget('colour', size.width, size.height),
@@ -729,7 +728,7 @@ export class WebGL2Renderer implements RenderBackend {
         const ablation = this.ablationVariants?.[this.ablationVariant];
         if (!this.paused) this.simTime += Math.max(0, (now - this.lastTick) / 1000) * p.animationSpeed;
         this.lastTick = now;
-        const internalResolution: [number, number] = [this.baseTargets[0].width, this.baseTargets[0].height];
+        const internalResolution: [number, number] = [targets[0].width, targets[0].height];
         const timer =
             !ablationReady && !this.paused && this.timerQuery && this.pendingTimerQueries.length === 0
                 ? this.gl.createQuery()
@@ -742,8 +741,7 @@ export class WebGL2Renderer implements RenderBackend {
         this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.cursorBuffer);
         this.gl.bufferSubData(this.gl.UNIFORM_BUFFER, 0, packCursorUniform(p, this.cursorState));
         this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.uniformBuffer);
-        this.draw('BASE', this.baseTargets[0], undefined, undefined, undefined, 'base');
-        this.draw('MATERIALIZE', targets[next], this.baseTargets[0].texture, undefined, undefined, 'field-materialize');
+        this.draw('BASE', targets[next], undefined, undefined, undefined, 'base');
         [current, next] = [next, current];
         const nextLeadingKey = this.options.bakedLeadingAdjustments
             ? 'baked'

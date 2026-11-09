@@ -91,7 +91,7 @@ describe('field configuration', () => {
         }
         const implementation = AtmosphereRenderer.toString();
         expect(implementation).toContain('compactPostShaderSource(primaryPostKind)');
-        expect(implementation).toContain('this.compactPostPipelineIndices.get(postKind) ?? 8');
+        expect(implementation).toContain('this.compactPostPipelineIndices.get(postKind) ?? PIPELINE.post');
     });
 
     it('re-hashes film grain independently every rendered frame instead of translating a fixed field', () => {
@@ -655,7 +655,7 @@ describe('field configuration', () => {
         expect(bindGroupCacheKey(0, undefined, 0)).toBe('0:none:0');
     });
     it('can bypass the stage-one threshold to expose the raw field', () => {
-        expect(BASE_SHADER_SOURCE).toContain('if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }');
+        expect(BASE_SHADER_SOURCE).toContain('if(u.thresholdEnabled<.5) { return materialized(natural); }');
     });
     it('appends and packs independent lens and camera toggles without moving existing post uniforms', () => {
         const toggleKeys = [
