@@ -320,6 +320,21 @@ describe('field configuration', () => {
         expect(renderSize(801.9, 600.8, 3, Number.POSITIVE_INFINITY)).toEqual({ width: 2405, height: 1802 });
         expect(renderSize(0, 0, 2, 1)).toEqual({ width: 1, height: 1 });
     });
+    it('holds the canvas to the area of 3840×2160 at the viewport’s own aspect', () => {
+        // [CSS width, CSS height, DPR, cap] -> canvas; reasons: 5K, exact 4K, ultrawide, portrait, under budget.
+        const cases: [number, number, number, number, { width: number; height: number }][] = [
+            [5120, 2880, 1, Infinity, { width: 3840, height: 2160 }],
+            [2560, 1440, 1.5, 1.5, { width: 3840, height: 2160 }],
+            [3440, 1440, 2, 1.5, { width: 4451, height: 1863 }],
+            [1440, 3440, 2, 1.5, { width: 1863, height: 4451 }],
+            [1280, 800, 2, 1.5, { width: 1920, height: 1200 }],
+        ];
+        for (const [width, height, dpr, cap, expected] of cases) {
+            const size = renderSize(width, height, dpr, cap);
+            expect(size).toEqual(expected);
+            expect(size.width * size.height).toBeLessThanOrEqual(3840 * 2160);
+        }
+    });
     it('keeps scaled render targets valid', () => {
         expect(scaledSize(1202, 901, 0.5)).toEqual({ width: 601, height: 450 });
         expect(scaledSize(0, 0, 0.5)).toEqual({ width: 1, height: 1 });

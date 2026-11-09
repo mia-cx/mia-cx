@@ -366,10 +366,18 @@ export interface RenderOptions {
     bakedLeadingAdjustments?: ReturnType<typeof leadingAdjustmentRegion>;
 }
 
+/** Most pixels the canvas may hold: the area of 2160p, at whatever aspect the viewport has. */
+export const MAX_RENDER_PIXELS = 3840 * 2160;
+
+/**
+ * Canvas size for a CSS box: the DPR up to `cap`, then both sides shrunk by one factor if that would exceed
+ * MAX_RENDER_PIXELS, so ultrawide and portrait views keep their aspect. Adaptive resolution scales below this.
+ */
 export function renderSize(width: number, height: number, dpr: number, cap: number) {
+    const scale = Math.min(dpr, cap, Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, width * height)));
     return {
-        width: Math.max(1, Math.floor(width * Math.min(dpr, cap))),
-        height: Math.max(1, Math.floor(height * Math.min(dpr, cap))),
+        width: Math.max(1, Math.floor(width * scale)),
+        height: Math.max(1, Math.floor(height * scale)),
     };
 }
 
