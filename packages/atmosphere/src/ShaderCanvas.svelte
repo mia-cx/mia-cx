@@ -48,7 +48,9 @@
     /** No usable graphics backend, or the device was lost: show the flat haze instead. */
     let failed = $state(false);
     let status = $state('Starting graphics…');
-    let fps = $state(0);
+    /** The F key's overlay: frame rate and render size, plus GPU time per pass when the backend reports it. */
+    let frameStats = $state('');
+    let gpuStats = $state('');
     let fpsVisible = $state(false);
     let options = BAKED_RENDER_OPTIONS;
     const cursorState = new CursorState();
@@ -194,12 +196,20 @@
                 if (disposed) return instance.destroy();
                 renderer = instance;
                 let lastFpsUpdate = 0;
-                instance.onStats = (nextFps) => {
+                instance.onStats = (nextFps, width, height, _rolling, scale = 1) => {
                     if (!fpsVisible) return;
                     const now = performance.now();
                     if (now - lastFpsUpdate < 500) return;
                     lastFpsUpdate = now;
-                    fps = nextFps;
+                    // Passes run at the canvas size times the adaptive scale.
+                    const size = `${Math.floor(width * scale)}×${Math.floor(height * scale)}`;
+                    frameStats = `${nextFps.toFixed(1)} FPS · ${instance.backend} ${size}`;
+                };
+                // WebGPU samples timestamps every 30 frames; WebGL2 reports once, with ?webglAblate=1.
+                instance.onGpuStats = (stats) => {
+                    gpuStats = stats
+                        ? `GPU ${stats.totalMs.toFixed(2)} ms · ${stats.passes.map(({ label, ms }) => `${label} ${ms.toFixed(2)}`).join(' · ')}`
+                        : '';
                 };
                 instance.setCursorState(cursorState);
                 instance.setCalmMask(calmMask.canvas);
@@ -321,7 +331,7 @@
 ></canvas>
 <!-- A layer of its own, so a lost device's last frame can never show over it. -->
 {#if failed}<div class="fallback" aria-hidden="true"></div>{/if}
-{#if ready && fpsVisible}<output class="fps" aria-label="Frames per second">{fps.toFixed(1)} FPS</output>{/if}
+{#if ready && fpsVisible}<output class="fps" aria-label="Render statistics">{frameStats}{#if gpuStats}<br />{gpuStats}{/if}</output>{/if}
 {#if !ready}<p class="visually-hidden" role="status" aria-live="polite">{status}</p>{/if}
 
 <style>
@@ -390,6 +400,7 @@
         top: max(0.5rem, env(safe-area-inset-top));
         left: max(0.5rem, env(safe-area-inset-left));
         z-index: 50;
+        max-width: min(40rem, calc(100vw - 1rem));
         padding: 0.25rem 0.4rem;
         color: #fff;
         background: rgb(0 0 0 / 70%);
