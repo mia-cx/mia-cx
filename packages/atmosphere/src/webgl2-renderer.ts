@@ -114,7 +114,7 @@ void main() {
     rgb = vec3(texture(_group_0_binding_1_fs, redUv).x, rgb.y, texture(_group_0_binding_1_fs, blueUv).z);`;
     else
         effect = `
-    rgb = blend_2(rgb, texture(_group_0_binding_3_fs, vec2(uv.x, 1.0 - uv.y)).xyz, _group_0_binding_0_fs.post[8].x);`;
+    rgb = blend_2(rgb, texture(_group_0_binding_3_fs, uv).xyz, _group_0_binding_0_fs.post[8].x);`;
     return `${header}const int kind = ${index};\n${common}${effect}\n    _fs2p_location0 = vec4(rgb, 1.0);\n}`;
 }
 export function specializeWebGL2Shader(name: keyof typeof SELECTORS, index: number): string {
@@ -169,7 +169,12 @@ export const WEBGL2_TARGET_FORMATS = {
     'god-rays': 'RGBA16F',
 } as const;
 
-/** Convert GLSL's bottom-left fragment position to canonical WGSL top-left coordinates. */
+/**
+ * Convert GLSL's bottom-left fragment position to canonical WGSL top-left coordinates, for a pass that draws to the
+ * canvas. Render-target passes keep GL's own position instead: their rows are then stored top row first, the layout
+ * WebGPU uses and the one the calm mask and density uploads already have, so each pass reads its source the right
+ * way up. Flipping those too would mirror the image once per pass, leaving it upside down after an odd number.
+ */
 export function topLeftFragmentCoordinates(source: string) {
     return source.replaceAll(
         'vec4 pos = gl_FragCoord;',
@@ -189,9 +194,9 @@ function compile(gl: WebGL2RenderingContext, type: number, source: string) {
     }
     return value;
 }
-function program(gl: WebGL2RenderingContext, fragment: string) {
+function program(gl: WebGL2RenderingContext, fragment: string, drawsToCanvas = false) {
     const vs = compile(gl, gl.VERTEX_SHADER, VERTEX),
-        fs = compile(gl, gl.FRAGMENT_SHADER, topLeftFragmentCoordinates(fragment)),
+        fs = compile(gl, gl.FRAGMENT_SHADER, drawsToCanvas ? topLeftFragmentCoordinates(fragment) : fragment),
         p = gl.createProgram();
     if (!p) throw new Error('Could not allocate a WebGL2 program.');
     gl.attachShader(p, vs);
@@ -427,7 +432,8 @@ export class WebGL2Renderer implements RenderBackend {
     }
     private installProgram(key: ProgramKey, source: string) {
         const gl = this.gl,
-            p = program(gl, source);
+            // PRESENT flips itself; DISPLAY is the other program that draws to the canvas (presentation-lite ablation).
+            p = program(gl, source, key === 'DISPLAY');
         this.programs.set(key, p);
         const i = gl.getUniformBlockIndex(p, 'U_block_0Fragment');
         if (i !== gl.INVALID_INDEX) gl.uniformBlockBinding(p, i, 0);
