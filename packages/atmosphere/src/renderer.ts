@@ -68,9 +68,32 @@ export const MAX_CURSOR_DENSITY_PASSES = 2;
 export const MAX_TIMESTAMPED_PASSES = MAX_RENDER_PASSES + MAX_CURSOR_DENSITY_PASSES;
 export const CURSOR_DENSITY_UNIFORM_BYTES = 32;
 const GPU_QUERY_COUNT = MAX_TIMESTAMPED_PASSES * 2;
+/** Render-pipeline indices, in the order create() compiles them; compact post variants follow. */
+const PIPELINE = {
+    base: 0,
+    blur: 1,
+    octave: 2,
+    display: 3,
+    bloomExtract: 4,
+    bloomBlur: 5,
+    godRays: 6,
+    post: 7,
+    present: 8,
+    colour: 9,
+    lut: 10,
+    copy: 11,
+    cursorDecay: 12,
+    cursorPaint: 13,
+    octaveChain: 14,
+} as const;
 const PIPELINE_COUNT = 15;
-const CURSOR_DECAY_PIPELINE = 13;
-const CURSOR_PAINT_PIPELINE = 14;
+/** Render-target indices: the linear-light ping-pong pair, the display-space post pair, then god rays. */
+const TEXTURE = { rgbaA: 0, rgbaB: 1, postA: 2, postB: 3, godRays: 4 } as const;
+const TEXTURE_COUNT = 5;
+/** The linear-light slot a pass reading `current` writes to; a post-space source folds back into the pair. */
+function rgbaDestination(current: number) {
+    return current === TEXTURE.rgbaA ? TEXTURE.rgbaB : TEXTURE.rgbaA;
+}
 export const GPU_FRAME_TIMING_RING_SIZE = 3;
 export const MAX_IN_FLIGHT_SUBMISSIONS = 3;
 export const GPU_TIMING_WATCHDOG_MS = 1_000;
@@ -117,7 +140,7 @@ export function aggregateGpuTimestamps(timestamps: ArrayLike<bigint>, labels: re
     });
     const sum = (...prefixes: string[]) =>
         passes.reduce((n, pass) => n + (prefixes.some((prefix) => pass.label.startsWith(prefix)) ? pass.ms : 0), 0);
-    const fieldMs = sum('base', 'field-materialize');
+    const fieldMs = sum('base');
     const cursorMs = sum('CURSOR:');
     const colourMs = sum('colour:');
     const postMs = sum('post:');
@@ -356,6 +379,8 @@ export interface RenderOptions {
     seed: number;
     dprCap: number;
     renderScale: number;
+    /** Pins the adaptive scale to a fixed value (clamped to [0.125, 1]); used by ?atmo-scale=. */
+    pinnedScale?: number;
     parameters: ShaderParameters;
     colour: ColourEffect[];
     post: PostEffect[];
@@ -366,10 +391,21 @@ export interface RenderOptions {
     bakedLeadingAdjustments?: ReturnType<typeof leadingAdjustmentRegion>;
 }
 
+/** The effective adaptive-scale pin for ?atmo-scale=, clamped to the controller's own range. */
+export function pinnedRenderScale(options: Pick<RenderOptions, 'pinnedScale'>) {
+    const pin = options.pinnedScale;
+    return pin === undefined || !Number.isFinite(pin) ? undefined : Math.min(1, Math.max(0.125, pin));
+}
+
+/** Hard ceiling on rendered pixels: 3840×2160, so extreme DPR×CSS-size combos cannot quadruple cost. */
+export const MAX_RENDER_PIXELS = 3840 * 2160;
+
 export function renderSize(width: number, height: number, dpr: number, cap: number) {
+    let ratio = Math.min(dpr, cap);
+    if (width * ratio * height * ratio > MAX_RENDER_PIXELS) ratio = Math.sqrt(MAX_RENDER_PIXELS / (width * height));
     return {
-        width: Math.max(1, Math.floor(width * Math.min(dpr, cap))),
-        height: Math.max(1, Math.floor(height * Math.min(dpr, cap))),
+        width: Math.max(1, Math.floor(width * ratio)),
+        height: Math.max(1, Math.floor(height * ratio)),
     };
 }
 
@@ -433,6 +469,27 @@ export function octaveEffectIsActive(parameters: ShaderParameters, index: number
 
 export function octaveBlurIsActive(parameters: ShaderParameters, index: number) {
     return parameters[OCTAVE_BLUR_SCHEMA[index].key] > 0;
+}
+
+/**
+ * How many sample paths the fused octave chain walks, or undefined when the per-octave passes must
+ * run instead: no octave active, any blur or pixelation (the per-pass loop blurs even an inactive
+ * octave), any threshold, or more than OCTAVE_CHAIN_MAX_LEAVES paths. The fused chain keeps full
+ * precision where the passes round to half floats in between; a threshold turns that rounding into
+ * flipped pixels along its edge, so thresholds stay on the per-octave passes.
+ */
+export function fusedOctaveLeaves(parameters: ShaderParameters): number | undefined {
+    const octaves = Array.from({ length: OCTAVE_COUNT }, (_, index) => index);
+    const active = octaves.filter((index) => octaveEffectIsActive(parameters, index));
+    if (!active.length) return undefined;
+    if (octaves.some((index) => octaveBlurIsActive(parameters, index))) return undefined;
+    if (OCTAVE_PIXELATE_SCHEMA.some(({ key }) => parameters[key] >= 0.5)) return undefined;
+    if (OCTAVE_PARAMETER_SCHEMA.some(([, threshold]) => parameters[threshold.key] !== 0)) return undefined;
+    const leaves = active.reduce((product, index) => {
+        const [, , smoothness, distance] = OCTAVE_PARAMETER_SCHEMA[index];
+        return product * (parameters[distance.key] < 0.5 ? 1 : Math.round(1 + 3 * parameters[smoothness.key]));
+    }, 1);
+    return leaves <= OCTAVE_CHAIN_MAX_LEAVES ? leaves : undefined;
 }
 
 export function godRaysIsActive(parameters: ShaderParameters) {
@@ -567,6 +624,13 @@ struct CursorUniform { parameters:array<vec4f,1> }
 // Feathered text and image regions from the page; alpha is the share of light taken away there.
 @group(0) @binding(6) var calmField:texture_2d<f32>;
 fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
+// Rounds the scalar to half precision first, as the r16float target of the former separate
+// materialise pass did, so fusing the two passes leaves every pixel as it was. Through
+// pack2x16float, which rounds like a texture store; quantizeToF16 does not on every driver.
+fn materialized(field:f32)->vec4f {
+    let stored=unpack2x16float(pack2x16float(vec2f(field,0.))).x;
+    return vec4f(vec3f(pow(clamp(stored,0.,1.),u.finalContrast)),1.);
+}
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     var q=(pos.xy/u.resolution)*2.-1.; q.x*=u.resolution.x/u.resolution.y;
     let t=u.time;
@@ -625,10 +689,11 @@ fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
     let densityResponse=select(pow(max(1.-clamp(natural,0.,1.),1e-6),darkBias),1.,darkBias==0.);
     natural+=cursorDensity*densityResponse;
     // Field shaping finishes here; recursive scatter/noise is the next destructive stage on top.
-    if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }
+    // The field leaves as linear-light grey, final contrast applied, ready for the Colour pipeline.
+    if(u.thresholdEnabled<.5) { return materialized(natural); }
     let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
     let thresholded=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
-    return vec4f(thresholded,0.,0.,1.);
+    return materialized(thresholded);
 }`;
 
 export const BLUR_SHADER_SOURCE =
@@ -651,10 +716,8 @@ export const BLUR_SHADER_SOURCE =
     return vec4f(value,1.);
 }`;
 
-export const OCTAVE_SHADER_SOURCE =
-    COMMON_SHADER_SOURCE +
-    /* wgsl */ `
-@group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
+/** Hash and Frosted Glass scatter shared by the per-octave pass and the fused octave chain. */
+const OCTAVE_SCATTER_SOURCE = /* wgsl */ `
 fn avalanche(value: u32) -> u32 {
     var x=value;
     x^=x>>16u; x*=0x7feb352du; x^=x>>15u; x*=0x846ca68bu; x^=x>>16u;
@@ -674,7 +737,14 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     let bits=tileHash(tile,octaveFrameSalt ^ (sampleIndex*0x165667b1u));
     let radius=f32(bits>>8u)*(1./16777215.)*distance;
     return directions[bits&15u]*radius;
-}
+}`;
+
+export const OCTAVE_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;` +
+    OCTAVE_SCATTER_SOURCE +
+    /* wgsl */ `
 @fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let sourceSize=vec2f(textureDimensions(src));
@@ -723,6 +793,63 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,luminance);
     let scale=select(0.,thresholded/max(luminance,.000001),luminance>0.);
     return vec4f(injected*scale,1.);
+}`;
+
+/** Most sample paths the fused octave chain walks per pixel; past this the per-octave passes are cheaper. */
+export const OCTAVE_CHAIN_MAX_LEAVES = 16;
+/**
+ * Every active octave in one pass. A separate octave pass averages whole-texel displaced reads of the
+ * one before and adds tile noise, so the chain is a mean over every combination of per-octave sample
+ * choices (a "leaf"), each one texel load plus the noise met along its walk. Only runs while no
+ * octave blurs, pixelates or thresholds: see fusedOctaveLeaves.
+ */
+export const OCTAVE_CHAIN_SHADER_SOURCE =
+    COMMON_SHADER_SOURCE +
+    /* wgsl */ `
+@group(0) @binding(1) var src: texture_2d<f32>;` +
+    OCTAVE_SCATTER_SOURCE +
+    /* wgsl */ `
+// The pixel a separate pass for one octave works in, given the texel it writes. WebGPU stores rows
+// top-down, so it is the same texel; WebGL2 rewrites this to mirror rows (see octaveChainRows).
+fn passPixel(texel: vec2i, size: vec2i) -> vec2i { return texel; }
+fn octaveIsActive(s: vec4f) -> bool { return s.x!=0. || s.y!=0. || s.w!=0.; }
+fn sampleCount(s: vec4f) -> u32 {
+    // Offsets round r*direction with r below the distance: under half a texel every sample is the same.
+    if(s.w<.5) { return 1u; }
+    return u32(round(mix(1.,4.,s.z)));
+}
+@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let size=vec2i(textureDimensions(src));
+    let frame=u32(u.frameIndex);
+    var leaves=1u;
+    for(var o=0u;o<5u;o++) { if(octaveIsActive(u.octaves[o])) { leaves*=sampleCount(u.octaves[o]); } }
+    var sum=vec3f(0.);
+    for(var leaf=0u;leaf<leaves;leaf++) {
+        var texel=vec2i(pos.xy); var rest=leaf; var noise=0.;
+        // Walk from the last octave applied back to the first, as each pass reads the one before it.
+        for(var k=0u;k<5u;k++) {
+            let octave=4u-k;
+            let s=u.octaves[octave];
+            if(!octaveIsActive(s)) { continue; }
+            let pixel=passPixel(texel,size);
+            let tileShift=4u-octave;
+            let tile=vec2u(pixel)>>vec2u(tileShift);
+            if(s.x!=0.) {
+                let noiseSalt=(octave*0x27d4eb2du) ^ (frame*0x165667b1u) ^ 0xa511e9b3u;
+                noise+=(f32(tileHash(tile,noiseSalt))*(1./4294967295.)-.5)*s.x;
+            }
+            var offset=vec2i(0);
+            if(s.w>0.) {
+                let count=sampleCount(s);
+                let sampleIndex=rest%count; rest/=count;
+                let octaveFrameSalt=(octave*0x27d4eb2du) ^ (frame*0x9e3779b9u);
+                offset=vec2i(round(scatterOffset(tile,sampleIndex,s.w,octaveFrameSalt)))*i32(1u<<tileShift);
+            }
+            texel=clamp(pixel+offset,vec2i(0),size-vec2i(1));
+        }
+        sum+=textureLoad(src,texel,0).rgb+noise;
+    }
+    return vec4f(sum/f32(leaves),1.);
 }`;
 
 export const GOD_RAYS_TEXTURE_FORMAT: GPUTextureFormat = 'rgba16float';
@@ -815,13 +942,6 @@ export const BLOOM_BLUR_SHADER_SOURCE =
     /* wgsl */ `
 @group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let o=(1.+u.post[5].y*3.)/vec2f(textureDimensions(src)); var rgb=textureSample(src,samp,uv+o).rgb+textureSample(src,samp,uv-o).rgb+textureSample(src,samp,uv+vec2f(-o.x,o.y)).rgb+textureSample(src,samp,uv+vec2f(o.x,-o.y)).rgb; return vec4f(rgb*.25,1); }`;
-
-/** Scalar-to-RGBA materialization before the Colour pipeline. */
-export const MATERIALIZE_SHADER_SOURCE =
-    COMMON_SHADER_SOURCE +
-    /* wgsl */ `
-@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
-@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let v=pow(clamp(textureSample(src,samp,pos.xy/u.resolution).r,0.,1.),u.finalContrast); return vec4f(vec3f(v),1.); }`;
 
 /** A single literal post item; u.blurRadii[1].z selects its kind. */
 export const POST_EFFECT_SHADER_SOURCE =
@@ -1012,6 +1132,9 @@ export class AtmosphereRenderer {
     private historyTexture?: GPUTexture;
     private historyView?: GPUTextureView;
     private historyValid = false;
+    /** Stand-in for post pipelines whose history binding is declared but unsampled (no datamosh). */
+    private placeholderView?: GPUTextureView;
+    private placeholderTexture?: GPUTexture;
     private datamoshWasActive = false;
     private buffers: GPUBuffer[] = [];
     private cursorBuffer?: GPUBuffer;
@@ -1042,6 +1165,7 @@ export class AtmosphereRenderer {
     private statsFrames = 0;
     private frameTelemetry = new FrameTelemetry();
     private adaptiveResolution: AdaptiveResolutionController;
+    private pinnedScale?: number;
     private destroyed = false;
     private submissionsInFlight = 0;
     private invalid = true;
@@ -1096,9 +1220,11 @@ export class AtmosphereRenderer {
         private canvas: HTMLCanvasElement,
         public options: RenderOptions,
     ) {
-        this.adaptiveResolution = new AdaptiveResolutionController(options.renderScale, {
+        this.pinnedScale = pinnedRenderScale(options);
+        this.adaptiveResolution = new AdaptiveResolutionController(this.pinnedScale ?? options.renderScale, {
             // Avoid making a native-resolution, many-pass frame the first workload on an unknown GPU.
-            initialScale: Math.min(0.5, options.renderScale),
+            initialScale: this.pinnedScale ?? Math.min(0.5, options.renderScale),
+            minScale: this.pinnedScale,
         });
         this.observer = new ResizeObserver(() => {
             this.resize();
@@ -1152,14 +1278,13 @@ export class AtmosphereRenderer {
         const maxBlend = { operation: 'max', srcFactor: 'one', dstFactor: 'one' } as const;
         // One batch, so every pipeline compiles in parallel; the order sets each one's index.
         self.pipelines = await Promise.all([
-            make(BASE_SHADER_SOURCE, { format: 'r16float' }),
+            make(BASE_SHADER_SOURCE, { format: 'rgba16float' }),
             make(BLUR_SHADER_SOURCE, { format: 'rgba16float' }),
             make(OCTAVE_SHADER_SOURCE, { format: 'rgba16float' }),
             make(DISPLAY_SHADER_SOURCE, { format }),
             make(BLOOM_EXTRACT_SHADER_SOURCE, { format: BLOOM_TEXTURE_FORMAT }),
             make(BLOOM_BLUR_SHADER_SOURCE, { format: BLOOM_TEXTURE_FORMAT }),
             make(GOD_RAYS_SHADER_SOURCE, { format: GOD_RAYS_TEXTURE_FORMAT }),
-            make(MATERIALIZE_SHADER_SOURCE, { format: 'rgba16float' }),
             make(primaryPostKind === undefined ? POST_EFFECT_SHADER_SOURCE : compactPostShaderSource(primaryPostKind), {
                 format: POST_TEXTURE_FORMAT,
             }),
@@ -1172,11 +1297,12 @@ export class AtmosphereRenderer {
                 format: CURSOR_DENSITY_FORMAT,
                 blend: { color: maxBlend, alpha: maxBlend },
             }),
+            make(OCTAVE_CHAIN_SHADER_SOURCE, { format: 'rgba16float' }),
             ...extraPostKinds.map((kind) => make(compactPostShaderSource(kind), { format: POST_TEXTURE_FORMAT })),
         ]);
         if (primaryPostKind !== undefined) {
-            self.compactPostPipelineIndices.set(primaryPostKind, 8);
-            if (primaryPostKind === 27) self.compactPostHistoryPipelines.add(8);
+            self.compactPostPipelineIndices.set(primaryPostKind, PIPELINE.post);
+            if (primaryPostKind === 27) self.compactPostHistoryPipelines.add(PIPELINE.post);
             const firstExtraIndex = self.pipelines.length - extraPostKinds.length;
             extraPostKinds.forEach((kind, offset) => {
                 const pipelineIndex = firstExtraIndex + offset;
@@ -1281,22 +1407,42 @@ export class AtmosphereRenderer {
             this.resetAdaptive(performance.now());
         }
     }
+    /** The post plan this frame would run; only datamosh reads the history texture. */
+    private postPlanHasDatamosh() {
+        return (this.options.bakedPostPlan ?? rendererStagePlan(this.options.post, this.options.parameters)).some(
+            (stage) => stage.kind === 'datamosh',
+        );
+    }
+    private historyPlaceholder() {
+        if (!this.placeholderTexture) {
+            this.placeholderTexture = this.device!.createTexture({
+                size: [1, 1],
+                format: POST_TEXTURE_FORMAT,
+                usage: GPUTextureUsage.TEXTURE_BINDING,
+            });
+            this.placeholderView = this.placeholderTexture.createView();
+        }
+        return this.placeholderView!;
+    }
     private recreateTargets(preserveHistory = this.paused) {
         if (!this.device) return;
         this.textures.forEach((texture) => texture.destroy());
-        if (!preserveHistory) this.historyTexture?.destroy();
+        if (!preserveHistory) {
+            this.historyTexture?.destroy();
+            this.historyTexture = undefined;
+            this.historyView = undefined;
+        }
         this.textureViews = [];
         this.bindGroups.clear();
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
-        // Scalar field, linear Colour/Octaves, and display-space Post ping-pong.
+        // Laid out as TEXTURE: linear Field/Colour/Octaves and display-space Post ping-pong, then god rays.
         // A paused redraw is deliberately a one-off quality pass.  Do not move the adaptive controller:
         // its effective scale is the scale to which we return when animation resumes.
-        const targetScale = this.paused ? this.options.renderScale : this.adaptiveResolution.effectiveScale;
+        const targetScale = this.paused
+            ? (this.pinnedScale ?? this.options.renderScale)
+            : this.adaptiveResolution.effectiveScale;
         const size = scaledSize(this.canvas.width, this.canvas.height, targetScale);
         this.textures = [
-            ...Array.from({ length: 2 }, () =>
-                this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage }),
-            ),
             ...Array.from({ length: 2 }, () =>
                 this.device!.createTexture({
                     size: [size.width, size.height],
@@ -1321,13 +1467,21 @@ export class AtmosphereRenderer {
             }),
         ];
         this.textureViews = this.textures.map((texture) => texture.createView());
-        if (!preserveHistory || !this.historyTexture) {
-            this.historyTexture = this.device.createTexture({
-                size: [size.width, size.height],
-                format: POST_TEXTURE_FORMAT,
-                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-            });
-            this.historyView = this.historyTexture.createView();
+        // History is only worth its VRAM and per-frame copy while the plan contains datamosh.
+        if (this.postPlanHasDatamosh()) {
+            if (!preserveHistory || !this.historyTexture) {
+                this.historyTexture = this.device.createTexture({
+                    size: [size.width, size.height],
+                    format: POST_TEXTURE_FORMAT,
+                    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+                });
+                this.historyView = this.historyTexture.createView();
+                this.historyValid = false;
+            }
+        } else if (this.historyTexture) {
+            this.historyTexture.destroy();
+            this.historyTexture = undefined;
+            this.historyView = undefined;
             this.historyValid = false;
         }
     }
@@ -1339,15 +1493,27 @@ export class AtmosphereRenderer {
         const resetHistory =
             this.options.seed !== options.seed || (datamoshIsActive(options.parameters) && !this.datamoshWasActive);
         this.options = options;
+        this.pinnedScale = pinnedRenderScale(options);
         if (scaleChanged) {
-            this.adaptiveResolution.setCeiling(options.renderScale, performance.now());
+            this.adaptiveResolution.setCeiling(this.pinnedScale ?? options.renderScale, performance.now());
             this.adaptiveGeneration += 1;
         }
         this.datamoshWasActive = datamoshIsActive(options.parameters);
         this.updateAdjustmentLut();
         this.updateCubeLuts();
         if (changed) this.recreateTargets();
-        else if (resetHistory) {
+        else if (this.device && this.textures.length && !this.historyTexture && this.postPlanHasDatamosh()) {
+            // Datamosh joined the post plan while running, by its switch or its post item: allocate
+            // its history at the current target size.
+            this.historyTexture = this.device.createTexture({
+                size: [this.textures[TEXTURE.postA].width, this.textures[TEXTURE.postA].height],
+                format: POST_TEXTURE_FORMAT,
+                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+            });
+            this.historyView = this.historyTexture.createView();
+            this.historyValid = false;
+            this.bindGroups.clear();
+        } else if (resetHistory) {
             this.historyValid = false;
             this.bindGroups.clear();
         }
@@ -1572,8 +1738,8 @@ export class AtmosphereRenderer {
             buffers.length < MAX_RENDER_PASSES ||
             !s ||
             this.pipelines.length < PIPELINE_COUNT ||
-            this.textures.length < 7 ||
-            this.textureViews.length < 7
+            this.textures.length < TEXTURE_COUNT ||
+            this.textureViews.length < TEXTURE_COUNT
         )
             return;
         const enc = d.createCommandEncoder();
@@ -1596,7 +1762,7 @@ export class AtmosphereRenderer {
         );
         const gpuLabels: string[] | undefined = sampleGpu ? [] : undefined;
         const data = packUniform(
-            [this.textures[0].width, this.textures[0].height],
+            [this.textures[TEXTURE.rgbaA].width, this.textures[TEXTURE.rgbaA].height],
             this.simTime,
             this.options.seed,
             this.options.parameters,
@@ -1622,7 +1788,7 @@ export class AtmosphereRenderer {
             let bindGroup = this.bindGroups.get(cacheKey);
             if (!bindGroup) {
                 const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer } }];
-                if (pipelineIndex === 0)
+                if (pipelineIndex === PIPELINE.base)
                     entries.push(
                         { binding: 1, resource: { buffer: this.cursorBuffer! } },
                         { binding: 2, resource: this.densityViews[this.densityActive] },
@@ -1632,25 +1798,25 @@ export class AtmosphereRenderer {
                 if (sourceTextureIndex !== undefined) {
                     entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
                     if (usesSampler) entries.push({ binding: 2, resource: s });
-                    if (pipelineIndex === 3) {
+                    if (pipelineIndex === PIPELINE.display) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
-                        entries.push({ binding: 4, resource: this.textureViews[3] });
-                        entries.push({ binding: 5, resource: this.textureViews[4] });
-                    } else if (pipelineIndex === 4) {
+                        entries.push({ binding: 4, resource: this.textureViews[TEXTURE.rgbaB] });
+                        entries.push({ binding: 5, resource: this.textureViews[TEXTURE.postA] });
+                    } else if (pipelineIndex === PIPELINE.bloomExtract) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
-                        entries.push({ binding: 4, resource: this.textureViews[4] });
+                        entries.push({ binding: 4, resource: this.textureViews[TEXTURE.postA] });
                     } else if (
-                        (pipelineIndex === 8 && this.compactPostPipelineIndices.size === 0) ||
+                        (pipelineIndex === PIPELINE.post && this.compactPostPipelineIndices.size === 0) ||
                         this.compactPostHistoryPipelines.has(pipelineIndex)
                     ) {
                         entries.push({
                             binding: 3,
                             resource:
                                 auxiliaryTextureIndex === undefined
-                                    ? this.historyView!
+                                    ? (this.historyView ?? this.historyPlaceholder())
                                     : this.textureViews[auxiliaryTextureIndex],
                         });
-                    } else if (pipelineIndex === 11 && lutId) {
+                    } else if (pipelineIndex === PIPELINE.lut && lutId) {
                         entries.push({
                             binding: 3,
                             resource:
@@ -1732,7 +1898,7 @@ export class AtmosphereRenderer {
         }
         if (this.densityMayBeNonzero && this.densityDecay < 0.999999) {
             const next = 1 - this.densityActive,
-                pipeline = this.pipelines[CURSOR_DECAY_PIPELINE];
+                pipeline = this.pipelines[PIPELINE.cursorDecay];
             d.queue.writeBuffer(this.densityParamsBuffer!, 0, new Float32Array([this.densityDecay, 0, 0, 0]));
             const group = d.createBindGroup({
                 layout: pipeline.getBindGroupLayout(0),
@@ -1742,7 +1908,7 @@ export class AtmosphereRenderer {
                     { binding: 2, resource: this.densitySampler! },
                 ],
             });
-            cursorPass(CURSOR_DECAY_PIPELINE, this.densityViews[next], group, 3, 1, 'CURSOR:DECAY', 'clear');
+            cursorPass(PIPELINE.cursorDecay, this.densityViews[next], group, 3, 1, 'CURSOR:DECAY', 'clear');
             this.densityActive = next;
             this.densityDecay = 1;
             this.bindGroups.clear();
@@ -1757,7 +1923,7 @@ export class AtmosphereRenderer {
                 0,
                 new Float32Array([this.densityWidth / this.densityHeight, 0, 0, 0]),
             );
-            const pipeline = this.pipelines[CURSOR_PAINT_PIPELINE],
+            const pipeline = this.pipelines[PIPELINE.cursorPaint],
                 group = d.createBindGroup({
                     layout: pipeline.getBindGroupLayout(0),
                     entries: [
@@ -1766,7 +1932,7 @@ export class AtmosphereRenderer {
                     ],
                 });
             cursorPass(
-                CURSOR_PAINT_PIPELINE,
+                PIPELINE.cursorPaint,
                 this.densityViews[this.densityActive],
                 group,
                 6,
@@ -1778,11 +1944,8 @@ export class AtmosphereRenderer {
             this.densityMayBeNonzero = true;
             this.bindGroups.clear();
         }
-        draw(this.textureViews[0], 0, undefined, false, 'base');
-        data[0] = this.textures[2].width;
-        data[1] = this.textures[2].height;
-        draw(this.textureViews[2], 7, 0, true, 'field-materialize');
-        let rgbaCurrent = 2;
+        draw(this.textureViews[TEXTURE.rgbaA], PIPELINE.base, undefined, false, 'base');
+        let rgbaCurrent: number = TEXTURE.rgbaA;
         data.set(
             this.options.bakedPostParameters ?? POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
@@ -1791,8 +1954,15 @@ export class AtmosphereRenderer {
         if (this.adjustmentLutActive) {
             data.fill(0, 60, UNIFORM_FLOATS);
             data.set([0, 0, 0, 1, 1, 1, 1], 60);
-            const destination = rgbaCurrent === 2 ? 3 : 2;
-            draw(this.textureViews[destination], 11, rgbaCurrent, true, 'colour:adjustments', 'internal-adjustments');
+            const destination = rgbaDestination(rgbaCurrent);
+            draw(
+                this.textureViews[destination],
+                PIPELINE.lut,
+                rgbaCurrent,
+                true,
+                'colour:adjustments',
+                'internal-adjustments',
+            );
             rgbaCurrent = destination;
         }
         const colourOccurrences = new Map<string, number>();
@@ -1810,8 +1980,8 @@ export class AtmosphereRenderer {
                     if (!lut) continue;
                     data.fill(0, 60, UNIFORM_FLOATS);
                     data.set([...lut.asset.domainMin, ...lut.asset.domainMax, effect.values[0]], 60);
-                    const destination = rgbaCurrent === 2 ? 3 : 2;
-                    draw(this.textureViews[destination], 11, rgbaCurrent, true, timingLabel, effect.assetId);
+                    const destination = rgbaDestination(rgbaCurrent);
+                    draw(this.textureViews[destination], PIPELINE.lut, rgbaCurrent, true, timingLabel, effect.assetId);
                     rgbaCurrent = destination;
                     continue;
                 }
@@ -1837,8 +2007,8 @@ export class AtmosphereRenderer {
             data.fill(0, 60, UNIFORM_FLOATS);
             data.set(values.slice(0, 40), 60);
             data[58] = kind;
-            const destination = rgbaCurrent === 2 ? 3 : 2;
-            draw(this.textureViews[destination], 10, rgbaCurrent, true, timingLabel);
+            const destination = rgbaDestination(rgbaCurrent);
+            draw(this.textureViews[destination], PIPELINE.colour, rgbaCurrent, true, timingLabel);
             rgbaCurrent = destination;
         }
         data.set(
@@ -1846,25 +2016,25 @@ export class AtmosphereRenderer {
             60,
         );
         if (postStages.some((effect) => effect.kind === 'datamosh') && !this.historyValid && this.historyTexture) {
-            draw(this.textureViews[4], 12, rgbaCurrent, false, 'history-initialize');
-            enc.copyTextureToTexture({ texture: this.textures[4] }, { texture: this.historyTexture }, [
-                this.textures[4].width,
-                this.textures[4].height,
+            draw(this.textureViews[TEXTURE.postA], PIPELINE.copy, rgbaCurrent, false, 'history-initialize');
+            enc.copyTextureToTexture({ texture: this.textures[TEXTURE.postA] }, { texture: this.historyTexture }, [
+                this.textures[TEXTURE.postA].width,
+                this.textures[TEXTURE.postA].height,
             ]);
             this.historyValid = true;
         }
         let postRan = false;
         for (const effect of postStages) {
             if (effect.kind === 'datamosh' && !this.historyValid) continue;
-            const destination = !postRan ? 4 : rgbaCurrent === 4 ? 5 : 4;
+            const destination = postRan && rgbaCurrent === TEXTURE.postA ? TEXTURE.postB : TEXTURE.postA;
             if (effect.kind === 'god-rays') {
-                data[0] = this.textures[6].width;
-                data[1] = this.textures[6].height;
-                draw(this.textureViews[6], 6, rgbaCurrent, true, `${effect.label}:rays`);
-                data[0] = this.textures[4].width;
-                data[1] = this.textures[4].height;
+                data[0] = this.textures[TEXTURE.godRays].width;
+                data[1] = this.textures[TEXTURE.godRays].height;
+                draw(this.textureViews[TEXTURE.godRays], PIPELINE.godRays, rgbaCurrent, true, `${effect.label}:rays`);
+                data[0] = this.textures[TEXTURE.postA].width;
+                data[1] = this.textures[TEXTURE.postA].height;
                 data[58] = 27;
-                const pipelineIndex = this.compactPostPipelineIndices.get(27) ?? 8;
+                const pipelineIndex = this.compactPostPipelineIndices.get(27) ?? PIPELINE.post;
                 draw(
                     this.textureViews[destination],
                     pipelineIndex,
@@ -1872,7 +2042,7 @@ export class AtmosphereRenderer {
                     true,
                     `${effect.label}:composite`,
                     undefined,
-                    6,
+                    TEXTURE.godRays,
                 );
                 rgbaCurrent = destination;
                 postRan = true;
@@ -1885,7 +2055,7 @@ export class AtmosphereRenderer {
                       ? 26
                       : POST_KIND_INDEX[effect.kind];
             const postKind = data[58];
-            const pipelineIndex = this.compactPostPipelineIndices.get(postKind) ?? 8;
+            const pipelineIndex = this.compactPostPipelineIndices.get(postKind) ?? PIPELINE.post;
             draw(this.textureViews[destination], pipelineIndex, rgbaCurrent, true, effect.label);
             rgbaCurrent = destination;
             postRan = true;
@@ -1897,22 +2067,28 @@ export class AtmosphereRenderer {
             ]);
             this.historyValid = true;
         }
-        for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
-            data[29] = octave;
-            if (octaveBlurIsActive(this.options.parameters, octave)) {
-                const destination = rgbaCurrent >= 4 ? 2 : rgbaCurrent === 2 ? 3 : 2;
-                draw(this.textureViews[destination], 1, rgbaCurrent, true, `blur${octave + 1}`);
-                rgbaCurrent = destination;
-            }
-            if (octaveEffectIsActive(this.options.parameters, octave)) {
-                const destination = rgbaCurrent >= 4 ? 2 : rgbaCurrent === 2 ? 3 : 2;
-                draw(this.textureViews[destination], 2, rgbaCurrent, true, `octave${octave + 1}`);
-                rgbaCurrent = destination;
+        if (fusedOctaveLeaves(this.options.parameters) !== undefined) {
+            const destination = rgbaDestination(rgbaCurrent);
+            draw(this.textureViews[destination], PIPELINE.octaveChain, rgbaCurrent, false, 'octaves');
+            rgbaCurrent = destination;
+        } else {
+            for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
+                data[29] = octave;
+                if (octaveBlurIsActive(this.options.parameters, octave)) {
+                    const destination = rgbaDestination(rgbaCurrent);
+                    draw(this.textureViews[destination], PIPELINE.blur, rgbaCurrent, true, `blur${octave + 1}`);
+                    rgbaCurrent = destination;
+                }
+                if (octaveEffectIsActive(this.options.parameters, octave)) {
+                    const destination = rgbaDestination(rgbaCurrent);
+                    draw(this.textureViews[destination], PIPELINE.octave, rgbaCurrent, true, `octave${octave + 1}`);
+                    rgbaCurrent = destination;
+                }
             }
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), 9, rgbaCurrent, true, 'display');
+        draw(c.getCurrentTexture().createView(), PIPELINE.present, rgbaCurrent, true, 'display');
         if (frameTimingSlot) {
             const timingEnd = enc.beginComputePass({
                 timestampWrites: {
@@ -2062,6 +2238,7 @@ export class AtmosphereRenderer {
         this.densityPaintParamsBuffer?.destroy();
         this.lutTextures.forEach(({ texture }) => texture.destroy());
         this.historyTexture?.destroy();
+        this.placeholderTexture?.destroy();
         this.textureViews = [];
         this.bindGroups.clear();
         this.buffers.forEach((buffer) => buffer.destroy());

@@ -19,7 +19,7 @@ describe('ShaderCanvas', () => {
 
     it('seeds every page load and honours the render scale prop', () => {
         expect(source).toContain('const pageSeed = Math.random() * 1000');
-        expect(source).toContain('{ ...loadedOptions, seed: pageSeed, renderScale, dprCap }');
+        expect(source).toContain('{ ...loadedOptions, seed: pageSeed, renderScale, dprCap, pinnedScale }');
     });
 
     it('pauses the field for reduced motion and destroys the renderer on unmount', () => {

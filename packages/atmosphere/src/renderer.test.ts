@@ -33,11 +33,13 @@ import {
     GPU_FRAME_TIMING_RING_SIZE,
     GPU_TIMING_WATCHDOG_MS,
     MAX_IN_FLIGHT_SUBMISSIONS,
+    MAX_RENDER_PIXELS,
     aggregateGpuTimestamps,
     advanceSimulationTime,
     bindGroupCacheKey,
     defaultParameters,
     fullResolutionPassSizes,
+    fusedOctaveLeaves,
     godRaysIsActive,
     octavePixelSizes,
     octaveBlurIsActive,
@@ -90,7 +92,7 @@ describe('field configuration', () => {
         }
         const implementation = AtmosphereRenderer.toString();
         expect(implementation).toContain('compactPostShaderSource(primaryPostKind)');
-        expect(implementation).toContain('this.compactPostPipelineIndices.get(postKind) ?? 8');
+        expect(implementation).toContain('this.compactPostPipelineIndices.get(postKind) ?? PIPELINE.post');
     });
 
     it('re-hashes film grain independently every rendered frame instead of translating a fixed field', () => {
@@ -255,11 +257,12 @@ describe('field configuration', () => {
     });
     it('renders one full-resolution frozen pause frame and restores adaptive rendering', () => {
         const source = AtmosphereRenderer.toString();
-        expect(source).toContain('this.paused ? this.options.renderScale : this.adaptiveResolution.effectiveScale');
+        expect(source).toContain('this.pinnedScale ?? this.options.renderScale');
         expect(source).toContain('if (value === this.paused) return');
         expect(source).toContain('this.recreateTargets(value)');
-        expect(source).toContain('if (!preserveHistory) this.historyTexture?.destroy()');
+        expect(source).toContain('this.historyTexture?.destroy()');
         expect(source).toContain('if (postRan && !this.paused && this.historyTexture)');
+        expect(source).toContain('postPlanHasDatamosh');
         expect(source).toContain('this.renderedFrames += 1');
         expect(source).toContain('const frameTimingSlot = this.paused ?');
         expect(source).toContain('!this.paused && this.querySet');
@@ -319,6 +322,30 @@ describe('field configuration', () => {
         expect(renderSize(801.9, 600.8, 3, 1.5)).toEqual({ width: 1202, height: 901 });
         expect(renderSize(801.9, 600.8, 3, Number.POSITIVE_INFINITY)).toEqual({ width: 2405, height: 1802 });
         expect(renderSize(0, 0, 2, 1)).toEqual({ width: 1, height: 1 });
+    });
+    it('bounds the render target by MAX_RENDER_PIXELS while preserving aspect', () => {
+        expect(MAX_RENDER_PIXELS).toBe(3840 * 2160);
+        const oversized = renderSize(2880, 1620, 2, 1.5);
+        expect(oversized.width * oversized.height).toBeLessThanOrEqual(MAX_RENDER_PIXELS);
+        expect(Math.abs(oversized.width - (oversized.height * 2880) / 1620)).toBeLessThanOrEqual(1);
+        // A 2880×1620 viewport at uncapped DPR 2 lands within a pixel of 3840×2160.
+        const uhd = renderSize(2880, 1620, 2, Number.POSITIVE_INFINITY);
+        expect(Math.abs(uhd.width - 3840)).toBeLessThanOrEqual(1);
+        expect(Math.abs(uhd.height - 2160)).toBeLessThanOrEqual(1);
+        expect(uhd.width * uhd.height).toBeLessThanOrEqual(MAX_RENDER_PIXELS);
+        expect(renderSize(2560, 1440, 1, 1.5)).toEqual({ width: 2560, height: 1440 });
+        expect(renderSize(412, 915, 3, 1.5)).toEqual({ width: 618, height: 1372 });
+        // Portrait and ultrawide viewports past the budget keep their own aspect, not 16:9.
+        for (const [width, height] of [
+            [2160, 3840],
+            [3440, 1440],
+            [5120, 1440],
+        ]) {
+            const capped = renderSize(width, height, 2, Number.POSITIVE_INFINITY);
+            expect(capped.width * capped.height).toBeLessThanOrEqual(MAX_RENDER_PIXELS);
+            expect(capped.width * capped.height).toBeGreaterThan(MAX_RENDER_PIXELS * 0.999);
+            expect(Math.abs(capped.width / capped.height - width / height)).toBeLessThan(0.002);
+        }
     });
     it('keeps scaled render targets valid', () => {
         expect(scaledSize(1202, 901, 0.5)).toEqual({ width: 601, height: 450 });
@@ -629,7 +656,7 @@ describe('field configuration', () => {
         expect(bindGroupCacheKey(0, undefined, 0)).toBe('0:none:0');
     });
     it('can bypass the stage-one threshold to expose the raw field', () => {
-        expect(BASE_SHADER_SOURCE).toContain('if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }');
+        expect(BASE_SHADER_SOURCE).toContain('if(u.thresholdEnabled<.5) { return materialized(natural); }');
     });
     it('appends and packs independent lens and camera toggles without moving existing post uniforms', () => {
         const toggleKeys = [
@@ -658,5 +685,29 @@ describe('field configuration', () => {
         expect(DISPLAY_SHADER_SOURCE).toContain('if(u.post[9].x>.5 && u.post[6].z!=0.)');
         expect(DISPLAY_SHADER_SOURCE).toContain('if(u.post[9].w>.5 && u.post[7].z!=0.)');
         expect(DISPLAY_SHADER_SOURCE).toContain('if(dispersionEnabled)');
+    });
+    it('fuses the octave chain only where it reproduces the per-octave passes', () => {
+        const baked = defaultShaderSettings().parameters;
+        const silent = Object.fromEntries(
+            OCTAVE_PARAMETER_SCHEMA.flatMap((group) => group.map(({ key }) => [key, 0])),
+        ) as Partial<typeof baked>;
+        const cases: [string, Partial<typeof baked>, number | undefined][] = [
+            // Octave 4 takes round(1 + 3 × 0.67) = 3 samples; octaves 3 and 5 scatter by one sample.
+            ['the baked chain walks three paths', {}, 3],
+            ['a blur on an active octave', { octave2BlurRadius: 0.5 }, undefined],
+            // The per-pass loop blurs octave 1 although its scatter is off.
+            ['a blur on an inactive octave', { octave1BlurRadius: 0.5 }, undefined],
+            ['pixelation', { octave4Pixelate: 1 }, undefined],
+            // Even on the last octave: the fused chain's extra precision flips pixels along the edge.
+            ['a threshold', { octave5Threshold: 0.1 }, undefined],
+            [
+                'more than sixteen paths',
+                { octave2Distance: 0.6, octave4Smoothness: 1, octave5Smoothness: 1 },
+                undefined,
+            ],
+            ['no active octave', silent, undefined],
+        ];
+        for (const [name, overrides, leaves] of cases)
+            expect(fusedOctaveLeaves({ ...baked, ...overrides }), name).toBe(leaves);
     });
 });
