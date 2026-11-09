@@ -1187,12 +1187,12 @@ export class WebGL2Renderer implements RenderBackend {
         if (scaleChanged) this.adaptive.setCeiling(this.pinnedScale ?? o.renderScale, performance.now());
         this.datamoshWasActive = datamoshIsActive(o.parameters);
         if (resize) this.recreateTargets();
-        else if (resetHistory) {
-            // Datamosh switched on while running: allocate its history at the current target size.
-            if (!this.history && this.postPlanHasDatamosh() && this.postTargets.length)
-                this.history = this.makeTarget('post', this.postTargets[0].width, this.postTargets[0].height);
+        else if (this.postTargets.length && !this.history && this.postPlanHasDatamosh()) {
+            // Datamosh joined the post plan while running, by its switch or its post item: allocate
+            // its history at the current target size.
+            this.history = this.makeTarget('post', this.postTargets[0].width, this.postTargets[0].height);
             this.historyValid = false;
-        }
+        } else if (resetHistory) this.historyValid = false;
         this.invalidate();
     }
     private cursorState?: CursorSnapshot;

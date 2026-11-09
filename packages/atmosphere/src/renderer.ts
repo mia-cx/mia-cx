@@ -1502,16 +1502,18 @@ export class AtmosphereRenderer {
         this.updateAdjustmentLut();
         this.updateCubeLuts();
         if (changed) this.recreateTargets();
-        else if (resetHistory) {
-            // Datamosh switched on while running: allocate its history at the current target size.
-            if (this.postPlanHasDatamosh() && !this.historyTexture && this.device && this.textures.length) {
-                this.historyTexture = this.device.createTexture({
-                    size: [this.textures[TEXTURE.postA].width, this.textures[TEXTURE.postA].height],
-                    format: POST_TEXTURE_FORMAT,
-                    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-                });
-                this.historyView = this.historyTexture.createView();
-            }
+        else if (this.device && this.textures.length && !this.historyTexture && this.postPlanHasDatamosh()) {
+            // Datamosh joined the post plan while running, by its switch or its post item: allocate
+            // its history at the current target size.
+            this.historyTexture = this.device.createTexture({
+                size: [this.textures[TEXTURE.postA].width, this.textures[TEXTURE.postA].height],
+                format: POST_TEXTURE_FORMAT,
+                usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+            });
+            this.historyView = this.historyTexture.createView();
+            this.historyValid = false;
+            this.bindGroups.clear();
+        } else if (resetHistory) {
             this.historyValid = false;
             this.bindGroups.clear();
         }
