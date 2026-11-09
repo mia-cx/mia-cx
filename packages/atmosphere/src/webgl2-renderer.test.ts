@@ -69,7 +69,6 @@ describe('WebGL2 parity backend', () => {
                 'DISPLAY',
                 'GOD_RAYS',
                 'LUT',
-                'MATERIALIZE',
                 'OCTAVE',
                 'POST_EFFECT',
                 'PRESENT',
@@ -92,7 +91,9 @@ describe('WebGL2 parity backend', () => {
             'textureSample(calmField,densitySampler,pos.xy/u.resolution).a',
             'natural*=1.-calm;',
         );
-        calmed(shaders.BASE, 'texture(_group_0_binding_6_fs,', 'natural = (_calm_natural * (1.0 - calm));');
+        const multiply = shaders.BASE.match(/natural = \(_e\d+ \* \(1\.0 - calm\)\);/)?.[0];
+        expect(multiply).toBeDefined();
+        calmed(shaders.BASE, 'texture(_group_0_binding_6_fs,', multiply!);
     });
 
     it('samples the persistent density texture with generated GLSL parity', () => {
@@ -106,7 +107,7 @@ describe('WebGL2 parity backend', () => {
         );
         expect(shaders.BASE).toMatch(/natural = \(_e\d+ \+ \(_e\d+ \* densityResponse\)\);/);
         expect(shaders.BASE.indexOf('float densityResponse =')).toBeGreaterThan(
-            shaders.BASE.indexOf('natural = (_e342 * exp2'),
+            shaders.BASE.search(/natural = \(_e\d+ \* exp2/),
         );
         expect(BASE_SHADER_SOURCE).toContain('let darkBias=cp(3u);');
         expect(BASE_SHADER_SOURCE).toContain('select(pow(max(1.-clamp(natural,0.,1.),1e-6),darkBias),1.,darkBias==0.)');
@@ -200,7 +201,7 @@ describe('WebGL2 parity backend', () => {
     it('uses internal base resolution except for native presentation and god rays', () => {
         const implementation = WebGL2Renderer.toString();
         expect(implementation).toContain(
-            'const internalResolution = [this.baseTargets[0].width, this.baseTargets[0].height]',
+            'const internalResolution = [targets[0].width, targets[0].height]',
         );
         // The test runner's transform may wrap imports, so match the call loosely.
         expect(implementation.match(/packUniform\)?\(internalResolution/g)).toHaveLength(2);
