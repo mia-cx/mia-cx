@@ -195,13 +195,13 @@
             .then(({ renderer: instance }) => {
                 if (disposed) return instance.destroy();
                 renderer = instance;
-                let lastFpsUpdate = 0;
+                let lastFpsUpdate = Number.NEGATIVE_INFINITY;
                 instance.onStats = (nextFps, width, height, _rolling, scale = 1) => {
-                    if (!fpsVisible) return;
+                    // Keep the snapshot while hidden: paused WebGPU sends no replacement when F opens it.
                     const now = performance.now();
-                    if (now - lastFpsUpdate < 500) return;
+                    if (nextFps !== 0 && now - lastFpsUpdate < 500) return;
                     lastFpsUpdate = now;
-                    // Passes run at the canvas size times the adaptive scale.
+                    // The renderer reports its actual target scale, including full-quality paused frames.
                     const size = `${Math.floor(width * scale)}×${Math.floor(height * scale)}`;
                     frameStats = `${nextFps.toFixed(1)} FPS · ${instance.backend} ${size}`;
                 };

@@ -1635,7 +1635,7 @@ export class AtmosphereRenderer {
             this.canvas.width,
             this.canvas.height,
             this.frameTelemetry.summary(this.lastTime),
-            this.adaptiveResolution.effectiveScale,
+            this.paused ? this.options.renderScale : this.adaptiveResolution.effectiveScale,
         );
         this.invalidate();
     }

@@ -965,7 +965,7 @@ export class WebGL2Renderer implements RenderBackend {
             this.canvas.width,
             this.canvas.height,
             s,
-            this.adaptive.effectiveScale,
+            this.paused ? this.options.renderScale : this.adaptive.effectiveScale,
         );
     }
     private copy(from: Target, to: Target, _profileLabel?: string) {
