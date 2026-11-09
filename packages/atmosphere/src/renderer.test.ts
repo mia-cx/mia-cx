@@ -33,6 +33,7 @@ import {
     GPU_FRAME_TIMING_RING_SIZE,
     GPU_TIMING_WATCHDOG_MS,
     MAX_IN_FLIGHT_SUBMISSIONS,
+    MAX_RENDER_PIXELS,
     aggregateGpuTimestamps,
     advanceSimulationTime,
     bindGroupCacheKey,
@@ -320,6 +321,30 @@ describe('field configuration', () => {
         expect(renderSize(801.9, 600.8, 3, 1.5)).toEqual({ width: 1202, height: 901 });
         expect(renderSize(801.9, 600.8, 3, Number.POSITIVE_INFINITY)).toEqual({ width: 2405, height: 1802 });
         expect(renderSize(0, 0, 2, 1)).toEqual({ width: 1, height: 1 });
+    });
+    it('bounds the render target by MAX_RENDER_PIXELS while preserving aspect', () => {
+        expect(MAX_RENDER_PIXELS).toBe(3840 * 2160);
+        const oversized = renderSize(2880, 1620, 2, 1.5);
+        expect(oversized.width * oversized.height).toBeLessThanOrEqual(MAX_RENDER_PIXELS);
+        expect(Math.abs(oversized.width - (oversized.height * 2880) / 1620)).toBeLessThanOrEqual(1);
+        // A 2880×1620 viewport at uncapped DPR 2 lands within a pixel of 3840×2160.
+        const uhd = renderSize(2880, 1620, 2, Number.POSITIVE_INFINITY);
+        expect(Math.abs(uhd.width - 3840)).toBeLessThanOrEqual(1);
+        expect(Math.abs(uhd.height - 2160)).toBeLessThanOrEqual(1);
+        expect(uhd.width * uhd.height).toBeLessThanOrEqual(MAX_RENDER_PIXELS);
+        expect(renderSize(2560, 1440, 1, 1.5)).toEqual({ width: 2560, height: 1440 });
+        expect(renderSize(412, 915, 3, 1.5)).toEqual({ width: 618, height: 1372 });
+        // Portrait and ultrawide viewports past the budget keep their own aspect, not 16:9.
+        for (const [width, height] of [
+            [2160, 3840],
+            [3440, 1440],
+            [5120, 1440],
+        ]) {
+            const capped = renderSize(width, height, 2, Number.POSITIVE_INFINITY);
+            expect(capped.width * capped.height).toBeLessThanOrEqual(MAX_RENDER_PIXELS);
+            expect(capped.width * capped.height).toBeGreaterThan(MAX_RENDER_PIXELS * 0.999);
+            expect(Math.abs(capped.width / capped.height - width / height)).toBeLessThan(0.002);
+        }
     });
     it('keeps scaled render targets valid', () => {
         expect(scaledSize(1202, 901, 0.5)).toEqual({ width: 601, height: 450 });

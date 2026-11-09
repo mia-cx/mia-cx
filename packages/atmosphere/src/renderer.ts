@@ -374,10 +374,15 @@ export function pinnedRenderScale(options: Pick<RenderOptions, 'pinnedScale'>) {
     return pin === undefined || !Number.isFinite(pin) ? undefined : Math.min(1, Math.max(0.125, pin));
 }
 
+/** Hard ceiling on rendered pixels: 3840×2160, so extreme DPR×CSS-size combos cannot quadruple cost. */
+export const MAX_RENDER_PIXELS = 3840 * 2160;
+
 export function renderSize(width: number, height: number, dpr: number, cap: number) {
+    let ratio = Math.min(dpr, cap);
+    if (width * ratio * height * ratio > MAX_RENDER_PIXELS) ratio = Math.sqrt(MAX_RENDER_PIXELS / (width * height));
     return {
-        width: Math.max(1, Math.floor(width * Math.min(dpr, cap))),
-        height: Math.max(1, Math.floor(height * Math.min(dpr, cap))),
+        width: Math.max(1, Math.floor(width * ratio)),
+        height: Math.max(1, Math.floor(height * ratio)),
     };
 }
 
