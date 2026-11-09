@@ -5,8 +5,7 @@ import {
     POST_KIND_INDEX,
     POST_PARAMETER_SCHEMA,
     packUniform,
-    octaveBlurIsActive,
-    octaveEffectIsActive,
+    octaveSteps,
     renderSize,
     scaledSize,
     datamoshIsActive,
@@ -892,22 +891,25 @@ export class WebGL2Renderer implements RenderBackend {
             this.copy(source, this.history!, 'post:history-copy');
             this.historyValid = true;
         }
-        for (let i = 0; i < OCTAVE_COUNT; i++) {
-            data[29] = i;
+        for (const [i, step] of octaveSteps(p).entries()) {
             if (ablation?.kind === 'all-octaves' || (ablation?.kind === 'octave' && ablation.index === i)) continue;
-            if (octaveBlurIsActive(p, i)) {
-                const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
+            const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
+            if (step.kind === 'blur') {
+                data[29] = step.octave;
                 this.upload(data);
-                this.draw('BLUR', destination, source.texture, undefined, undefined, `blur${i}`);
-                source = destination;
-            }
-            if (octaveEffectIsActive(p, i)) {
-                const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
+                this.draw('BLUR', destination, source.texture, undefined, undefined, `blur${step.octave}`);
+            } else if (step.first === step.last) {
+                data[29] = step.last;
                 this.upload(data);
-                this.specialized('OCTAVE', i);
-                this.draw(`OCTAVE:${i}`, destination, source.texture, undefined, undefined, `octave${i}`);
-                source = destination;
+                this.specialized('OCTAVE', step.last);
+                this.draw(`OCTAVE:${step.last}`, destination, source.texture, undefined, undefined, `octave${step.last}`);
+            } else {
+                data[29] = step.last;
+                data[57] = step.first;
+                this.upload(data);
+                this.draw('OCTAVE_CHAIN', destination, source.texture, undefined, undefined, 'octave-chain');
             }
+            source = destination;
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
@@ -973,12 +975,14 @@ export class WebGL2Renderer implements RenderBackend {
             variants.push({ label: `post:${index}:${stage.label}`, kind: 'post', index }),
         );
         if (postStages.length) variants.push({ label: 'all-post', kind: 'all-post' });
-        for (let index = 0; index < OCTAVE_COUNT; index++)
-            if (
-                octaveBlurIsActive(this.options.parameters, index) ||
-                octaveEffectIsActive(this.options.parameters, index)
-            )
-                variants.push({ label: `octave:${index}`, kind: 'octave', index });
+        // One variant per octave pass: stages fused into one pass cost together.
+        octaveSteps(this.options.parameters).forEach((step, index) =>
+            variants.push({
+                label: step.kind === 'blur' ? `blur:${step.octave}` : `octave:${step.first}-${step.last}`,
+                kind: 'octave',
+                index,
+            }),
+        );
         if (variants.some((x) => x.kind === 'octave')) variants.push({ label: 'all-octaves', kind: 'all-octaves' });
         variants.push({ label: 'colour', kind: 'colour' });
         // DISPLAY is the existing simple texture-to-canvas path, so it is a valid PRESENT replacement.

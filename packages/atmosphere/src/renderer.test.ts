@@ -42,6 +42,7 @@ import {
     octavePixelSizes,
     octaveBlurIsActive,
     octaveEffectIsActive,
+    octaveSteps,
     packUniform,
     renderSize,
     scaledSize,
@@ -111,7 +112,7 @@ describe('field configuration', () => {
         const adjustments = source.indexOf('colour:adjustments');
         const rgb = source.indexOf('const colourOccurrences');
         const post = source.indexOf('effect.label');
-        const octave = source.indexOf('octave${octave + 1}');
+        const octave = source.indexOf('octave${step.last + 1}');
         const display = source.indexOf('getCurrentTexture');
         expect([adjustments, rgb, post, octave, display]).not.toContain(-1);
         expect(adjustments).toBeLessThan(rgb);
@@ -339,6 +340,47 @@ describe('field configuration', () => {
     it('keeps scaled render targets valid', () => {
         expect(scaledSize(1202, 901, 0.5)).toEqual({ width: 601, height: 450 });
         expect(scaledSize(0, 0, 0.5)).toEqual({ width: 1, height: 1 });
+    });
+    it('fuses only octave stages that can be summed exactly, within the read budget', () => {
+        // Octave n: [noise, threshold, smoothness, distance]; smoothness 1 with a distance means four reads.
+        const plan = (settings: Record<number, number[]>, extra: Record<string, number> = {}) => {
+            const parameters = { ...defaultParameters(), ...extra };
+            for (let n = 1; n <= 5; n++) {
+                const [noise, threshold, smoothness, distance] = settings[n] ?? [0, 0, 0, 0];
+                Object.assign(parameters, {
+                    [`octave${n}Noise`]: noise,
+                    [`octave${n}Threshold`]: threshold,
+                    [`octave${n}Smoothness`]: smoothness,
+                    [`octave${n}Distance`]: distance,
+                    [`octave${n}BlurRadius`]: 0,
+                    [`octave${n}Pixelate`]: 0,
+                });
+            }
+            Object.assign(parameters, extra);
+            return octaveSteps(parameters);
+        };
+        const run = (first: number, last: number) => ({ kind: 'octaves', first, last });
+        // The shipped settings: 1 × 4 × 3 × 1 reads, one pass.
+        expect(plan({ 2: [0.005, 0, 1, 0], 3: [0.01, 0, 1, 0.3], 4: [0.01, 0, 0.67, 0.5], 5: [0.005, 0, 0, 1.8] })).toEqual([
+            run(1, 4),
+        ]);
+        // Inactive stages inside a run are identities and do not split it.
+        expect(plan({ 1: [0.01, 0, 0, 0], 4: [0.01, 0, 0, 0] })).toEqual([run(0, 3)]);
+        // 4 × 4 = 16 fits; a third four-read stage starts a new pass.
+        expect(plan({ 1: [0, 0, 1, 1], 2: [0, 0, 1, 1], 3: [0, 0, 1, 1] })).toEqual([run(0, 1), run(2, 2)]);
+        // A threshold may only end a pass.
+        expect(plan({ 1: [0.01, 0, 0, 0], 2: [0.01, 0.2, 0, 0], 3: [0.01, 0, 0, 0] })).toEqual([run(0, 1), run(2, 2)]);
+        // Pixelation and pre-blur keep their own passes.
+        expect(plan({ 1: [0.01, 0, 0, 0], 2: [0.01, 0, 0, 0], 3: [0.01, 0, 0, 0] }, { octave2Pixelate: 1 })).toEqual([
+            run(0, 0),
+            run(1, 1),
+            run(2, 2),
+        ]);
+        expect(plan({ 1: [0.01, 0, 0, 0], 2: [0.01, 0, 0, 0] }, { octave2BlurRadius: 0.5 })).toEqual([
+            run(0, 0),
+            { kind: 'blur', octave: 1 },
+            run(1, 1),
+        ]);
     });
     it('keeps the base and all five octave effect stages full resolution', () => {
         expect(OCTAVE_COUNT).toBe(5);

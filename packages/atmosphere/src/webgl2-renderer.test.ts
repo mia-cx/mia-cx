@@ -70,6 +70,7 @@ describe('WebGL2 parity backend', () => {
                 'GOD_RAYS',
                 'LUT',
                 'OCTAVE',
+                'OCTAVE_CHAIN',
                 'POST_EFFECT',
                 'PRESENT',
             ].sort(),

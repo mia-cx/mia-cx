@@ -84,8 +84,9 @@ const PIPELINE = {
     copy: 11,
     cursorDecay: 12,
     cursorPaint: 13,
+    octaveChain: 14,
 } as const;
-const PIPELINE_COUNT = 14;
+const PIPELINE_COUNT = 15;
 export const GPU_FRAME_TIMING_RING_SIZE = 3;
 export const MAX_IN_FLIGHT_SUBMISSIONS = 3;
 export const GPU_TIMING_WATCHDOG_MS = 1_000;
@@ -458,6 +459,48 @@ export function octaveBlurIsActive(parameters: ShaderParameters, index: number) 
     return parameters[OCTAVE_BLUR_SCHEMA[index].key] > 0;
 }
 
+/** Most source reads a fused octave pass makes per pixel: the product of its stages' sample counts. */
+export const MAX_FUSED_OCTAVE_READS = 16;
+
+/** One octave pass: a pre-blur, or the effect stages `first` to `last` (one stage when they are equal). */
+export type OctaveStep = { kind: 'blur'; octave: number } | { kind: 'octaves'; first: number; last: number };
+
+/**
+ * The octave stages grouped into passes. Consecutive effect stages share one pass when the result can be summed
+ * exactly from texel reads: each stage then only averages its source at whole-pixel offsets and adds noise. A
+ * pixelated stage averages a tile, a threshold reads its own screen-space derivative (so it may only end a pass),
+ * and a blur filters between texels, so those keep passes of their own. A one-stage pass is the per-octave shader.
+ */
+export function octaveSteps(parameters: ShaderParameters): OctaveStep[] {
+    const steps: OctaveStep[] = [];
+    let run: { first: number; last: number; reads: number } | undefined;
+    const flush = () => {
+        if (run) steps.push({ kind: 'octaves', first: run.first, last: run.last });
+        run = undefined;
+    };
+    for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
+        if (octaveBlurIsActive(parameters, octave)) {
+            flush();
+            steps.push({ kind: 'blur', octave });
+        }
+        if (!octaveEffectIsActive(parameters, octave)) continue;
+        const [, threshold, smoothness, distance] = OCTAVE_PARAMETER_SCHEMA[octave].map(({ key }) => parameters[key]);
+        if (parameters[OCTAVE_PIXELATE_SCHEMA[octave].key] >= 0.5) {
+            flush();
+            steps.push({ kind: 'octaves', first: octave, last: octave });
+            continue;
+        }
+        // The shader's sample count: one read without scatter, otherwise one to four by smoothness. WGSL rounds exact
+        // halves to even and Math.round rounds them up, so at worst this overcounts and the budget errs low.
+        const reads = distance > 0 ? Math.round(1 + 3 * smoothness) : 1;
+        if (run && run.reads * reads > MAX_FUSED_OCTAVE_READS) flush();
+        run = run ? { ...run, last: octave, reads: run.reads * reads } : { first: octave, last: octave, reads };
+        if (threshold !== 0) flush();
+    }
+    flush();
+    return steps;
+}
+
 export function godRaysIsActive(parameters: ShaderParameters) {
     return parameters.godRaysEnabled >= 0.5 && parameters.godRaysAmount !== 0 && parameters.godRaysIntensity !== 0;
 }
@@ -680,7 +723,8 @@ export const BLUR_SHADER_SOURCE =
     return vec4f(value,1.);
 }`;
 
-export const OCTAVE_SHADER_SOURCE =
+/** Bindings and hashes shared by the per-octave and fused octave shaders, so both scatter and salt identically. */
+const OCTAVE_COMMON_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
@@ -704,7 +748,11 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     let radius=f32(bits>>8u)*(1./16777215.)*distance;
     return directions[bits&15u]*radius;
 }
-@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+`;
+
+export const OCTAVE_SHADER_SOURCE =
+    OCTAVE_COMMON_SOURCE +
+    /* wgsl */ `@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let sourceSize=vec2f(textureDimensions(src));
     let octave=u32(u.octaveIndex);
@@ -750,6 +798,73 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     let luminance=dot(max(injected,vec3f(0.)),vec3f(.2126,.7152,.0722));
     let thresholdWidth=max(.015,fwidth(luminance)*1.5);
     let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,luminance);
+    let scale=select(0.,thresholded/max(luminance,.000001),luminance>0.);
+    return vec4f(injected*scale,1.);
+}`;
+
+/**
+ * Octave stages blurRadii[1].y (first) to octaveIndex (last) in one pass; see `octaveSteps` for which may share one.
+ * Each of those stages averages its source at whole-pixel offsets and adds per-tile noise, so the chain equals the
+ * mean over every path of sample choices of the source texel the path ends on plus the noise it picked up on the way.
+ * Paths are walked like an odometer, recomputing only the stages whose choice changed. Reads are exact texel loads
+ * at clamped positions, which is what the per-octave pass's texel-centre samples with clamp-to-edge return.
+ */
+export const OCTAVE_CHAIN_SHADER_SOURCE =
+    OCTAVE_COMMON_SOURCE +
+    /* wgsl */ `@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let size=vec2i(textureDimensions(src));
+    let first=u32(u.blurRadii[1].y);
+    let last=u32(u.octaveIndex);
+    let frame=u32(u.frameIndex);
+    var count: array<u32,5>;
+    var paths=1u;
+    for(var octave=first;octave<=last;octave++) {
+        let settings=u.octaves[octave];
+        count[octave]=select(1u,u32(round(mix(1.,4.,settings.z))),settings.w>0.);
+        paths*=count[octave];
+    }
+    // Stage o is evaluated at point[o+1] and reads its source at point[o]; noise[o] is the noise gathered down to it.
+    var choice: array<u32,5>;
+    var point: array<vec2i,6>;
+    var noise: array<f32,6>;
+    point[last+1u]=vec2i(pos.xy);
+    var sum=vec3f(0.);
+    var changed=last;
+    for(var path=0u;path<paths;path++) {
+        for(var o=i32(changed);o>=i32(first);o--) {
+            let octave=u32(o);
+            let settings=u.octaves[octave];
+            let here=point[octave+1u];
+            let tile=vec2u(here)>>vec2u(4u-octave);
+            var detail=0.;
+            if(settings.x!=0.) {
+                let noiseSalt=(octave*0x27d4eb2du) ^ (frame*0x165667b1u) ^ 0xa511e9b3u;
+                detail=(f32(tileHash(tile,noiseSalt))*(1./4294967295.)-.5)*settings.x;
+            }
+            noise[octave]=noise[octave+1u]+detail;
+            var offset=vec2i(0);
+            if(settings.w>0.) {
+                let octaveFrameSalt=(octave*0x27d4eb2du) ^ (frame*0x9e3779b9u);
+                offset=vec2i(round(scatterOffset(tile,choice[octave],settings.w,octaveFrameSalt)))*i32(1u<<(4u-octave));
+            }
+            point[octave]=clamp(here+offset,vec2i(0),size-vec2i(1));
+        }
+        sum+=textureLoad(src,point[first],0).rgb+noise[first];
+        var o=first;
+        loop {
+            choice[o]+=1u;
+            if(choice[o]<count[o] || o==last) { break; }
+            choice[o]=0u;
+            o+=1u;
+        }
+        changed=o;
+    }
+    let injected=sum/f32(paths);
+    let threshold=u.octaves[last].y;
+    if(threshold==0.) { return vec4f(injected,1.); }
+    let luminance=dot(max(injected,vec3f(0.)),vec3f(.2126,.7152,.0722));
+    let thresholdWidth=max(.015,fwidth(luminance)*1.5);
+    let thresholded=smoothstep(threshold-thresholdWidth,threshold+thresholdWidth,luminance);
     let scale=select(0.,thresholded/max(luminance,.000001),luminance>0.);
     return vec4f(injected*scale,1.);
 }`;
@@ -1193,6 +1308,7 @@ export class AtmosphereRenderer {
                 format: CURSOR_DENSITY_FORMAT,
                 blend: { color: maxBlend, alpha: maxBlend },
             }),
+            make(OCTAVE_CHAIN_SHADER_SOURCE, { format: 'rgba16float' }),
             ...extraPostKinds.map((kind) => make(compactPostShaderSource(kind), { format: POST_TEXTURE_FORMAT })),
         ]);
         if (primaryPostKind !== undefined) {
@@ -1923,18 +2039,21 @@ export class AtmosphereRenderer {
             ]);
             this.historyValid = true;
         }
-        for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
-            data[29] = octave;
-            if (octaveBlurIsActive(this.options.parameters, octave)) {
-                const destination = rgbaCurrent === 0 ? 1 : 0;
-                draw(this.textureViews[destination], PIPELINE.blur, rgbaCurrent, true, `blur${octave + 1}`);
-                rgbaCurrent = destination;
+        for (const step of octaveSteps(this.options.parameters)) {
+            const destination = rgbaCurrent === 0 ? 1 : 0;
+            if (step.kind === 'blur') {
+                data[29] = step.octave;
+                draw(this.textureViews[destination], PIPELINE.blur, rgbaCurrent, true, `blur${step.octave + 1}`);
+            } else if (step.first === step.last) {
+                data[29] = step.last;
+                draw(this.textureViews[destination], PIPELINE.octave, rgbaCurrent, true, `octave${step.last + 1}`);
+            } else {
+                data[29] = step.last;
+                data[57] = step.first;
+                const label = `octaves${step.first + 1}-${step.last + 1}`;
+                draw(this.textureViews[destination], PIPELINE.octaveChain, rgbaCurrent, false, label);
             }
-            if (octaveEffectIsActive(this.options.parameters, octave)) {
-                const destination = rgbaCurrent === 0 ? 1 : 0;
-                draw(this.textureViews[destination], PIPELINE.octave, rgbaCurrent, true, `octave${octave + 1}`);
-                rgbaCurrent = destination;
-            }
+            rgbaCurrent = destination;
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
