@@ -10,7 +10,6 @@ import {
     WEBGL2_SUPPORTED_COLOUR,
     WEBGL2_SUPPORTED_POST,
     WebGL2Renderer,
-    octaveChainRows,
     specializeWebGL2Shader,
 } from './webgl2-renderer';
 import * as shaders from './webgl2-shaders';
@@ -69,8 +68,8 @@ describe('WebGL2 parity backend', () => {
                 'DISPLAY',
                 'GOD_RAYS',
                 'LUT',
+                'MATERIALIZE',
                 'OCTAVE',
-                'OCTAVE_CHAIN',
                 'POST_EFFECT',
                 'PRESENT',
             ].sort(),
@@ -82,18 +81,17 @@ describe('WebGL2 parity backend', () => {
     });
 
     it('takes the calm mask off the field before the threshold on both backends', () => {
-        const calmed = (source: string, sample: string, multiply: RegExp) => {
+        const calmed = (source: string, sample: string, multiply: string) => {
             expect(source).toContain(sample);
-            const at = source.search(multiply);
-            expect(at).toBeGreaterThan(-1);
-            expect(at).toBeLessThan(source.indexOf('threshold', at));
+            expect(source).toContain(multiply);
+            expect(source.indexOf(multiply)).toBeLessThan(source.indexOf('threshold', source.indexOf(multiply)));
         };
         calmed(
             BASE_SHADER_SOURCE,
             'textureSample(calmField,densitySampler,pos.xy/u.resolution).a',
-            /natural\*=1\.-calm;/,
+            'natural*=1.-calm;',
         );
-        calmed(shaders.BASE, 'texture(_group_0_binding_6_fs,', /natural = \(_e\d+ \* \(1\.0 - calm\)\);/);
+        calmed(shaders.BASE, 'texture(_group_0_binding_6_fs,', 'natural = (_calm_natural * (1.0 - calm));');
     });
 
     it('samples the persistent density texture with generated GLSL parity', () => {
@@ -200,7 +198,9 @@ describe('WebGL2 parity backend', () => {
 
     it('uses internal base resolution except for native presentation and god rays', () => {
         const implementation = WebGL2Renderer.toString();
-        expect(implementation).toContain('const internalResolution = [targets[0].width, targets[0].height]');
+        expect(implementation).toContain(
+            'const internalResolution = [this.baseTargets[0].width, this.baseTargets[0].height]',
+        );
         // The test runner's transform may wrap imports, so match the call loosely.
         expect(implementation.match(/packUniform\)?\(internalResolution/g)).toHaveLength(2);
         expect(implementation).toContain('data[0] = this.godRays.width');
@@ -215,8 +215,7 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).not.toContain('this.draw("DISPLAY", this.history');
         expect(shaders.COPY).toContain('texelFetch');
         expect(shaders.COPY).not.toContain('texture(');
-        expect(implementation).toContain('if (postRan && !this.paused && this.history)');
-        expect(implementation).toContain('postPlanHasDatamosh');
+        expect(implementation).toContain('if (postRan && !this.paused)');
     });
 
     it('adapts only from available, non-disjoint GPU elapsed queries with captured attribution', () => {
@@ -257,11 +256,11 @@ describe('WebGL2 parity backend', () => {
 
     it('renders one full-resolution frozen pause frame and restores adaptive rendering', () => {
         const implementation = WebGL2Renderer.toString();
-        expect(implementation).toContain('this.pinnedScale ?? this.options.renderScale');
+        expect(implementation).toContain('this.paused ? this.options.renderScale : this.adaptive.effectiveScale');
         expect(implementation).toContain('if (v === this.paused) return');
         expect(implementation).toContain('this.recreateTargets(v)');
         expect(implementation).toContain('if (!preserveHistory) this.historyValid = false');
-        expect(implementation).toContain('if (postRan && !this.paused && this.history)');
+        expect(implementation).toContain('if (postRan && !this.paused)');
         expect(implementation).toContain('this.frame = (this.frame + 1)');
         expect(implementation).toContain('const timer = !ablationReady && !this.paused && this.timerQuery');
     });
@@ -271,13 +270,5 @@ describe('WebGL2 parity backend', () => {
         expect(implementation).not.toContain('1000 / 30');
         expect(implementation).not.toContain('lastPresented');
         expect(implementation).toContain('Math.max(0, (now - this.lastTick) / 1e3) * p.animationSpeed');
-    });
-
-    it('mirrors the fused octave chain into the rows each per-octave pass worked in', () => {
-        // Regenerating OCTAVE_CHAIN must keep the identity this rewrite anchors on, or WebGL2 would
-        // draw the chain unmirrored and stop matching its per-octave passes.
-        expect(octaveChainRows(shaders.OCTAVE_CHAIN)).toMatch(
-            /ivec2 passPixel\(ivec2 (\w+), ivec2 (\w+)\) \{\n {4}return ivec2\(\1\.x, \2\.y - 1 - \1\.y\);/,
-        );
     });
 });

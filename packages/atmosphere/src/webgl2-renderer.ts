@@ -5,12 +5,10 @@ import {
     POST_KIND_INDEX,
     POST_PARAMETER_SCHEMA,
     packUniform,
-    fusedOctaveLeaves,
     octaveBlurIsActive,
     octaveEffectIsActive,
     renderSize,
     scaledSize,
-    pinnedRenderScale,
     datamoshIsActive,
     type RenderOptions,
 } from './renderer';
@@ -155,7 +153,7 @@ const ABLATION_WARMUPS = 3,
 const FENCE_POLL_MS = 4;
 const FENCE_EMERGENCY_MS = 750;
 const TIMER_QUERY_WATCHDOG_MS = 1_000;
-export type WebGL2TargetKind = 'colour' | 'post' | 'god-rays';
+export type WebGL2TargetKind = 'base' | 'colour' | 'post' | 'god-rays';
 type Target = {
     texture: WebGLTexture;
     framebuffer: WebGLFramebuffer;
@@ -164,6 +162,7 @@ type Target = {
     kind: WebGL2TargetKind;
 };
 export const WEBGL2_TARGET_FORMATS = {
+    base: 'R16F',
     colour: 'RGBA16F',
     post: 'RGBA8',
     history: 'RGBA8',
@@ -190,31 +189,9 @@ function compile(gl: WebGL2RenderingContext, type: number, source: string) {
     }
     return value;
 }
-/**
- * The fused octave chain stands in for one top-left pass per active octave, and each of those
- * worked in rows mirrored from the texel it wrote. Mirror the chain's `passPixel` the same way.
- */
-export function octaveChainRows(source: string) {
-    const mirrored = source.replace(
-        /(ivec2 passPixel\(ivec2 (\w+), ivec2 (\w+)\) \{\n {4}return )\2;/,
-        '$1ivec2($2.x, $3.y - 1 - $2.y);',
-    );
-    if (mirrored === source) throw new Error('OCTAVE_CHAIN GLSL no longer has the passPixel identity to mirror.');
-    return mirrored;
-}
-/**
- * Every top-left pass reads its source through `pos / resolution`, which lands on the row mirrored
- * from where the source pass wrote: each such read flips the field once. These programs work in
- * GL's own bottom-left rows instead. BASE used to be read by a separate materialise pass, so keeping
- * GL rows keeps the flip that pass contributed and stores the field exactly where materialise did.
- */
-const STORED_ROW_PROGRAMS: Partial<Record<ProgramKey, (source: string) => string>> = {
-    BASE: (source) => source,
-    OCTAVE_CHAIN: octaveChainRows,
-};
 function program(gl: WebGL2RenderingContext, fragment: string) {
     const vs = compile(gl, gl.VERTEX_SHADER, VERTEX),
-        fs = compile(gl, gl.FRAGMENT_SHADER, fragment),
+        fs = compile(gl, gl.FRAGMENT_SHADER, topLeftFragmentCoordinates(fragment)),
         p = gl.createProgram();
     if (!p) throw new Error('Could not allocate a WebGL2 program.');
     gl.attachShader(p, vs);
@@ -283,6 +260,7 @@ export class WebGL2Renderer implements RenderBackend {
         this.lostHandler?.(message);
     }
     private programs = new Map<ProgramKey, WebGLProgram>();
+    private baseTargets: Target[] = [];
     private colourTargets: Target[] = [];
     private postTargets: Target[] = [];
     private godRays?: Target;
@@ -318,7 +296,6 @@ export class WebGL2Renderer implements RenderBackend {
     private historyValid = false;
     private datamoshWasActive = false;
     private adaptive: AdaptiveResolutionController;
-    private pinnedScale?: number;
     private timerQuery?: TimerQueryExtension;
     private pendingTimerQueries: PendingTimerQuery[] = [];
     private lastTimerQueryEvidence = performance.now();
@@ -405,10 +382,8 @@ export class WebGL2Renderer implements RenderBackend {
         gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 2 * 4, 0);
         gl.vertexAttribDivisor(2, 0);
         this.recreateDensityTargets(1, 1);
-        this.pinnedScale = pinnedRenderScale(options);
-        this.adaptive = new AdaptiveResolutionController(this.pinnedScale ?? options.renderScale, {
-            initialScale: this.pinnedScale ?? Math.min(WEBGL2_STARTUP_SCALE, options.renderScale),
-            minScale: this.pinnedScale,
+        this.adaptive = new AdaptiveResolutionController(options.renderScale, {
+            initialScale: Math.min(WEBGL2_STARTUP_SCALE, options.renderScale),
             severeSamples: 1,
         });
         this.timerQuery = gl.getExtension('EXT_disjoint_timer_query_webgl2') ?? undefined;
@@ -452,8 +427,7 @@ export class WebGL2Renderer implements RenderBackend {
     }
     private installProgram(key: ProgramKey, source: string) {
         const gl = this.gl,
-            storedRows = STORED_ROW_PROGRAMS[key],
-            p = program(gl, storedRows ? storedRows(source) : topLeftFragmentCoordinates(source));
+            p = program(gl, source);
         this.programs.set(key, p);
         const i = gl.getUniformBlockIndex(p, 'U_block_0Fragment');
         if (i !== gl.INVALID_INDEX) gl.uniformBlockBinding(p, i, 0);
@@ -491,15 +465,16 @@ export class WebGL2Renderer implements RenderBackend {
             gl.texParameteri(gl.TEXTURE_2D, key, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        const post = kind === 'post';
+        const single = kind === 'base',
+            post = kind === 'post';
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
-            post ? gl.RGBA8 : gl.RGBA16F,
+            single ? gl.R16F : post ? gl.RGBA8 : gl.RGBA16F,
             width,
             height,
             0,
-            gl.RGBA,
+            single ? gl.RED : gl.RGBA,
             post ? gl.UNSIGNED_BYTE : gl.HALF_FLOAT,
             null,
         );
@@ -614,17 +589,12 @@ export class WebGL2Renderer implements RenderBackend {
     }
     private allTargets() {
         return [
+            ...this.baseTargets,
             ...this.colourTargets,
             ...this.postTargets,
             ...(this.godRays ? [this.godRays] : []),
             ...(this.history ? [this.history] : []),
         ];
-    }
-    /** The post plan this frame would run; only datamosh reads the history texture. */
-    private postPlanHasDatamosh() {
-        return (this.options.bakedPostPlan ?? rendererStagePlan(this.options.post, this.options.parameters)).some(
-            (e) => e.kind === 'datamosh',
-        );
     }
     private recreateTargets(preserveHistory = this.paused) {
         const gl = this.gl;
@@ -632,11 +602,14 @@ export class WebGL2Renderer implements RenderBackend {
             gl.deleteTexture(x.texture);
             gl.deleteFramebuffer(x.framebuffer);
         }
-        if (!preserveHistory) this.history = undefined;
         // Pausing uses full configured quality without teaching the adaptive controller that this should
         // become its continuous workload.  Its effective scale remains the resume scale.
-        const targetScale = this.paused ? (this.pinnedScale ?? this.options.renderScale) : this.adaptive.effectiveScale;
+        const targetScale = this.paused ? this.options.renderScale : this.adaptive.effectiveScale;
         const size = scaledSize(this.canvas.width, this.canvas.height, targetScale);
+        this.baseTargets = [
+            this.makeTarget('base', size.width, size.height),
+            this.makeTarget('base', size.width, size.height),
+        ];
         this.colourTargets = [
             this.makeTarget('colour', size.width, size.height),
             this.makeTarget('colour', size.width, size.height),
@@ -645,15 +618,7 @@ export class WebGL2Renderer implements RenderBackend {
             this.makeTarget('post', size.width, size.height),
             this.makeTarget('post', size.width, size.height),
         ];
-        // History is only worth its VRAM and per-frame copy while the plan contains datamosh.
-        if (this.postPlanHasDatamosh()) {
-            if (!preserveHistory || !this.history) this.history = this.makeTarget('post', size.width, size.height);
-        } else if (this.history) {
-            gl.deleteTexture(this.history.texture);
-            gl.deleteFramebuffer(this.history.framebuffer);
-            this.history = undefined;
-            this.boundTextures.clear();
-        }
+        if (!preserveHistory || !this.history) this.history = this.makeTarget('post', size.width, size.height);
         this.godRays = this.makeTarget(
             'god-rays',
             Math.max(1, Math.round(size.width * this.options.parameters.godRaysRenderScale)),
@@ -745,7 +710,7 @@ export class WebGL2Renderer implements RenderBackend {
         const ablation = this.ablationVariants?.[this.ablationVariant];
         if (!this.paused) this.simTime += Math.max(0, (now - this.lastTick) / 1000) * p.animationSpeed;
         this.lastTick = now;
-        const internalResolution: [number, number] = [targets[0].width, targets[0].height];
+        const internalResolution: [number, number] = [this.baseTargets[0].width, this.baseTargets[0].height];
         const timer =
             !ablationReady && !this.paused && this.timerQuery && this.pendingTimerQueries.length === 0
                 ? this.gl.createQuery()
@@ -758,7 +723,8 @@ export class WebGL2Renderer implements RenderBackend {
         this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.cursorBuffer);
         this.gl.bufferSubData(this.gl.UNIFORM_BUFFER, 0, packCursorUniform(p, this.cursorState));
         this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.uniformBuffer);
-        this.draw('BASE', targets[next], undefined, undefined, undefined, 'base');
+        this.draw('BASE', this.baseTargets[0], undefined, undefined, undefined, 'base');
+        this.draw('MATERIALIZE', targets[next], this.baseTargets[0].texture, undefined, undefined, 'field-materialize');
         [current, next] = [next, current];
         const nextLeadingKey = this.options.bakedLeadingAdjustments
             ? 'baked'
@@ -922,38 +888,27 @@ export class WebGL2Renderer implements RenderBackend {
             postIndex = 1 - postIndex;
             postRan = true;
         }
-        if (postRan && !this.paused && this.history) {
-            this.copy(source, this.history, 'post:history-copy');
+        if (postRan && !this.paused) {
+            this.copy(source, this.history!, 'post:history-copy');
             this.historyValid = true;
         }
-        // Ablation drops one octave at a time, which only the per-octave passes can do.
-        if (ablation?.kind !== 'octave' && fusedOctaveLeaves(p) !== undefined) {
-            if (ablation?.kind !== 'all-octaves') {
+        for (let i = 0; i < OCTAVE_COUNT; i++) {
+            data[29] = i;
+            if (ablation?.kind === 'all-octaves' || (ablation?.kind === 'octave' && ablation.index === i)) continue;
+            if (octaveBlurIsActive(p, i)) {
                 const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
                 this.upload(data);
-                this.draw('OCTAVE_CHAIN', destination, source.texture, undefined, undefined, 'octaves');
+                this.draw('BLUR', destination, source.texture, undefined, undefined, `blur${i}`);
                 source = destination;
             }
-        } else
-            for (let i = 0; i < OCTAVE_COUNT; i++) {
-                data[29] = i;
-                if (ablation?.kind === 'all-octaves' || (ablation?.kind === 'octave' && ablation.index === i)) continue;
-                if (octaveBlurIsActive(p, i)) {
-                    const destination =
-                        source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
-                    this.upload(data);
-                    this.draw('BLUR', destination, source.texture, undefined, undefined, `blur${i}`);
-                    source = destination;
-                }
-                if (octaveEffectIsActive(p, i)) {
-                    const destination =
-                        source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
-                    this.upload(data);
-                    this.specialized('OCTAVE', i);
-                    this.draw(`OCTAVE:${i}`, destination, source.texture, undefined, undefined, `octave${i}`);
-                    source = destination;
-                }
+            if (octaveEffectIsActive(p, i)) {
+                const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
+                this.upload(data);
+                this.specialized('OCTAVE', i);
+                this.draw(`OCTAVE:${i}`, destination, source.texture, undefined, undefined, `octave${i}`);
+                source = destination;
             }
+        }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
         this.upload(data);
@@ -1182,17 +1137,11 @@ export class WebGL2Renderer implements RenderBackend {
                 this.boundTextures.clear();
             }
         this.options = o;
-        this.pinnedScale = pinnedRenderScale(o);
 
-        if (scaleChanged) this.adaptive.setCeiling(this.pinnedScale ?? o.renderScale, performance.now());
+        if (scaleChanged) this.adaptive.setCeiling(o.renderScale, performance.now());
         this.datamoshWasActive = datamoshIsActive(o.parameters);
         if (resize) this.recreateTargets();
-        else if (this.postTargets.length && !this.history && this.postPlanHasDatamosh()) {
-            // Datamosh joined the post plan while running, by its switch or its post item: allocate
-            // its history at the current target size.
-            this.history = this.makeTarget('post', this.postTargets[0].width, this.postTargets[0].height);
-            this.historyValid = false;
-        } else if (resetHistory) this.historyValid = false;
+        else if (resetHistory) this.historyValid = false;
         this.invalidate();
     }
     private cursorState?: CursorSnapshot;
