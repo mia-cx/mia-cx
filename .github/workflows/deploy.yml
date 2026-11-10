@@ -12,6 +12,11 @@ on:
                 required: false
                 type: string
                 default: ''
+            validated_sha:
+                description: Release merge commit whose PR checks passed on the identical tree
+                required: false
+                type: string
+                default: ''
         outputs:
             sha:
                 description: The commit that was deployed
@@ -87,14 +92,19 @@ jobs:
               run: pnpm install --frozen-lockfile
 
             - name: Install the browser for the site's tests
+              if: ${{ !(inputs.environment == 'production' && github.event_name == 'push' && github.ref == 'refs/heads/main' && inputs.validated_sha == steps.target.outputs.sha) }}
               run: pnpm --filter @mia-cx/mia.cx exec playwright install --with-deps chromium
 
             - name: Check code
+              if: ${{ !(inputs.environment == 'production' && github.event_name == 'push' && github.ref == 'refs/heads/main' && inputs.validated_sha == steps.target.outputs.sha) }}
               run: |
                   pnpm --filter "@mia-cx/mia.cx..." --if-present run lint
                   pnpm --filter "@mia-cx/mia.cx..." --if-present run check
                   pnpm --filter "@mia-cx/mia.cx..." --if-present run test
-                  pnpm --filter @mia-cx/mia.cx build
+
+            # Each deploy needs its own artifact even when the PR supplied successful checks.
+            - name: Build the deployment artifact
+              run: pnpm --filter @mia-cx/mia.cx build
 
             # Staging serves the same pages as mia.cx; keep its copy out of search results.
             - name: Keep staging out of search results

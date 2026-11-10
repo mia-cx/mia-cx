@@ -26,9 +26,11 @@ jobs:
         permissions:
             contents: read
             pull-requests: read
+            actions: read
         outputs:
             release: ${{ steps.release.outputs.release }}
             sha: ${{ steps.release.outputs.sha }}
+            validated: ${{ steps.validate.outputs.validated }}
         steps:
             - name: Check out repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,7 +64,7 @@ jobs:
                   release=false
                   if ! git diff --quiet "$sha^1" "$sha" -- apps/mia.cx/package.json; then
                     for _ in 1 2 3 4 5 6; do
-                      release="$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --paginate --slurp | node .github/scripts/release-merge.mjs "$sha" "$GITHUB_REPOSITORY")"
+                      release="$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/pulls" --paginate --slurp | tee "$RUNNER_TEMP/release-pulls.json" | node .github/scripts/release-merge.mjs "$sha" "$GITHUB_REPOSITORY")"
                       [ "$release" = true ] && break
                       sleep 10
                     done
@@ -72,6 +74,14 @@ jobs:
                     exit 1
                   fi
                   echo "release=$release" >> "$GITHUB_OUTPUT"
+
+            - name: Check whether the release PR already passed validation
+              id: validate
+              if: github.event_name == 'push' && steps.release.outputs.release == 'true'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  SHA: ${{ steps.release.outputs.sha }}
+              run: node .github/scripts/release-merge.mjs "$SHA" "$GITHUB_REPOSITORY" validated < "$RUNNER_TEMP/release-pulls.json"
 
     version:
         name: Open or update the release pull request
@@ -136,6 +146,7 @@ jobs:
             # A release ships the newest release on main when it gets the slot; a manual redeploy ships
             # exactly the commit it names, which may roll back on purpose.
             sha: ${{ github.event_name == 'workflow_dispatch' && needs.release.outputs.sha || '' }}
+            validated_sha: ${{ needs.release.outputs.validated == 'true' && needs.release.outputs.sha || '' }}
         secrets: inherit
         permissions:
             contents: read
