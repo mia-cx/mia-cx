@@ -42,6 +42,7 @@ import {
     octavePixelSizes,
     octaveBlurIsActive,
     octaveEffectIsActive,
+    octaveSteps,
     packUniform,
     renderSize,
     scaledSize,
@@ -90,7 +91,7 @@ describe('field configuration', () => {
         }
         const implementation = AtmosphereRenderer.toString();
         expect(implementation).toContain('compactPostShaderSource(primaryPostKind)');
-        expect(implementation).toContain('this.compactPostPipelineIndices.get(postKind) ?? 8');
+        expect(implementation).toContain('this.compactPostPipelineIndices.get(postKind) ?? PIPELINE.post');
     });
 
     it('re-hashes film grain independently every rendered frame instead of translating a fixed field', () => {
@@ -111,7 +112,7 @@ describe('field configuration', () => {
         const adjustments = source.indexOf('colour:adjustments');
         const rgb = source.indexOf('const colourOccurrences');
         const post = source.indexOf('effect.label');
-        const octave = source.indexOf('octave${octave + 1}');
+        const octave = source.indexOf('octave${step.last + 1}');
         const display = source.indexOf('getCurrentTexture');
         expect([adjustments, rgb, post, octave, display]).not.toContain(-1);
         expect(adjustments).toBeLessThan(rgb);
@@ -260,6 +261,7 @@ describe('field configuration', () => {
         expect(source).toContain('this.recreateTargets(value)');
         expect(source).toContain('if (!preserveHistory) this.historyTexture?.destroy()');
         expect(source).toContain('if (postRan && !this.paused && this.historyTexture)');
+        expect(source).toContain('if (!datamosh) this.historyValid = false');
         expect(source).toContain('this.renderedFrames += 1');
         expect(source).toContain('const frameTimingSlot = this.paused ?');
         expect(source).toContain('!this.paused && this.querySet');
@@ -320,9 +322,65 @@ describe('field configuration', () => {
         expect(renderSize(801.9, 600.8, 3, Number.POSITIVE_INFINITY)).toEqual({ width: 2405, height: 1802 });
         expect(renderSize(0, 0, 2, 1)).toEqual({ width: 1, height: 1 });
     });
+    it('holds the canvas to the area of 3840×2160 at the viewport’s own aspect', () => {
+        // [CSS width, CSS height, DPR, cap] -> canvas; reasons: 5K, exact 4K, ultrawide, portrait, under budget.
+        const cases: [number, number, number, number, { width: number; height: number }][] = [
+            [5120, 2880, 1, Infinity, { width: 3840, height: 2160 }],
+            [2560, 1440, 1.5, 1.5, { width: 3840, height: 2160 }],
+            [3440, 1440, 2, 1.5, { width: 4451, height: 1863 }],
+            [1440, 3440, 2, 1.5, { width: 1863, height: 4451 }],
+            [1280, 800, 2, 1.5, { width: 1920, height: 1200 }],
+        ];
+        for (const [width, height, dpr, cap, expected] of cases) {
+            const size = renderSize(width, height, dpr, cap);
+            expect(size).toEqual(expected);
+            expect(size.width * size.height).toBeLessThanOrEqual(3840 * 2160);
+        }
+    });
     it('keeps scaled render targets valid', () => {
         expect(scaledSize(1202, 901, 0.5)).toEqual({ width: 601, height: 450 });
         expect(scaledSize(0, 0, 0.5)).toEqual({ width: 1, height: 1 });
+    });
+    it('fuses only octave stages that can be summed exactly, within the read budget', () => {
+        // Octave n: [noise, threshold, smoothness, distance]; smoothness 1 with a distance means four reads.
+        const plan = (settings: Record<number, number[]>, extra: Record<string, number> = {}) => {
+            const parameters = { ...defaultParameters(), ...extra };
+            for (let n = 1; n <= 5; n++) {
+                const [noise, threshold, smoothness, distance] = settings[n] ?? [0, 0, 0, 0];
+                Object.assign(parameters, {
+                    [`octave${n}Noise`]: noise,
+                    [`octave${n}Threshold`]: threshold,
+                    [`octave${n}Smoothness`]: smoothness,
+                    [`octave${n}Distance`]: distance,
+                    [`octave${n}BlurRadius`]: 0,
+                    [`octave${n}Pixelate`]: 0,
+                });
+            }
+            Object.assign(parameters, extra);
+            return octaveSteps(parameters);
+        };
+        const run = (first: number, last: number) => ({ kind: 'octaves', first, last });
+        // The shipped settings: 1 × 4 × 3 × 1 reads, one pass.
+        expect(
+            plan({ 2: [0.005, 0, 1, 0], 3: [0.01, 0, 1, 0.3], 4: [0.01, 0, 0.67, 0.5], 5: [0.005, 0, 0, 1.8] }),
+        ).toEqual([run(1, 4)]);
+        // Inactive stages inside a run are identities and do not split it.
+        expect(plan({ 1: [0.01, 0, 0, 0], 4: [0.01, 0, 0, 0] })).toEqual([run(0, 3)]);
+        // 4 × 4 = 16 fits; a third four-read stage starts a new pass.
+        expect(plan({ 1: [0, 0, 1, 1], 2: [0, 0, 1, 1], 3: [0, 0, 1, 1] })).toEqual([run(0, 1), run(2, 2)]);
+        // A threshold may only end a pass.
+        expect(plan({ 1: [0.01, 0, 0, 0], 2: [0.01, 0.2, 0, 0], 3: [0.01, 0, 0, 0] })).toEqual([run(0, 1), run(2, 2)]);
+        // Pixelation and pre-blur keep their own passes.
+        expect(plan({ 1: [0.01, 0, 0, 0], 2: [0.01, 0, 0, 0], 3: [0.01, 0, 0, 0] }, { octave2Pixelate: 1 })).toEqual([
+            run(0, 0),
+            run(1, 1),
+            run(2, 2),
+        ]);
+        expect(plan({ 1: [0.01, 0, 0, 0], 2: [0.01, 0, 0, 0] }, { octave2BlurRadius: 0.5 })).toEqual([
+            run(0, 0),
+            { kind: 'blur', octave: 1 },
+            run(1, 1),
+        ]);
     });
     it('keeps the base and all five octave effect stages full resolution', () => {
         expect(OCTAVE_COUNT).toBe(5);
@@ -629,7 +687,7 @@ describe('field configuration', () => {
         expect(bindGroupCacheKey(0, undefined, 0)).toBe('0:none:0');
     });
     it('can bypass the stage-one threshold to expose the raw field', () => {
-        expect(BASE_SHADER_SOURCE).toContain('if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }');
+        expect(BASE_SHADER_SOURCE).toContain('if(u.thresholdEnabled<.5) { return materialize(natural); }');
     });
     it('appends and packs independent lens and camera toggles without moving existing post uniforms', () => {
         const toggleKeys = [

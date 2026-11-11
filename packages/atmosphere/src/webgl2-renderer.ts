@@ -1,12 +1,10 @@
 import type { RenderBackend } from './render-backend';
 import {
     COLOUR_KIND_INDEX,
-    OCTAVE_COUNT,
     POST_KIND_INDEX,
     POST_PARAMETER_SCHEMA,
     packUniform,
-    octaveBlurIsActive,
-    octaveEffectIsActive,
+    octaveSteps,
     renderSize,
     scaledSize,
     datamoshIsActive,
@@ -114,7 +112,7 @@ void main() {
     rgb = vec3(texture(_group_0_binding_1_fs, redUv).x, rgb.y, texture(_group_0_binding_1_fs, blueUv).z);`;
     else
         effect = `
-    rgb = blend_2(rgb, texture(_group_0_binding_3_fs, vec2(uv.x, 1.0 - uv.y)).xyz, _group_0_binding_0_fs.post[8].x);`;
+    rgb = blend_2(rgb, texture(_group_0_binding_3_fs, uv).xyz, _group_0_binding_0_fs.post[8].x);`;
     return `${header}const int kind = ${index};\n${common}${effect}\n    _fs2p_location0 = vec4(rgb, 1.0);\n}`;
 }
 export function specializeWebGL2Shader(name: keyof typeof SELECTORS, index: number): string {
@@ -153,7 +151,7 @@ const ABLATION_WARMUPS = 3,
 const FENCE_POLL_MS = 4;
 const FENCE_EMERGENCY_MS = 750;
 const TIMER_QUERY_WATCHDOG_MS = 1_000;
-export type WebGL2TargetKind = 'base' | 'colour' | 'post' | 'god-rays';
+export type WebGL2TargetKind = 'colour' | 'post' | 'god-rays';
 type Target = {
     texture: WebGLTexture;
     framebuffer: WebGLFramebuffer;
@@ -162,14 +160,18 @@ type Target = {
     kind: WebGL2TargetKind;
 };
 export const WEBGL2_TARGET_FORMATS = {
-    base: 'R16F',
     colour: 'RGBA16F',
     post: 'RGBA8',
     history: 'RGBA8',
     'god-rays': 'RGBA16F',
 } as const;
 
-/** Convert GLSL's bottom-left fragment position to canonical WGSL top-left coordinates. */
+/**
+ * Convert GLSL's bottom-left fragment position to canonical WGSL top-left coordinates, for a pass that draws to the
+ * canvas. Render-target passes keep GL's own position instead: their rows are then stored top row first, the layout
+ * WebGPU uses and the one the calm mask and density uploads already have, so each pass reads its source the right
+ * way up. Flipping those too would mirror the image once per pass, leaving it upside down after an odd number.
+ */
 export function topLeftFragmentCoordinates(source: string) {
     return source.replaceAll(
         'vec4 pos = gl_FragCoord;',
@@ -189,9 +191,9 @@ function compile(gl: WebGL2RenderingContext, type: number, source: string) {
     }
     return value;
 }
-function program(gl: WebGL2RenderingContext, fragment: string) {
+function program(gl: WebGL2RenderingContext, fragment: string, drawsToCanvas = false) {
     const vs = compile(gl, gl.VERTEX_SHADER, VERTEX),
-        fs = compile(gl, gl.FRAGMENT_SHADER, topLeftFragmentCoordinates(fragment)),
+        fs = compile(gl, gl.FRAGMENT_SHADER, drawsToCanvas ? topLeftFragmentCoordinates(fragment) : fragment),
         p = gl.createProgram();
     if (!p) throw new Error('Could not allocate a WebGL2 program.');
     gl.attachShader(p, vs);
@@ -260,7 +262,6 @@ export class WebGL2Renderer implements RenderBackend {
         this.lostHandler?.(message);
     }
     private programs = new Map<ProgramKey, WebGLProgram>();
-    private baseTargets: Target[] = [];
     private colourTargets: Target[] = [];
     private postTargets: Target[] = [];
     private godRays?: Target;
@@ -427,7 +428,8 @@ export class WebGL2Renderer implements RenderBackend {
     }
     private installProgram(key: ProgramKey, source: string) {
         const gl = this.gl,
-            p = program(gl, source);
+            // PRESENT flips itself; DISPLAY is the other program that draws to the canvas (presentation-lite ablation).
+            p = program(gl, source, key === 'DISPLAY');
         this.programs.set(key, p);
         const i = gl.getUniformBlockIndex(p, 'U_block_0Fragment');
         if (i !== gl.INVALID_INDEX) gl.uniformBlockBinding(p, i, 0);
@@ -465,16 +467,15 @@ export class WebGL2Renderer implements RenderBackend {
             gl.texParameteri(gl.TEXTURE_2D, key, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        const single = kind === 'base',
-            post = kind === 'post';
+        const post = kind === 'post';
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
-            single ? gl.R16F : post ? gl.RGBA8 : gl.RGBA16F,
+            post ? gl.RGBA8 : gl.RGBA16F,
             width,
             height,
             0,
-            single ? gl.RED : gl.RGBA,
+            gl.RGBA,
             post ? gl.UNSIGNED_BYTE : gl.HALF_FLOAT,
             null,
         );
@@ -589,7 +590,6 @@ export class WebGL2Renderer implements RenderBackend {
     }
     private allTargets() {
         return [
-            ...this.baseTargets,
             ...this.colourTargets,
             ...this.postTargets,
             ...(this.godRays ? [this.godRays] : []),
@@ -606,10 +606,6 @@ export class WebGL2Renderer implements RenderBackend {
         // become its continuous workload.  Its effective scale remains the resume scale.
         const targetScale = this.paused ? this.options.renderScale : this.adaptive.effectiveScale;
         const size = scaledSize(this.canvas.width, this.canvas.height, targetScale);
-        this.baseTargets = [
-            this.makeTarget('base', size.width, size.height),
-            this.makeTarget('base', size.width, size.height),
-        ];
         this.colourTargets = [
             this.makeTarget('colour', size.width, size.height),
             this.makeTarget('colour', size.width, size.height),
@@ -710,7 +706,7 @@ export class WebGL2Renderer implements RenderBackend {
         const ablation = this.ablationVariants?.[this.ablationVariant];
         if (!this.paused) this.simTime += Math.max(0, (now - this.lastTick) / 1000) * p.animationSpeed;
         this.lastTick = now;
-        const internalResolution: [number, number] = [this.baseTargets[0].width, this.baseTargets[0].height];
+        const internalResolution: [number, number] = [targets[0].width, targets[0].height];
         const timer =
             !ablationReady && !this.paused && this.timerQuery && this.pendingTimerQueries.length === 0
                 ? this.gl.createQuery()
@@ -723,8 +719,7 @@ export class WebGL2Renderer implements RenderBackend {
         this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.cursorBuffer);
         this.gl.bufferSubData(this.gl.UNIFORM_BUFFER, 0, packCursorUniform(p, this.cursorState));
         this.gl.bindBuffer(this.gl.UNIFORM_BUFFER, this.uniformBuffer);
-        this.draw('BASE', this.baseTargets[0], undefined, undefined, undefined, 'base');
-        this.draw('MATERIALIZE', targets[next], this.baseTargets[0].texture, undefined, undefined, 'field-materialize');
+        this.draw('BASE', targets[next], undefined, undefined, undefined, 'field');
         [current, next] = [next, current];
         const nextLeadingKey = this.options.bakedLeadingAdjustments
             ? 'baked'
@@ -837,7 +832,8 @@ export class WebGL2Renderer implements RenderBackend {
         }
         const postStages = this.cachedPostPlan;
         let source: Target = this.colourTargets[current];
-        if (ablation?.kind !== 'all-post' && postStages.some((e) => e.kind === 'datamosh') && !this.historyValid) {
+        const datamosh = postStages.some((e) => e.kind === 'datamosh');
+        if (ablation?.kind !== 'all-post' && datamosh && !this.historyValid) {
             this.upload(data);
             this.draw('COPY', this.history!, source.texture, undefined, undefined, 'post:history-copy');
             this.historyValid = true;
@@ -888,26 +884,38 @@ export class WebGL2Renderer implements RenderBackend {
             postIndex = 1 - postIndex;
             postRan = true;
         }
-        if (postRan && !this.paused) {
+        // Only datamosh reads the history; see the WebGPU renderer.
+        if (!datamosh) this.historyValid = false;
+        else if (postRan && !this.paused) {
             this.copy(source, this.history!, 'post:history-copy');
             this.historyValid = true;
         }
-        for (let i = 0; i < OCTAVE_COUNT; i++) {
-            data[29] = i;
+        for (const [i, step] of octaveSteps(p).entries()) {
             if (ablation?.kind === 'all-octaves' || (ablation?.kind === 'octave' && ablation.index === i)) continue;
-            if (octaveBlurIsActive(p, i)) {
-                const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
+            const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
+            if (step.kind === 'blur') {
+                data[29] = step.octave;
                 this.upload(data);
-                this.draw('BLUR', destination, source.texture, undefined, undefined, `blur${i}`);
-                source = destination;
-            }
-            if (octaveEffectIsActive(p, i)) {
-                const destination = source === this.colourTargets[0] ? this.colourTargets[1] : this.colourTargets[0];
+                this.draw('BLUR', destination, source.texture, undefined, undefined, `blur${step.octave}`);
+            } else if (step.first === step.last) {
+                data[29] = step.last;
                 this.upload(data);
-                this.specialized('OCTAVE', i);
-                this.draw(`OCTAVE:${i}`, destination, source.texture, undefined, undefined, `octave${i}`);
-                source = destination;
+                this.specialized('OCTAVE', step.last);
+                this.draw(
+                    `OCTAVE:${step.last}`,
+                    destination,
+                    source.texture,
+                    undefined,
+                    undefined,
+                    `octave${step.last}`,
+                );
+            } else {
+                data[29] = step.last;
+                data[57] = step.first;
+                this.upload(data);
+                this.draw('OCTAVE_CHAIN', destination, source.texture, undefined, undefined, 'octave-chain');
             }
+            source = destination;
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
@@ -957,7 +965,7 @@ export class WebGL2Renderer implements RenderBackend {
             this.canvas.width,
             this.canvas.height,
             s,
-            this.adaptive.effectiveScale,
+            this.paused ? this.options.renderScale : this.adaptive.effectiveScale,
         );
     }
     private copy(from: Target, to: Target, _profileLabel?: string) {
@@ -973,12 +981,14 @@ export class WebGL2Renderer implements RenderBackend {
             variants.push({ label: `post:${index}:${stage.label}`, kind: 'post', index }),
         );
         if (postStages.length) variants.push({ label: 'all-post', kind: 'all-post' });
-        for (let index = 0; index < OCTAVE_COUNT; index++)
-            if (
-                octaveBlurIsActive(this.options.parameters, index) ||
-                octaveEffectIsActive(this.options.parameters, index)
-            )
-                variants.push({ label: `octave:${index}`, kind: 'octave', index });
+        // One variant per octave pass: stages fused into one pass cost together.
+        octaveSteps(this.options.parameters).forEach((step, index) =>
+            variants.push({
+                label: step.kind === 'blur' ? `blur:${step.octave}` : `octave:${step.first}-${step.last}`,
+                kind: 'octave',
+                index,
+            }),
+        );
         if (variants.some((x) => x.kind === 'octave')) variants.push({ label: 'all-octaves', kind: 'all-octaves' });
         variants.push({ label: 'colour', kind: 'colour' });
         // DISPLAY is the existing simple texture-to-canvas path, so it is a valid PRESENT replacement.

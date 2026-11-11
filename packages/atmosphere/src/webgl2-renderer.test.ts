@@ -44,8 +44,9 @@ describe('WebGL2 parity backend', () => {
         expect(source).toContain('uv - radial * amount');
         expect(source).not.toContain('vec2(d, 0.0)');
         const godRaysComposite = specializeWebGL2Shader('POST_EFFECT', 27);
-        expect(godRaysComposite).toContain('texture(_group_0_binding_3_fs, vec2(uv.x, 1.0 - uv.y))');
-        expect(godRaysComposite).not.toContain('texture(_group_0_binding_3_fs, uv)');
+        // Every render target is stored the same way up, so the rays are read at the scene's own position.
+        expect(godRaysComposite).toContain('texture(_group_0_binding_3_fs, uv)');
+        expect(godRaysComposite).not.toContain('1.0 - uv.y');
     });
 
     it('lazily installs specialized programs and assigns samplers only at installation', () => {
@@ -68,8 +69,8 @@ describe('WebGL2 parity backend', () => {
                 'DISPLAY',
                 'GOD_RAYS',
                 'LUT',
-                'MATERIALIZE',
                 'OCTAVE',
+                'OCTAVE_CHAIN',
                 'POST_EFFECT',
                 'PRESENT',
             ].sort(),
@@ -91,7 +92,9 @@ describe('WebGL2 parity backend', () => {
             'textureSample(calmField,densitySampler,pos.xy/u.resolution).a',
             'natural*=1.-calm;',
         );
-        calmed(shaders.BASE, 'texture(_group_0_binding_6_fs,', 'natural = (_calm_natural * (1.0 - calm));');
+        const multiply = shaders.BASE.match(/natural = \(_e\d+ \* \(1\.0 - calm\)\);/)?.[0];
+        expect(multiply).toBeDefined();
+        calmed(shaders.BASE, 'texture(_group_0_binding_6_fs,', multiply!);
     });
 
     it('samples the persistent density texture with generated GLSL parity', () => {
@@ -105,7 +108,7 @@ describe('WebGL2 parity backend', () => {
         );
         expect(shaders.BASE).toMatch(/natural = \(_e\d+ \+ \(_e\d+ \* densityResponse\)\);/);
         expect(shaders.BASE.indexOf('float densityResponse =')).toBeGreaterThan(
-            shaders.BASE.indexOf('natural = (_e342 * exp2'),
+            shaders.BASE.search(/natural = \(_e\d+ \* exp2/),
         );
         expect(BASE_SHADER_SOURCE).toContain('let darkBias=cp(3u);');
         expect(BASE_SHADER_SOURCE).toContain('select(pow(max(1.-clamp(natural,0.,1.),1e-6),darkBias),1.,darkBias==0.)');
@@ -198,9 +201,7 @@ describe('WebGL2 parity backend', () => {
 
     it('uses internal base resolution except for native presentation and god rays', () => {
         const implementation = WebGL2Renderer.toString();
-        expect(implementation).toContain(
-            'const internalResolution = [this.baseTargets[0].width, this.baseTargets[0].height]',
-        );
+        expect(implementation).toContain('const internalResolution = [targets[0].width, targets[0].height]');
         // The test runner's transform may wrap imports, so match the call loosely.
         expect(implementation.match(/packUniform\)?\(internalResolution/g)).toHaveLength(2);
         expect(implementation).toContain('data[0] = this.godRays.width');
@@ -216,6 +217,8 @@ describe('WebGL2 parity backend', () => {
         expect(shaders.COPY).toContain('texelFetch');
         expect(shaders.COPY).not.toContain('texture(');
         expect(implementation).toContain('if (postRan && !this.paused)');
+        // Only datamosh reads the history, so other Post plans skip the per-frame copy and re-initialise later.
+        expect(implementation).toContain('if (!datamosh) this.historyValid = false');
     });
 
     it('adapts only from available, non-disjoint GPU elapsed queries with captured attribution', () => {

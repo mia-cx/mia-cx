@@ -68,9 +68,25 @@ export const MAX_CURSOR_DENSITY_PASSES = 2;
 export const MAX_TIMESTAMPED_PASSES = MAX_RENDER_PASSES + MAX_CURSOR_DENSITY_PASSES;
 export const CURSOR_DENSITY_UNIFORM_BYTES = 32;
 const GPU_QUERY_COUNT = MAX_TIMESTAMPED_PASSES * 2;
+/** Pipeline slots, in the order create() compiles them; compact baked Post variants follow the last one. */
+const PIPELINE = {
+    field: 0,
+    blur: 1,
+    octave: 2,
+    display: 3,
+    bloomExtract: 4,
+    bloomBlur: 5,
+    godRays: 6,
+    post: 7,
+    present: 8,
+    colour: 9,
+    lut: 10,
+    copy: 11,
+    cursorDecay: 12,
+    cursorPaint: 13,
+    octaveChain: 14,
+} as const;
 const PIPELINE_COUNT = 15;
-const CURSOR_DECAY_PIPELINE = 13;
-const CURSOR_PAINT_PIPELINE = 14;
 export const GPU_FRAME_TIMING_RING_SIZE = 3;
 export const MAX_IN_FLIGHT_SUBMISSIONS = 3;
 export const GPU_TIMING_WATCHDOG_MS = 1_000;
@@ -117,7 +133,7 @@ export function aggregateGpuTimestamps(timestamps: ArrayLike<bigint>, labels: re
     });
     const sum = (...prefixes: string[]) =>
         passes.reduce((n, pass) => n + (prefixes.some((prefix) => pass.label.startsWith(prefix)) ? pass.ms : 0), 0);
-    const fieldMs = sum('base', 'field-materialize');
+    const fieldMs = sum('base', 'field');
     const cursorMs = sum('CURSOR:');
     const colourMs = sum('colour:');
     const postMs = sum('post:');
@@ -366,10 +382,18 @@ export interface RenderOptions {
     bakedLeadingAdjustments?: ReturnType<typeof leadingAdjustmentRegion>;
 }
 
+/** Most pixels the canvas may hold: the area of 2160p, at whatever aspect the viewport has. */
+export const MAX_RENDER_PIXELS = 3840 * 2160;
+
+/**
+ * Canvas size for a CSS box: the DPR up to `cap`, then both sides shrunk by one factor if that would exceed
+ * MAX_RENDER_PIXELS, so ultrawide and portrait views keep their aspect. Adaptive resolution scales below this.
+ */
 export function renderSize(width: number, height: number, dpr: number, cap: number) {
+    const scale = Math.min(dpr, cap, Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, width * height)));
     return {
-        width: Math.max(1, Math.floor(width * Math.min(dpr, cap))),
-        height: Math.max(1, Math.floor(height * Math.min(dpr, cap))),
+        width: Math.max(1, Math.floor(width * scale)),
+        height: Math.max(1, Math.floor(height * scale)),
     };
 }
 
@@ -433,6 +457,48 @@ export function octaveEffectIsActive(parameters: ShaderParameters, index: number
 
 export function octaveBlurIsActive(parameters: ShaderParameters, index: number) {
     return parameters[OCTAVE_BLUR_SCHEMA[index].key] > 0;
+}
+
+/** Most source reads a fused octave pass makes per pixel: the product of its stages' sample counts. */
+export const MAX_FUSED_OCTAVE_READS = 16;
+
+/** One octave pass: a pre-blur, or the effect stages `first` to `last` (one stage when they are equal). */
+export type OctaveStep = { kind: 'blur'; octave: number } | { kind: 'octaves'; first: number; last: number };
+
+/**
+ * The octave stages grouped into passes. Consecutive effect stages share one pass when the result can be summed
+ * exactly from texel reads: each stage then only averages its source at whole-pixel offsets and adds noise. A
+ * pixelated stage averages a tile, a threshold reads its own screen-space derivative (so it may only end a pass),
+ * and a blur filters between texels, so those keep passes of their own. A one-stage pass is the per-octave shader.
+ */
+export function octaveSteps(parameters: ShaderParameters): OctaveStep[] {
+    const steps: OctaveStep[] = [];
+    let run: { first: number; last: number; reads: number } | undefined;
+    const flush = () => {
+        if (run) steps.push({ kind: 'octaves', first: run.first, last: run.last });
+        run = undefined;
+    };
+    for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
+        if (octaveBlurIsActive(parameters, octave)) {
+            flush();
+            steps.push({ kind: 'blur', octave });
+        }
+        if (!octaveEffectIsActive(parameters, octave)) continue;
+        const [, threshold, smoothness, distance] = OCTAVE_PARAMETER_SCHEMA[octave].map(({ key }) => parameters[key]);
+        if (parameters[OCTAVE_PIXELATE_SCHEMA[octave].key] >= 0.5) {
+            flush();
+            steps.push({ kind: 'octaves', first: octave, last: octave });
+            continue;
+        }
+        // The shader's sample count: one read without scatter, otherwise one to four by smoothness. WGSL rounds exact
+        // halves to even and Math.round rounds them up, so at worst this overcounts and the budget errs low.
+        const reads = distance > 0 ? Math.round(1 + 3 * smoothness) : 1;
+        if (run && run.reads * reads > MAX_FUSED_OCTAVE_READS) flush();
+        run = run ? { ...run, last: octave, reads: run.reads * reads } : { first: octave, last: octave, reads };
+        if (threshold !== 0) flush();
+    }
+    flush();
+    return steps;
 }
 
 export function godRaysIsActive(parameters: ShaderParameters) {
@@ -557,9 +623,15 @@ fn smoothAbsFold(value: f32) -> f32 {
 }
 `;
 
+/**
+ * The field pass: shapes the scalar field, calms it under page content, and writes it as grey RGB with the final
+ * contrast applied, ready for the Colour pipeline. It writes straight to an RGBA target, so the scalar never makes a
+ * round trip through a texture of its own.
+ */
 export const BASE_SHADER_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
+fn materialize(v:f32)->vec4f { return vec4f(vec3f(pow(clamp(v,0.,1.),u.finalContrast)),1.); }
 struct CursorUniform { parameters:array<vec4f,1> }
 @group(0) @binding(1) var<uniform> cursor:CursorUniform;
 @group(0) @binding(2) var densityField:texture_2d<f32>;
@@ -625,10 +697,10 @@ fn cp(i:u32)->f32 { return cursor.parameters[i/4u][i%4u]; }
     let densityResponse=select(pow(max(1.-clamp(natural,0.,1.),1e-6),darkBias),1.,darkBias==0.);
     natural+=cursorDensity*densityResponse;
     // Field shaping finishes here; recursive scatter/noise is the next destructive stage on top.
-    if(u.thresholdEnabled<.5) { return vec4f(natural,0.,0.,1.); }
+    if(u.thresholdEnabled<.5) { return materialize(natural); }
     let thresholdWidth=max(u.thresholdSoftness,fwidth(natural)*1.5);
     let thresholded=smoothstep(u.threshold-thresholdWidth,u.threshold+thresholdWidth,natural);
-    return vec4f(thresholded,0.,0.,1.);
+    return materialize(thresholded);
 }`;
 
 export const BLUR_SHADER_SOURCE =
@@ -651,7 +723,8 @@ export const BLUR_SHADER_SOURCE =
     return vec4f(value,1.);
 }`;
 
-export const OCTAVE_SHADER_SOURCE =
+/** Bindings and hashes shared by the per-octave and fused octave shaders, so both scatter and salt identically. */
+const OCTAVE_COMMON_SOURCE =
     COMMON_SHADER_SOURCE +
     /* wgsl */ `
 @group(0) @binding(1) var src: texture_2d<f32>; @group(0) @binding(2) var samp: sampler;
@@ -675,7 +748,11 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     let radius=f32(bits>>8u)*(1./16777215.)*distance;
     return directions[bits&15u]*radius;
 }
-@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+`;
+
+export const OCTAVE_SHADER_SOURCE =
+    OCTAVE_COMMON_SOURCE +
+    /* wgsl */ `@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv=pos.xy/u.resolution;
     let sourceSize=vec2f(textureDimensions(src));
     let octave=u32(u.octaveIndex);
@@ -721,6 +798,73 @@ fn scatterOffset(tile: vec2u, sampleIndex: u32, distance: f32, octaveFrameSalt: 
     let luminance=dot(max(injected,vec3f(0.)),vec3f(.2126,.7152,.0722));
     let thresholdWidth=max(.015,fwidth(luminance)*1.5);
     let thresholded=smoothstep(settings.y-thresholdWidth,settings.y+thresholdWidth,luminance);
+    let scale=select(0.,thresholded/max(luminance,.000001),luminance>0.);
+    return vec4f(injected*scale,1.);
+}`;
+
+/**
+ * Octave stages blurRadii[1].y (first) to octaveIndex (last) in one pass; see `octaveSteps` for which may share one.
+ * Each of those stages averages its source at whole-pixel offsets and adds per-tile noise, so the chain equals the
+ * mean over every path of sample choices of the source texel the path ends on plus the noise it picked up on the way.
+ * Paths are walked like an odometer, recomputing only the stages whose choice changed. Reads are exact texel loads
+ * at clamped positions, which is what the per-octave pass's texel-centre samples with clamp-to-edge return.
+ */
+export const OCTAVE_CHAIN_SHADER_SOURCE =
+    OCTAVE_COMMON_SOURCE +
+    /* wgsl */ `@fragment fn fs(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let size=vec2i(textureDimensions(src));
+    let first=u32(u.blurRadii[1].y);
+    let last=u32(u.octaveIndex);
+    let frame=u32(u.frameIndex);
+    var count: array<u32,5>;
+    var paths=1u;
+    for(var octave=first;octave<=last;octave++) {
+        let settings=u.octaves[octave];
+        count[octave]=select(1u,u32(round(mix(1.,4.,settings.z))),settings.w>0.);
+        paths*=count[octave];
+    }
+    // Stage o is evaluated at point[o+1] and reads its source at point[o]; noise[o] is the noise gathered down to it.
+    var choice: array<u32,5>;
+    var point: array<vec2i,6>;
+    var noise: array<f32,6>;
+    point[last+1u]=vec2i(pos.xy);
+    var sum=vec3f(0.);
+    var changed=last;
+    for(var path=0u;path<paths;path++) {
+        for(var o=i32(changed);o>=i32(first);o--) {
+            let octave=u32(o);
+            let settings=u.octaves[octave];
+            let here=point[octave+1u];
+            let tile=vec2u(here)>>vec2u(4u-octave);
+            var detail=0.;
+            if(settings.x!=0.) {
+                let noiseSalt=(octave*0x27d4eb2du) ^ (frame*0x165667b1u) ^ 0xa511e9b3u;
+                detail=(f32(tileHash(tile,noiseSalt))*(1./4294967295.)-.5)*settings.x;
+            }
+            noise[octave]=noise[octave+1u]+detail;
+            var offset=vec2i(0);
+            if(settings.w>0.) {
+                let octaveFrameSalt=(octave*0x27d4eb2du) ^ (frame*0x9e3779b9u);
+                offset=vec2i(round(scatterOffset(tile,choice[octave],settings.w,octaveFrameSalt)))*i32(1u<<(4u-octave));
+            }
+            point[octave]=clamp(here+offset,vec2i(0),size-vec2i(1));
+        }
+        sum+=textureLoad(src,point[first],0).rgb+noise[first];
+        var o=first;
+        loop {
+            choice[o]+=1u;
+            if(choice[o]<count[o] || o==last) { break; }
+            choice[o]=0u;
+            o+=1u;
+        }
+        changed=o;
+    }
+    let injected=sum/f32(paths);
+    let threshold=u.octaves[last].y;
+    if(threshold==0.) { return vec4f(injected,1.); }
+    let luminance=dot(max(injected,vec3f(0.)),vec3f(.2126,.7152,.0722));
+    let thresholdWidth=max(.015,fwidth(luminance)*1.5);
+    let thresholded=smoothstep(threshold-thresholdWidth,threshold+thresholdWidth,luminance);
     let scale=select(0.,thresholded/max(luminance,.000001),luminance>0.);
     return vec4f(injected*scale,1.);
 }`;
@@ -815,13 +959,6 @@ export const BLOOM_BLUR_SHADER_SOURCE =
     /* wgsl */ `
 @group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
 @fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let uv=pos.xy/u.resolution; let o=(1.+u.post[5].y*3.)/vec2f(textureDimensions(src)); var rgb=textureSample(src,samp,uv+o).rgb+textureSample(src,samp,uv-o).rgb+textureSample(src,samp,uv+vec2f(-o.x,o.y)).rgb+textureSample(src,samp,uv+vec2f(o.x,-o.y)).rgb; return vec4f(rgb*.25,1); }`;
-
-/** Scalar-to-RGBA materialization before the Colour pipeline. */
-export const MATERIALIZE_SHADER_SOURCE =
-    COMMON_SHADER_SOURCE +
-    /* wgsl */ `
-@group(0) @binding(1) var src:texture_2d<f32>; @group(0) @binding(2) var samp:sampler;
-@fragment fn fs(@builtin(position) pos:vec4f)->@location(0) vec4f { let v=pow(clamp(textureSample(src,samp,pos.xy/u.resolution).r,0.,1.),u.finalContrast); return vec4f(vec3f(v),1.); }`;
 
 /** A single literal post item; u.blurRadii[1].z selects its kind. */
 export const POST_EFFECT_SHADER_SOURCE =
@@ -1152,14 +1289,13 @@ export class AtmosphereRenderer {
         const maxBlend = { operation: 'max', srcFactor: 'one', dstFactor: 'one' } as const;
         // One batch, so every pipeline compiles in parallel; the order sets each one's index.
         self.pipelines = await Promise.all([
-            make(BASE_SHADER_SOURCE, { format: 'r16float' }),
+            make(BASE_SHADER_SOURCE, { format: 'rgba16float' }),
             make(BLUR_SHADER_SOURCE, { format: 'rgba16float' }),
             make(OCTAVE_SHADER_SOURCE, { format: 'rgba16float' }),
             make(DISPLAY_SHADER_SOURCE, { format }),
             make(BLOOM_EXTRACT_SHADER_SOURCE, { format: BLOOM_TEXTURE_FORMAT }),
             make(BLOOM_BLUR_SHADER_SOURCE, { format: BLOOM_TEXTURE_FORMAT }),
             make(GOD_RAYS_SHADER_SOURCE, { format: GOD_RAYS_TEXTURE_FORMAT }),
-            make(MATERIALIZE_SHADER_SOURCE, { format: 'rgba16float' }),
             make(primaryPostKind === undefined ? POST_EFFECT_SHADER_SOURCE : compactPostShaderSource(primaryPostKind), {
                 format: POST_TEXTURE_FORMAT,
             }),
@@ -1172,11 +1308,12 @@ export class AtmosphereRenderer {
                 format: CURSOR_DENSITY_FORMAT,
                 blend: { color: maxBlend, alpha: maxBlend },
             }),
+            make(OCTAVE_CHAIN_SHADER_SOURCE, { format: 'rgba16float' }),
             ...extraPostKinds.map((kind) => make(compactPostShaderSource(kind), { format: POST_TEXTURE_FORMAT })),
         ]);
         if (primaryPostKind !== undefined) {
-            self.compactPostPipelineIndices.set(primaryPostKind, 8);
-            if (primaryPostKind === 27) self.compactPostHistoryPipelines.add(8);
+            self.compactPostPipelineIndices.set(primaryPostKind, PIPELINE.post);
+            if (primaryPostKind === 27) self.compactPostHistoryPipelines.add(PIPELINE.post);
             const firstExtraIndex = self.pipelines.length - extraPostKinds.length;
             extraPostKinds.forEach((kind, offset) => {
                 const pipelineIndex = firstExtraIndex + offset;
@@ -1288,15 +1425,12 @@ export class AtmosphereRenderer {
         this.textureViews = [];
         this.bindGroups.clear();
         const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
-        // Scalar field, linear Colour/Octaves, and display-space Post ping-pong.
+        // Slots 0–1: linear field/Colour/Octaves ping-pong; 2–3: display-space Post ping-pong; 4: god rays.
         // A paused redraw is deliberately a one-off quality pass.  Do not move the adaptive controller:
         // its effective scale is the scale to which we return when animation resumes.
         const targetScale = this.paused ? this.options.renderScale : this.adaptiveResolution.effectiveScale;
         const size = scaledSize(this.canvas.width, this.canvas.height, targetScale);
         this.textures = [
-            ...Array.from({ length: 2 }, () =>
-                this.device!.createTexture({ size: [size.width, size.height], format: 'r16float', usage }),
-            ),
             ...Array.from({ length: 2 }, () =>
                 this.device!.createTexture({
                     size: [size.width, size.height],
@@ -1501,7 +1635,7 @@ export class AtmosphereRenderer {
             this.canvas.width,
             this.canvas.height,
             this.frameTelemetry.summary(this.lastTime),
-            this.adaptiveResolution.effectiveScale,
+            this.paused ? this.options.renderScale : this.adaptiveResolution.effectiveScale,
         );
         this.invalidate();
     }
@@ -1572,8 +1706,8 @@ export class AtmosphereRenderer {
             buffers.length < MAX_RENDER_PASSES ||
             !s ||
             this.pipelines.length < PIPELINE_COUNT ||
-            this.textures.length < 7 ||
-            this.textureViews.length < 7
+            this.textures.length < 5 ||
+            this.textureViews.length < 5
         )
             return;
         const enc = d.createCommandEncoder();
@@ -1622,7 +1756,7 @@ export class AtmosphereRenderer {
             let bindGroup = this.bindGroups.get(cacheKey);
             if (!bindGroup) {
                 const entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer } }];
-                if (pipelineIndex === 0)
+                if (pipelineIndex === PIPELINE.field)
                     entries.push(
                         { binding: 1, resource: { buffer: this.cursorBuffer! } },
                         { binding: 2, resource: this.densityViews[this.densityActive] },
@@ -1632,15 +1766,15 @@ export class AtmosphereRenderer {
                 if (sourceTextureIndex !== undefined) {
                     entries.push({ binding: 1, resource: this.textureViews[sourceTextureIndex] });
                     if (usesSampler) entries.push({ binding: 2, resource: s });
-                    if (pipelineIndex === 3) {
+                    if (pipelineIndex === PIPELINE.display) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
-                        entries.push({ binding: 4, resource: this.textureViews[3] });
-                        entries.push({ binding: 5, resource: this.textureViews[4] });
-                    } else if (pipelineIndex === 4) {
+                        entries.push({ binding: 4, resource: this.textureViews[1] });
+                        entries.push({ binding: 5, resource: this.textureViews[2] });
+                    } else if (pipelineIndex === PIPELINE.bloomExtract) {
                         entries.push({ binding: 3, resource: this.adjustmentView! });
-                        entries.push({ binding: 4, resource: this.textureViews[4] });
+                        entries.push({ binding: 4, resource: this.textureViews[2] });
                     } else if (
-                        (pipelineIndex === 8 && this.compactPostPipelineIndices.size === 0) ||
+                        (pipelineIndex === PIPELINE.post && this.compactPostPipelineIndices.size === 0) ||
                         this.compactPostHistoryPipelines.has(pipelineIndex)
                     ) {
                         entries.push({
@@ -1650,7 +1784,7 @@ export class AtmosphereRenderer {
                                     ? this.historyView!
                                     : this.textureViews[auxiliaryTextureIndex],
                         });
-                    } else if (pipelineIndex === 11 && lutId) {
+                    } else if (pipelineIndex === PIPELINE.lut && lutId) {
                         entries.push({
                             binding: 3,
                             resource:
@@ -1732,7 +1866,7 @@ export class AtmosphereRenderer {
         }
         if (this.densityMayBeNonzero && this.densityDecay < 0.999999) {
             const next = 1 - this.densityActive,
-                pipeline = this.pipelines[CURSOR_DECAY_PIPELINE];
+                pipeline = this.pipelines[PIPELINE.cursorDecay];
             d.queue.writeBuffer(this.densityParamsBuffer!, 0, new Float32Array([this.densityDecay, 0, 0, 0]));
             const group = d.createBindGroup({
                 layout: pipeline.getBindGroupLayout(0),
@@ -1742,7 +1876,7 @@ export class AtmosphereRenderer {
                     { binding: 2, resource: this.densitySampler! },
                 ],
             });
-            cursorPass(CURSOR_DECAY_PIPELINE, this.densityViews[next], group, 3, 1, 'CURSOR:DECAY', 'clear');
+            cursorPass(PIPELINE.cursorDecay, this.densityViews[next], group, 3, 1, 'CURSOR:DECAY', 'clear');
             this.densityActive = next;
             this.densityDecay = 1;
             this.bindGroups.clear();
@@ -1757,7 +1891,7 @@ export class AtmosphereRenderer {
                 0,
                 new Float32Array([this.densityWidth / this.densityHeight, 0, 0, 0]),
             );
-            const pipeline = this.pipelines[CURSOR_PAINT_PIPELINE],
+            const pipeline = this.pipelines[PIPELINE.cursorPaint],
                 group = d.createBindGroup({
                     layout: pipeline.getBindGroupLayout(0),
                     entries: [
@@ -1766,7 +1900,7 @@ export class AtmosphereRenderer {
                     ],
                 });
             cursorPass(
-                CURSOR_PAINT_PIPELINE,
+                PIPELINE.cursorPaint,
                 this.densityViews[this.densityActive],
                 group,
                 6,
@@ -1778,11 +1912,8 @@ export class AtmosphereRenderer {
             this.densityMayBeNonzero = true;
             this.bindGroups.clear();
         }
-        draw(this.textureViews[0], 0, undefined, false, 'base');
-        data[0] = this.textures[2].width;
-        data[1] = this.textures[2].height;
-        draw(this.textureViews[2], 7, 0, true, 'field-materialize');
-        let rgbaCurrent = 2;
+        draw(this.textureViews[0], PIPELINE.field, undefined, false, 'field');
+        let rgbaCurrent = 0;
         data.set(
             this.options.bakedPostParameters ?? POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
@@ -1791,8 +1922,15 @@ export class AtmosphereRenderer {
         if (this.adjustmentLutActive) {
             data.fill(0, 60, UNIFORM_FLOATS);
             data.set([0, 0, 0, 1, 1, 1, 1], 60);
-            const destination = rgbaCurrent === 2 ? 3 : 2;
-            draw(this.textureViews[destination], 11, rgbaCurrent, true, 'colour:adjustments', 'internal-adjustments');
+            const destination = 1 - rgbaCurrent;
+            draw(
+                this.textureViews[destination],
+                PIPELINE.lut,
+                rgbaCurrent,
+                true,
+                'colour:adjustments',
+                'internal-adjustments',
+            );
             rgbaCurrent = destination;
         }
         const colourOccurrences = new Map<string, number>();
@@ -1810,8 +1948,8 @@ export class AtmosphereRenderer {
                     if (!lut) continue;
                     data.fill(0, 60, UNIFORM_FLOATS);
                     data.set([...lut.asset.domainMin, ...lut.asset.domainMax, effect.values[0]], 60);
-                    const destination = rgbaCurrent === 2 ? 3 : 2;
-                    draw(this.textureViews[destination], 11, rgbaCurrent, true, timingLabel, effect.assetId);
+                    const destination = 1 - rgbaCurrent;
+                    draw(this.textureViews[destination], PIPELINE.lut, rgbaCurrent, true, timingLabel, effect.assetId);
                     rgbaCurrent = destination;
                     continue;
                 }
@@ -1837,34 +1975,35 @@ export class AtmosphereRenderer {
             data.fill(0, 60, UNIFORM_FLOATS);
             data.set(values.slice(0, 40), 60);
             data[58] = kind;
-            const destination = rgbaCurrent === 2 ? 3 : 2;
-            draw(this.textureViews[destination], 10, rgbaCurrent, true, timingLabel);
+            const destination = 1 - rgbaCurrent;
+            draw(this.textureViews[destination], PIPELINE.colour, rgbaCurrent, true, timingLabel);
             rgbaCurrent = destination;
         }
         data.set(
             POST_PARAMETER_SCHEMA.map(({ key }) => this.options.parameters[key]),
             60,
         );
-        if (postStages.some((effect) => effect.kind === 'datamosh') && !this.historyValid && this.historyTexture) {
-            draw(this.textureViews[4], 12, rgbaCurrent, false, 'history-initialize');
-            enc.copyTextureToTexture({ texture: this.textures[4] }, { texture: this.historyTexture }, [
-                this.textures[4].width,
-                this.textures[4].height,
+        const datamosh = postStages.some((effect) => effect.kind === 'datamosh');
+        if (datamosh && !this.historyValid && this.historyTexture) {
+            draw(this.textureViews[2], PIPELINE.copy, rgbaCurrent, false, 'history-initialize');
+            enc.copyTextureToTexture({ texture: this.textures[2] }, { texture: this.historyTexture }, [
+                this.textures[2].width,
+                this.textures[2].height,
             ]);
             this.historyValid = true;
         }
         let postRan = false;
         for (const effect of postStages) {
             if (effect.kind === 'datamosh' && !this.historyValid) continue;
-            const destination = !postRan ? 4 : rgbaCurrent === 4 ? 5 : 4;
+            const destination = !postRan ? 2 : rgbaCurrent === 2 ? 3 : 2;
             if (effect.kind === 'god-rays') {
-                data[0] = this.textures[6].width;
-                data[1] = this.textures[6].height;
-                draw(this.textureViews[6], 6, rgbaCurrent, true, `${effect.label}:rays`);
                 data[0] = this.textures[4].width;
                 data[1] = this.textures[4].height;
+                draw(this.textureViews[4], PIPELINE.godRays, rgbaCurrent, true, `${effect.label}:rays`);
+                data[0] = this.textures[2].width;
+                data[1] = this.textures[2].height;
                 data[58] = 27;
-                const pipelineIndex = this.compactPostPipelineIndices.get(27) ?? 8;
+                const pipelineIndex = this.compactPostPipelineIndices.get(27) ?? PIPELINE.post;
                 draw(
                     this.textureViews[destination],
                     pipelineIndex,
@@ -1872,7 +2011,7 @@ export class AtmosphereRenderer {
                     true,
                     `${effect.label}:composite`,
                     undefined,
-                    6,
+                    4,
                 );
                 rgbaCurrent = destination;
                 postRan = true;
@@ -1885,34 +2024,40 @@ export class AtmosphereRenderer {
                       ? 26
                       : POST_KIND_INDEX[effect.kind];
             const postKind = data[58];
-            const pipelineIndex = this.compactPostPipelineIndices.get(postKind) ?? 8;
+            const pipelineIndex = this.compactPostPipelineIndices.get(postKind) ?? PIPELINE.post;
             draw(this.textureViews[destination], pipelineIndex, rgbaCurrent, true, effect.label);
             rgbaCurrent = destination;
             postRan = true;
         }
-        if (postRan && !this.paused && this.historyTexture) {
+        // Only datamosh reads the history. Without it the copy is wasted, and the history is stale by the
+        // time datamosh returns, so it is marked for re-initialisation instead.
+        if (!datamosh) this.historyValid = false;
+        else if (postRan && !this.paused && this.historyTexture) {
             enc.copyTextureToTexture({ texture: this.textures[rgbaCurrent] }, { texture: this.historyTexture }, [
                 this.textures[rgbaCurrent].width,
                 this.textures[rgbaCurrent].height,
             ]);
             this.historyValid = true;
         }
-        for (let octave = 0; octave < OCTAVE_COUNT; octave += 1) {
-            data[29] = octave;
-            if (octaveBlurIsActive(this.options.parameters, octave)) {
-                const destination = rgbaCurrent >= 4 ? 2 : rgbaCurrent === 2 ? 3 : 2;
-                draw(this.textureViews[destination], 1, rgbaCurrent, true, `blur${octave + 1}`);
-                rgbaCurrent = destination;
+        for (const step of octaveSteps(this.options.parameters)) {
+            const destination = rgbaCurrent === 0 ? 1 : 0;
+            if (step.kind === 'blur') {
+                data[29] = step.octave;
+                draw(this.textureViews[destination], PIPELINE.blur, rgbaCurrent, true, `blur${step.octave + 1}`);
+            } else if (step.first === step.last) {
+                data[29] = step.last;
+                draw(this.textureViews[destination], PIPELINE.octave, rgbaCurrent, true, `octave${step.last + 1}`);
+            } else {
+                data[29] = step.last;
+                data[57] = step.first;
+                const label = `octaves${step.first + 1}-${step.last + 1}`;
+                draw(this.textureViews[destination], PIPELINE.octaveChain, rgbaCurrent, false, label);
             }
-            if (octaveEffectIsActive(this.options.parameters, octave)) {
-                const destination = rgbaCurrent >= 4 ? 2 : rgbaCurrent === 2 ? 3 : 2;
-                draw(this.textureViews[destination], 2, rgbaCurrent, true, `octave${octave + 1}`);
-                rgbaCurrent = destination;
-            }
+            rgbaCurrent = destination;
         }
         data[0] = this.canvas.width;
         data[1] = this.canvas.height;
-        draw(c.getCurrentTexture().createView(), 9, rgbaCurrent, true, 'display');
+        draw(c.getCurrentTexture().createView(), PIPELINE.present, rgbaCurrent, true, 'display');
         if (frameTimingSlot) {
             const timingEnd = enc.beginComputePass({
                 timestampWrites: {

@@ -16,6 +16,7 @@ export interface RenderBackend {
      */
     readonly firstFrame?: Promise<void>;
     readonly unsupportedEffects?: readonly string[];
+    /** Canvas dimensions and the target scale used for this frame, including full-quality paused frames. */
     onStats?: (fps: number, width: number, height: number, rolling?: FrameRollingSummary, renderScale?: number) => void;
     onGpuStats?: (stats: GpuTimingStats | null) => void;
     onLost?: (message: string) => void;
