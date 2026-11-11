@@ -13,7 +13,6 @@ export const site = {
     /** Stated by Mia on ffm.bio/patch. */
     pronouns: 'she/they/none',
     location: 'Netherlands',
-    description: 'Mia Riezebos — creative developer. Freelance, Netherlands.',
 };
 
 /** TODO(mia): paste your server invite here and the Discord icon appears in the header row. */
@@ -75,14 +74,12 @@ export const sitemap = [
     { label: 'Textile privacy', href: '/textile/privacy' },
 ];
 
-/** Mia's approved short introduction for the home page. */
-export const about = [
-    "I'm Mia Riezebos, a designer, creative developer and music producer. I like to understand how things work, from the big picture down to the details, and I love helping people figure out what their ideas need.",
-];
-
 /** The home hero reads as one sentence: "I'm" → name → `intro`, then a link to the full biography. */
 export const intro =
     'a designer, creative developer and music producer. I like to understand how things work, from the big picture down to the details, and I love helping people figure out what their ideas need.';
+
+/** The hero's sentence as plain text: the description for home and /about, and llms.txt's summary. */
+export const summary = `I'm ${site.name}, ${intro}`;
 
 /** Mia's approved full biography as inline Markdown, shown above contact links on /about. */
 export const biography = [

@@ -1,12 +1,12 @@
 import { publishedPosts } from '$lib/content/loaders';
-import { site, sitemap } from '$lib/content/site';
+import { site, sitemap, summary } from '$lib/content/site';
 import { workWithPages } from '$lib/content/vault';
 import { markdownPath } from '$lib/markdown';
 
 export const prerender = true;
 
-const link = (title: string, path: string, summary?: string) =>
-    `- [${title}](${site.url}${markdownPath(path)})${summary ? `: ${summary}` : ''}`;
+const link = (title: string, path: string, note?: string) =>
+    `- [${title}](${site.url}${markdownPath(path)})${note ? `: ${note}` : ''}`;
 
 /**
  * The site's map for language models, in the llmstxt.org format, pointing at each page's Markdown.
@@ -30,7 +30,7 @@ export async function GET({ fetch }) {
     ] as const;
     const body = [
         `# ${site.name}`,
-        `> ${site.description}`,
+        `> ${summary}`,
         bio,
         ...sections.filter(([, links]) => links.length).map(([title, links]) => `## ${title}\n\n${links.join('\n')}`),
     ].join('\n\n');
