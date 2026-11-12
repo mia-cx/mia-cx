@@ -1,5 +1,23 @@
 # @mia-cx/mia.cx
 
+## 0.3.0
+
+### Minor Changes
+
+- a8590c6: The blog is live: Svartz publishes the work and blog vaults, and every post with a body has its own page.
+
+### Patch Changes
+
+- 4a26deb: The background field draws in fewer passes and no larger than 2160p's pixel count, so large and high-density screens do less work for the same look. Where the field falls back to WebGL2, it stays the right way up whatever effects are on.
+- ebbe9f3: /llms.txt carries the About page's bio and contact links, not only a list of pages.
+- 2bbb8cf: The Markdown buttons sit in a bar under each page's heading; on a post they share it with the dates.
+- 39b2f8c: "View as Markdown" and a copy button sit at the top of each page as one split button, like the CV downloads.
+- c81a4d1: The Markdown buttons sit inline after a page's dates, centred on them, and only on pages with content; list pages keep their Markdown twins without the buttons.
+- c26c81e: "The Quiet Cost of Carelessness" has its own page on the blog, linking back to where it first appeared on LinkedIn.
+- 0a24769: The home page's search and link-preview description and the summary in /llms.txt now use the home page's introduction.
+- 89362c8: "Software I Use" is off the blog; it stays in the vault as a draft.
+- d86e5dc: A post without an `updated_at` date no longer shows "Updated 1 January 1970".
+
 ## 0.2.2
 
 ### Patch Changes
