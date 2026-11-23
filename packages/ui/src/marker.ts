@@ -23,7 +23,7 @@ import { mergeLines, sameLine, shapePath, shrinkTarget, wipeOrder, type Edges, t
 export const MARKER_TAG = 'mia-marker';
 
 const STYLES = `
-${MARKER_TAG} { display: block; position: relative; isolation: isolate; }
+${MARKER_TAG} { display: block; position: relative; }
 ${MARKER_TAG} ::selection { background: transparent; }
 ${MARKER_TAG} :is(input, textarea)::selection { background: Highlight; color: HighlightText; }
 ${MARKER_TAG} > [data-marker-overlay] {
@@ -31,11 +31,13 @@ ${MARKER_TAG} > [data-marker-overlay] {
 }
 [data-marker-overlay] > * { position: absolute; inset: 0; clip-path: path('M0 0Z'); }
 [data-marker-paint] { background: var(--marker-color, Highlight); }
-[data-marker-copy] { box-sizing: border-box; color: var(--marker-text, HighlightText); }
+[data-marker-copy] { box-sizing: border-box; color: var(--marker-text, HighlightText); visibility: hidden; }
+[data-marker-copy] [data-marker-show] { visibility: visible; }
 [data-marker-copy] * {
     color: inherit !important; -webkit-text-fill-color: currentColor !important;
     text-decoration-color: currentColor !important; background: transparent !important;
     border-color: transparent !important; box-shadow: none !important; text-shadow: none !important;
+    filter: none !important; backdrop-filter: none !important; mix-blend-mode: normal !important;
 }
 [data-marker-copy] :is(img, video, canvas, picture, iframe) { visibility: hidden !important; }
 ::highlight(${MARKER_TAG}-word) {
@@ -44,7 +46,18 @@ ${MARKER_TAG} > [data-marker-overlay] {
 @media (forced-colors: active) {
     ${MARKER_TAG} ::selection { background: Highlight; color: HighlightText; }
     ${MARKER_TAG} > [data-marker-overlay] { display: none; }
+}
+@media print {
+    ${MARKER_TAG} > [data-marker-overlay] { display: none; }
 }`;
+
+/** How far an italic glyph leans past its text box at the end of a run, in ems: about a 12° slant. */
+const ITALIC_LEAN = 0.15;
+/** Extra width at the end of a text run whose glyphs lean past their box. */
+function overhang(node: Text) {
+    const style = getComputedStyle(node.parentElement!);
+    return /italic|oblique/.test(style.fontStyle) ? Number.parseFloat(style.fontSize) * ITALIC_LEAN : 0;
+}
 
 const DEFAULTS = { leading: 200, trailing: 200, stagger: 150, padding: 4, radius: 0 };
 type Setting = keyof typeof DEFAULTS;
@@ -163,6 +176,7 @@ function createMarker() {
             document.addEventListener('selectionchange', this.#onSelectionChange);
             // Capture, to read the selection before the press clears it.
             document.addEventListener('mousedown', this.#onMouseDown, true);
+            addEventListener('scroll', this.#onScroll, { passive: true });
         }
 
         disconnectedCallback() {
@@ -170,6 +184,7 @@ function createMarker() {
             this.#resize.disconnect();
             document.removeEventListener('selectionchange', this.#onSelectionChange);
             document.removeEventListener('mousedown', this.#onMouseDown, true);
+            removeEventListener('scroll', this.#onScroll);
             cancelAnimationFrame(this.#frame);
             this.#frame = 0;
             if ('highlights' in CSS) CSS.highlights.delete(`${MARKER_TAG}-word`);
@@ -220,9 +235,13 @@ function createMarker() {
 
         /** The word cursor is padded all round, so the word sits inside it. */
         #wordEdges(index: number) {
-            const rect = this.#wordRanges()[index]?.getClientRects()[0];
+            const word = this.#wordRanges()[index];
+            const rect = word?.getClientRects()[0];
+            if (!rect) return null;
             const pad = this.#setting('padding');
-            return rect ? this.#local(rect, pad, pad / 2) : null;
+            const edges = this.#local(rect, pad, pad / 2);
+            edges.r += overhang(word.startContainer as Text);
+            return edges;
         }
 
         #wordPoint(): Point | undefined {
@@ -253,6 +272,7 @@ function createMarker() {
         #moveTo(index: number) {
             const to = this.#wordEdges(index);
             if (!to) return;
+            this.#reveal([this.#wordRanges()[index].startContainer.parentElement!]);
             const head = this.#blocks[0];
             const from = head.at;
             if (!from || sameLine(from, to) || reducedMotion()) return this.#setEdges(head, to);
@@ -317,6 +337,7 @@ function createMarker() {
         #tick = (now: number) => {
             this.#frame = 0;
             if (this.#copyStale) this.#refreshCopy();
+            if (this.#shownStale) this.#markShown();
             const radius = this.#setting('radius');
             const paths: string[] = [];
             let moving = false;
@@ -330,22 +351,68 @@ function createMarker() {
             this.#paint.style.clipPath = clip;
             this.#copy.style.clipPath = clip;
             if (moving) this.#kick();
+            // Once nothing is highlighted, the next highlight starts from an empty copy.
+            else if (!paths.length && this.#shown.size) this.#reveal(null);
         };
 
         /** Copies the marker's content into the overlay, inset by the marker's padding like the original. */
         #refreshCopy() {
             this.#copyStale = false;
+            this.#shownStale = true;
             const style = getComputedStyle(this);
             this.#copy.style.padding = style.padding;
-            this.#copy.replaceChildren(
-                ...[...this.childNodes].filter((node) => node !== this.#overlay).map((node) => node.cloneNode(true)),
-            );
+            this.#copy.replaceChildren(...this.#content().map((node) => node.cloneNode(true)));
             for (const el of this.#copy.querySelectorAll('[id]')) el.removeAttribute('id');
+        }
+
+        #content() {
+            return [...this.childNodes].filter((node) => node !== this.#overlay);
+        }
+
+        /**
+         * Elements whose copy shows. The rest of the copy stays hidden: with its backgrounds gone, text a
+         * fixed header normally covers would otherwise show through the highlight.
+         */
+        #shown = new Set<Element>();
+        #shownStale = false;
+        /** Shows the copies of these elements too, or with `null`, hides the whole copy again. */
+        #reveal(elements: Iterable<Element> | null) {
+            if (!elements) this.#shown.clear();
+            else for (const el of elements) this.#shown.add(el);
+            this.#shownStale = true;
+            this.#kick();
+        }
+
+        #markShown() {
+            this.#shownStale = false;
+            for (const el of this.#copy.querySelectorAll('[data-marker-show]')) el.removeAttribute('data-marker-show');
+            for (const el of this.#shown) this.#copyOf(el)?.setAttribute('data-marker-show', '');
+        }
+
+        /** The copy of an element inside the marker, found by its position among its siblings. */
+        #copyOf(el: Element) {
+            const path: number[] = [];
+            for (let node: Node = el; node !== this; node = node.parentNode!) {
+                const siblings = node.parentNode === this ? this.#content() : [...node.parentNode!.childNodes];
+                path.unshift(siblings.indexOf(node as ChildNode));
+            }
+            let at: Node | undefined = this.#copy;
+            for (const index of path) at = at?.childNodes[index];
+            return at instanceof Element ? at : null;
         }
 
         #onMouseDown = (event: MouseEvent) => {
             const local = this.#local({ l: event.clientX, r: event.clientX, t: event.clientY, b: event.clientY });
             this.#deselectAt = this.#selecting ? { x: local.l, y: local.t } : undefined;
+        };
+
+        #scrolled = false;
+        #onScroll = () => {
+            if (!this.#selecting) return;
+            this.#scrolled = true;
+            // Content that restyles itself on scroll, such as a sticky header, would leave the copy behind.
+            this.#copyStale = true;
+            this.#onSelectionChange();
         };
 
         #onSelectionChange = () => {
@@ -368,6 +435,13 @@ function createMarker() {
             clearTimeout(this.#wrapTimer);
             this.#setEdges(this.#tail, null);
             const lines = this.#selectedLines(range);
+            if (this.#scrolled) {
+                // A selection in fixed content moves against the marker as the page scrolls: follow it at once.
+                this.#scrolled = false;
+                lines.forEach((to, i) => this.#setEdges((this.#blocks[i] ??= newBlock()), to, true));
+                for (const block of this.#blocks.slice(lines.length)) this.#setEdges(block, null);
+                return;
+            }
             // A block stays on the line it already covers, so extending up or down never shifts the others.
             const placed = new Map<Edges, Block>();
             const taken = () => [...placed.values()];
@@ -416,10 +490,16 @@ function createMarker() {
                 const part = document.createRange();
                 part.setStart(node, node === range.startContainer ? range.startOffset : 0);
                 part.setEnd(node, node === range.endContainer ? range.endOffset : node.length);
+                // Italic glyphs lean past their box, so a run ending in italics reaches a little further.
+                const lean = overhang(node);
                 for (const rect of part.getClientRects())
                     if (rect.width >= 1)
-                        items.push({ rect: { l: rect.left, r: rect.right, t: rect.top, b: rect.bottom }, item: node });
+                        items.push({
+                            rect: { l: rect.left, r: rect.right + lean, t: rect.top, b: rect.bottom },
+                            item: node,
+                        });
             }
+            this.#reveal(items.map(({ item }) => item.parentElement!));
             const lines = mergeLines(items);
             const whole = this.#wholeSections(range);
             const unit = (node: Text) => node.parentElement?.closest(UNIT) ?? null;

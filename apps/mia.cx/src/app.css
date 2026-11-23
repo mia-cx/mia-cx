@@ -117,6 +117,17 @@ select {
     gap: 12px;
 }
 
+/*
+ * The site's highlight (`<mia-marker>` from @mia-cx/ui, around everything in the root layout) in the
+ * accent colour. Its box is set here too, so the page lays out the same before the element is defined.
+ */
+mia-marker {
+    --marker-color: var(--accent);
+    --marker-text: var(--bg);
+    display: block;
+    position: relative;
+}
+
 .visually-hidden {
     position: absolute;
     width: 1px;
