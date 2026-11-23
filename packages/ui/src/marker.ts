@@ -148,9 +148,11 @@ function createMarker() {
         #mutations = new MutationObserver((records) => {
             if (records.every((r) => this.#overlay.contains(r.target))) return;
             this.#words = undefined;
+            // The copy rebuilds on the next frame that draws; a change that moves nothing draws nothing, so
+            // a counter ticking elsewhere costs nothing.
             this.#copyStale = true;
-            // The cursor's index may now name another word, or none: put the cursor on it as it is now.
-            if (this.#index >= 0 && !this.#selecting && this.#seeking < 0) this.#moveTo(this.#index);
+            // The cursor's index may now name another word, or none: retarget it without restarting its move.
+            if (this.#index >= 0 && !this.#selecting && this.#seeking < 0) this.#placeCursor();
         });
         #resize = new ResizeObserver(() => {
             this.#copyStale = true;
@@ -637,8 +639,11 @@ function createMarker() {
             const to = this.#wordEdges(this.#index);
             if (!to) return this.#retire(head, undefined);
             if (!head.at || !head.tweens || head.fading) return this.#moveTo(this.#index);
+            const at = head.at;
+            if (EDGES.every((edge) => Math.abs(at[edge] - to[edge]) < 0.5)) return;
             for (const edge of EDGES) head.tweens[edge].to = to[edge];
             head.at = to;
+            this.#kick();
         }
 
         /** Where an element sits, to tell later how far it moved. */
