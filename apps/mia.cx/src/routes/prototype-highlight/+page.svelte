@@ -11,11 +11,11 @@
 
     // Knobs, kept in localStorage so a reload or HMR keeps them.
     const DEFAULTS = {
-        leading: 90,
-        trailing: 170,
+        leading: 200,
+        trailing: 200,
         wpm: 170,
-        pad: 3,
-        radius: 4,
+        pad: 4,
+        radius: 0,
         doubleClickWindow: 330,
         spread: 150,
         reduced: false,
