@@ -49,10 +49,32 @@
     let total = $state(0);
     let wordCount = $state(0);
 
-    let wrapper: HTMLDivElement;
-    let layer: HTMLDivElement;
     let prose: HTMLDivElement;
+    /**
+     * One overlay above the whole page, in document coordinates: the blocks, then a copy of the page
+     * in the block's text colour, cut to the blocks each frame. It sits on top of everything, so it
+     * needs no stacking tricks to work over the header, the footer or anything else.
+     */
+    let overlay: HTMLDivElement;
+    let layer: HTMLDivElement;
     let clone: HTMLDivElement;
+
+    /** Copies the live page into the overlay. Run when a selection or narration starts, and on resize. */
+    function refreshClone() {
+        const copy = document.createElement('div');
+        copy.className = 'hl-clone';
+        copy.inert = true;
+        for (const child of document.body.children)
+            if (child !== overlay && !(child instanceof HTMLScriptElement)) copy.append(child.cloneNode(true));
+        for (const el of copy.querySelectorAll('[id]')) el.removeAttribute('id');
+        copy.style.clipPath = clone?.style.clipPath ?? `path('M0 0Z')`;
+        clone?.replaceWith(copy) ?? overlay.append(copy);
+        clone = copy;
+    }
+
+    /** Text the custom highlight covers: anywhere on the page but form fields and the overlay. */
+    const selectable = (node: Node | null) =>
+        !!node && !overlay.contains(node) && !(node instanceof Element ? node : node.parentElement)?.closest('input, textarea');
 
     interface Word {
         range: Range;
@@ -154,11 +176,10 @@
         clone.style.clipPath = `path('${path || 'M0 0Z'}')`;
     }
 
-    /** A rect in the wrapper's coordinates, padded. */
+    /** A rect in document coordinates, padded. */
     function local(rect: DOMRect | Edges): Edges {
-        const box = wrapper.getBoundingClientRect();
         const { l, r, t, b } = 'l' in rect ? rect : { l: rect.left, r: rect.right, t: rect.top, b: rect.bottom };
-        return { l: l - box.left - pad, r: r - box.left + pad, t: t - box.top - pad / 2, b: b - box.top + pad / 2 };
+        return { l: l + scrollX - pad, r: r + scrollX + pad, t: t + scrollY - pad / 2, b: b + scrollY + pad / 2 };
     }
 
     /** Moves a block's edges: an edge moving outward leads, an edge moving inward trails. */
@@ -231,6 +252,7 @@
     }
 
     function play() {
+        if (!started) refreshClone();
         started = true;
         playing = true;
         pausedBySelection = false;
@@ -275,9 +297,10 @@
     /** The rects of the selected text alone, without the boxes of elements it covers whole. */
     function textRects(range: Range) {
         const out: { rect: DOMRect; node: Text }[] = [];
-        const walker = document.createTreeWalker(prose, NodeFilter.SHOW_TEXT);
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
         for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
-            if (!node.data.trim() || !range.intersectsNode(node)) continue;
+            if (!node.data.trim() || !range.intersectsNode(node) || !selectable(node)) continue;
+            if (node.parentElement?.closest('script, style, noscript')) continue;
             const part = document.createRange();
             part.setStart(node, node === range.startContainer ? range.startOffset : 0);
             part.setEnd(node, node === range.endContainer ? range.endOffset : node.length);
@@ -334,7 +357,7 @@
         cancelAnimationFrame(selectionFrame);
         selectionFrame = requestAnimationFrame(() => {
             const selection = getSelection();
-            const inside = selection && !selection.isCollapsed && prose.contains(selection.anchorNode);
+            const inside = selection && !selection.isCollapsed && selectable(selection.anchorNode);
             if (!inside) {
                 if (mode === 'selection') {
                     mode = 'narration';
@@ -347,6 +370,7 @@
                 }
                 return;
             }
+            if (mode !== 'selection') refreshClone();
             mode = 'selection';
             if (pauseOnSelect && playing) {
                 playing = false;
@@ -415,6 +439,14 @@
     }
 
     onMount(() => {
+        overlay = document.createElement('div');
+        overlay.className = 'hl-overlay';
+        overlay.ariaHidden = 'true';
+        layer = document.createElement('div');
+        layer.className = 'hl-layer';
+        overlay.append(layer);
+        document.body.append(overlay);
+        refreshClone();
         tail = makeBlock();
         collectWords();
         let last = performance.now();
@@ -434,17 +466,26 @@
             render(now);
             frame = requestAnimationFrame(tick);
         });
-        const onResize = () => mode === 'narration' && index >= 0 && setEdges(0, local(words[index].range.getClientRects()[0]), true);
+        const onResize = () => {
+            refreshClone();
+            if (mode === 'selection') onSelectionChange();
+            else if (index >= 0) setEdges(0, local(words[index].range.getClientRects()[0]), true);
+        };
+        // A selection in the fixed header moves against the document as the page scrolls.
+        const onScroll = () => mode === 'selection' && onSelectionChange();
         document.addEventListener('selectionchange', onSelectionChange);
         // Capture, so it reads the selection before the press clears it.
         document.addEventListener('pointerdown', onPointerDown, true);
         addEventListener('resize', onResize);
+        addEventListener('scroll', onScroll, { passive: true });
         return () => {
             cancelAnimationFrame(frame);
             document.removeEventListener('selectionchange', onSelectionChange);
             document.removeEventListener('pointerdown', onPointerDown, true);
             removeEventListener('resize', onResize);
+            removeEventListener('scroll', onScroll);
             CSS.highlights.clear();
+            overlay.remove();
         };
     });
 </script>
@@ -455,15 +496,9 @@
     <p class="badge mono">Prototype · fake narration · #66</p>
     <h1>{data.post.title}</h1>
 
-    <div class="wrapper" bind:this={wrapper}>
-        <div class="layer" bind:this={layer} aria-hidden="true"></div>
-        <!-- eslint-disable-next-line svelte/no-at-html-tags, svelte/valid-compile -- prototype -->
-        <div class="prose proto-prose" bind:this={prose} onclick={onClick} role="presentation">
-            {@html data.html}
-        </div>
-        <!-- The same prose in the block's text colour, clipped to the blocks each frame. -->
-        <!-- eslint-disable-next-line svelte/no-at-html-tags -- prototype -->
-        <div class="prose clone" bind:this={clone} aria-hidden="true">{@html data.html}</div>
+    <!-- eslint-disable-next-line svelte/no-at-html-tags, svelte/valid-compile -- prototype -->
+    <div class="prose proto-prose" bind:this={prose} onclick={onClick} role="presentation">
+        {@html data.html}
     </div>
 </main>
 
@@ -508,40 +543,63 @@
         line-height: 0.95;
         letter-spacing: -0.02em;
     }
-    .wrapper {
-        position: relative;
-        isolation: isolate;
+    /* The blocks draw every selection on the page; form fields and Windows high contrast keep the native one. */
+    :global(::selection) {
+        background: transparent;
     }
-    .layer {
+    :global(input::selection, textarea::selection) {
+        background: Highlight;
+        color: HighlightText;
+    }
+    @media (forced-colors: active) {
+        :global(::selection) {
+            background: Highlight;
+        }
+        :global(.hl-overlay) {
+            display: none;
+        }
+    }
+    :global(.hl-overlay) {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 0;
+        z-index: 2147483000;
+        pointer-events: none;
+        user-select: none;
+    }
+    :global(.hl-layer) {
         position: absolute;
         inset: 0;
-        z-index: -1;
-        pointer-events: none;
     }
-    .layer :global(.hl-block) {
+    :global(.hl-block) {
         position: absolute;
         display: none;
         background: var(--accent);
     }
-    /* Both copies keep their paragraphs' margins inside, so their lines sit at the same height. */
-    .proto-prose,
-    .clone {
-        display: flow-root;
-    }
-    .proto-prose :global(::selection) {
-        background: transparent;
-    }
-    .clone {
+    :global(.hl-clone) {
         position: absolute;
-        inset: 0;
-        pointer-events: none;
-        user-select: none;
+        top: 0;
+        left: 0;
+        width: 100%;
         clip-path: path('M0 0Z');
-        color: var(--bg);
     }
-    .clone :global(*) {
+    /* The copy is only the text, in the block's colour: no backgrounds, borders, images or effects. */
+    :global(.hl-clone *) {
         color: var(--bg) !important;
+        -webkit-text-fill-color: var(--bg) !important;
         text-decoration-color: var(--bg) !important;
+        background: transparent !important;
+        border-color: transparent !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+        backdrop-filter: none !important;
+        filter: none !important;
+        mask: none !important;
+    }
+    :global(.hl-clone :is(canvas, img, video, picture)) {
+        visibility: hidden !important;
     }
     :global(::highlight(hl-quiet)) {
         text-decoration: underline 2px var(--accent);
