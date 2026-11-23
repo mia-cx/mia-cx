@@ -411,23 +411,53 @@ function createMarker() {
             this.#deselectAt = this.#selecting ? { x: local.l, y: local.t } : undefined;
         };
 
-        /** Set when text moved under a still highlight, so the next measure snaps instead of animating. */
-        #moved = false;
         // Content that restyles itself on scroll, such as a sticky header, would leave the copy behind.
         #onScroll = () => this.#followLayout(true);
         /** A page can move text from styles on `<html>`, like a parallax hero; the copy follows those itself. */
         #rootChanges = new MutationObserver(() => this.#followLayout(false));
 
-        /** Re-measures a showing highlight after the text under it moved without the selection changing. */
+        /**
+         * Keeps a showing highlight on text that moved without the selection changing. A selection
+         * re-measures as usual, and its anchor tells how far the text moved (see `#followSelection`);
+         * the word cursor slides by however far its word moved.
+         */
         #followLayout(restyled: boolean) {
-            if (this.#selecting) {
-                this.#moved = true;
-                if (restyled) this.#copyStale = true;
-                this.#onSelectionChange();
-            } else if (this.#index >= 0 && this.#blocks[0].at) {
-                if (restyled) this.#copyStale = true;
-                this.#setEdges(this.#blocks[0], this.#wordEdges(this.#index), true);
+            if (restyled) this.#copyStale = true;
+            if (this.#selecting) return this.#onSelectionChange();
+            const head = this.#blocks[0];
+            const to = this.#index >= 0 && head.at ? this.#wordEdges(this.#index) : null;
+            if (to && head.at) this.#slide(to.l - head.at.l, to.t - head.at.t, [head, this.#tail]);
+            else if (restyled) this.#kick();
+        }
+
+        /**
+         * Moves blocks with the text under them, animations and all: every edge of every tween shifts by
+         * the same amount, so a block mid-move keeps moving, just from where the text went.
+         */
+        #slide(dx: number, dy: number, blocks: Block[] = [...this.#blocks, this.#tail]) {
+            if (!dx && !dy) return;
+            const by: Record<Edge, number> = { l: dx, r: dx, t: dy, b: dy };
+            for (const block of blocks) {
+                if (block.at) for (const edge of EDGES) block.at[edge] += by[edge];
+                if (block.tweens)
+                    for (const edge of EDGES) {
+                        block.tweens[edge].from += by[edge];
+                        block.tweens[edge].to += by[edge];
+                    }
             }
+            this.#kick();
+        }
+
+        /** Where the selection's anchor sits, in the marker's coordinates, while it stays the same anchor. */
+        #anchor: { node: Node; offset: number; x: number; y: number } | undefined;
+        #anchorOf(selection: Selection) {
+            const { anchorNode: node, anchorOffset: offset } = selection;
+            if (!(node instanceof Text)) return undefined;
+            const caret = document.createRange();
+            caret.setStart(node, offset);
+            const rect = caret.getClientRects()[0] ?? caret.getBoundingClientRect();
+            const local = this.#local(rect);
+            return { node, offset, x: local.l, y: local.t };
         }
 
         #onSelectionChange = () => {
@@ -441,22 +471,25 @@ function createMarker() {
             const inField = (node: Node | null) =>
                 !!(node instanceof Element ? node : node?.parentElement)?.closest('input, textarea');
             const mine = range && range.intersectsNode(this) && !inField(selection!.anchorNode);
-            if (!mine) return this.#selecting && this.#clearSelection(selection);
+            if (!mine) {
+                this.#anchor = undefined;
+                return this.#selecting && this.#clearSelection(selection);
+            }
 
             if (!this.#selecting) {
                 this.#selecting = true;
                 this.#markQuietWord();
             }
+            // If the same anchor moved, the text moved under the selection (a scroll past fixed content,
+            // a parallax hero): carry the blocks along before animating whatever the selection changed.
+            const anchor = this.#anchorOf(selection!);
+            const last = this.#anchor;
+            if (anchor && last && anchor.node === last.node && anchor.offset === last.offset)
+                this.#slide(anchor.x - last.x, anchor.y - last.y);
+            this.#anchor = anchor;
             clearTimeout(this.#wrapTimer);
             this.#setEdges(this.#tail, null);
             const lines = this.#selectedLines(range);
-            if (this.#moved) {
-                // The text moved, not the selection: follow it at once.
-                this.#moved = false;
-                lines.forEach((to, i) => this.#setEdges((this.#blocks[i] ??= newBlock()), to, true));
-                for (const block of this.#blocks.slice(lines.length)) this.#setEdges(block, null);
-                return;
-            }
             // A block stays on the line it already covers, so extending up or down never shifts the others.
             const placed = new Map<Edges, Block>();
             const taken = () => [...placed.values()];
