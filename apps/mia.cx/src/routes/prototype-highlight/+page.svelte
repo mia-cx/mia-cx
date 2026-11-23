@@ -260,9 +260,10 @@
     }
 
     /** A rect in document coordinates, padded. */
-    function local(rect: DOMRect | Edges): Edges {
+    /** In document coordinates, padded all round by default: the word cursor. Selections pass `padX = 0`. */
+    function local(rect: DOMRect | Edges, padX = pad): Edges {
         const { l, r, t, b } = 'l' in rect ? rect : { l: rect.left, r: rect.right, t: rect.top, b: rect.bottom };
-        return { l: l + scrollX - pad, r: r + scrollX + pad, t: t + scrollY - pad / 2, b: b + scrollY + pad / 2 };
+        return { l: l + scrollX - padX, r: r + scrollX + padX, t: t + scrollY - pad / 2, b: b + scrollY + pad / 2 };
     }
 
     /** Moves a block's edges: an edge moving outward leads, an edge moving inward trails. */
@@ -547,7 +548,8 @@
             setEdges(tail, null);
             block(0);
             lines.sort((a, b) => a.t - b.t);
-            const targets = lines.map(local);
+            // No horizontal padding: a line ends exactly where its selected text does.
+            const targets = lines.map((line) => local(line, 0));
             // Gaps fill in levels: between the lines of a paragraph the selection covers whole, then
             // between paragraphs once their whole heading section is selected. Every row keeps its width.
             const whole = wholeSections(selection);
