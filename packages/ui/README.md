@@ -24,8 +24,9 @@ token names and changes the values; every component follows.
 
 ## Marker
 
-`<mia-marker>` is a custom element, not a Svelte component, so any site can use it. Call
-`defineMarker()` once in the browser (in Svelte, `onMount(defineMarker)`), then wrap text in it:
+`<mia-marker>` is a custom element, not a Svelte component, so any site can use it, Svelte or not.
+Import it from its own entry point, `@mia-cx/ui/marker`, and call `defineMarker()` once in the browser
+(in Svelte, `onMount(defineMarker)`), then wrap text in it:
 
 ```html
 <mia-marker class="prose">…article…</mia-marker>
@@ -37,7 +38,7 @@ exactly where a block covers it. Whole paragraphs, then whole heading sections, 
 their lines. Clearing a selection wipes it away toward the click, farthest line first.
 
 It is also a word cursor. Set `marker.word` to an index among its `wordCount` words (whitespace-separated
-runs of visible text, outside `<pre>`) and the highlight travels there; `-1` hides it. A narration with
+runs of text, outside `<pre>` and `aria-hidden`) and the highlight travels there; `-1` hides it. A narration with
 word timings drives it from its audio clock, and seeks when the reader clicks or taps a word:
 
 ```ts

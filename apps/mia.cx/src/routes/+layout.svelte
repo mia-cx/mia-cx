@@ -11,7 +11,7 @@
     import Footer from '$lib/components/Footer.svelte';
     import { markdownHref } from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
-    import { defineMarker } from '@mia-cx/ui';
+    import { defineMarker } from '@mia-cx/ui/marker';
     import { onMount } from 'svelte';
 
     let { children }: { children: Snippet } = $props();
