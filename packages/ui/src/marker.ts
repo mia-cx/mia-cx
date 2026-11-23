@@ -149,6 +149,8 @@ function createMarker() {
             if (records.every((r) => this.#overlay.contains(r.target))) return;
             this.#words = undefined;
             this.#copyStale = true;
+            // The cursor's index may now name another word, or none: put the cursor on it as it is now.
+            if (this.#index >= 0 && !this.#selecting && this.#seeking < 0) this.#moveTo(this.#index);
         });
         #resize = new ResizeObserver(() => {
             this.#copyStale = true;
@@ -471,7 +473,8 @@ function createMarker() {
                     // stand-in takes the original's box as computed: the space it holds stays the same.
                     if (originals[i]) {
                         const box = getComputedStyle(originals[i]);
-                        const { width, height } = originals[i].getBoundingClientRect();
+                        // Layout size, not the painted one: a transform doesn't change the space it holds.
+                        const { offsetWidth: width, offsetHeight: height } = originals[i] as HTMLElement;
                         Object.assign(plain.style, {
                             display: box.display,
                             boxSizing: 'border-box',
@@ -609,7 +612,8 @@ function createMarker() {
             this.#followLayout();
         };
         /** A page can move text from styles on `<html>`, like a parallax hero; the copy follows those itself. */
-        #rootChanges = new MutationObserver(() => this.#showing() && this.#followLayout());
+        // A cursor on a hidden word shows nothing, yet a root change may bring the word back.
+        #rootChanges = new MutationObserver(() => (this.#showing() || this.#index >= 0) && this.#followLayout());
 
         #showing() {
             return [...this.#blocks, this.#tail].some((block) => block.at);
@@ -623,13 +627,18 @@ function createMarker() {
         #followLayout() {
             if (this.#selecting) return this.#onSelectionChange();
             this.#followRefs();
-            const head = this.#blocks[0];
-            const to = this.#index >= 0 && head.at && head.tweens ? this.#wordEdges(this.#index) : null;
-            if (to && head.tweens) {
-                for (const edge of EDGES) head.tweens[edge].to = to[edge];
-                head.at = to;
-            }
+            if (this.#index >= 0 && this.#seeking < 0) this.#placeCursor();
             this.#kick();
+        }
+
+        /** The word cursor onto its word as it is now: moved and resized, shown again, or shrunk away. */
+        #placeCursor() {
+            const head = this.#blocks[0];
+            const to = this.#wordEdges(this.#index);
+            if (!to) return this.#retire(head, undefined);
+            if (!head.at || !head.tweens || head.fading) return this.#moveTo(this.#index);
+            for (const edge of EDGES) head.tweens[edge].to = to[edge];
+            head.at = to;
         }
 
         /** Where an element sits, to tell later how far it moved. */
