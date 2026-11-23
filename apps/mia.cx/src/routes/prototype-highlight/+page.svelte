@@ -184,8 +184,24 @@
         el: HTMLDivElement;
         at: Edges | null;
         tweens: Record<Edge, Tween> | null;
+        /** Hides the block once it has shrunk away; cancelled if the block is used again first. */
+        fading?: ReturnType<typeof setTimeout>;
     }
     const blocks: Block[] = [];
+
+    /**
+     * Shrinks a block out of existence instead of dropping it: into its start, its end or its middle,
+     * then hides it once the trailing edge has arrived.
+     */
+    function retire(which: number | Block, into: 'start' | 'end' | 'middle') {
+        const b = typeof which === 'number' ? block(which) : which;
+        if (!b.at || b.fading) return;
+        if (reduced) return setEdges(b, null);
+        const { l, r } = b.at;
+        const x = into === 'start' ? l : into === 'end' ? r : (l + r) / 2;
+        setEdges(b, { ...b.at, l: x, r: x });
+        b.fading = setTimeout(() => setEdges(b, null), trailing);
+    }
     function makeBlock(): Block {
         const el = document.createElement('div');
         el.className = 'hl-block';
@@ -237,6 +253,8 @@
     /** Moves a block's edges: an edge moving outward leads, an edge moving inward trails. */
     function setEdges(which: number | Block, to: Edges | null, snap = false) {
         const b = typeof which === 'number' ? block(which) : which;
+        clearTimeout(b.fading);
+        b.fading = undefined;
         if (!to) {
             b.at = null;
             b.tweens = null;
@@ -427,11 +445,12 @@
             if (!inside) {
                 if (mode === 'selection') {
                     mode = 'narration';
-                    for (let i = 1; i < blocks.length; i++) setEdges(i, null);
+                    // Every line shrinks away; with narration on, block 0 travels back to the voice instead.
+                    for (let i = 1; i < blocks.length; i++) retire(i, 'middle');
                     if (index >= 0) {
                         moveTo(index);
                         highlightWord(index);
-                    } else setEdges(0, null);
+                    } else retire(0, 'middle');
                     if (pausedBySelection) play();
                 }
                 return;
@@ -500,7 +519,13 @@
                 placed.set(to, fresh);
             }
             for (const [to, b] of placed) setEdges(b, to);
-            for (const b of blocks) if (![...placed.values()].includes(b)) setEdges(b, null);
+            // A line that left the selection shrinks into the side that joined it to what remains.
+            const kept = [...placed.keys()];
+            for (const b of blocks) {
+                if ([...placed.values()].includes(b) || !b.at) continue;
+                const top = b.at.t;
+                retire(b, kept.some((to) => to.t < top) ? 'start' : kept.some((to) => to.t > top) ? 'end' : 'middle');
+            }
         });
     }
 
