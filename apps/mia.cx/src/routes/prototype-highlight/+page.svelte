@@ -17,6 +17,7 @@
         pad: 3,
         radius: 4,
         seekDelay: 250,
+        doubleClickWindow: 800,
         reduced: false,
         pauseOnSelect: true,
     };
@@ -31,12 +32,55 @@
     let pad = $state(start.pad);
     let radius = $state(start.radius);
     let seekDelay = $state(start.seekDelay);
+    let doubleClickWindow = $state(start.doubleClickWindow);
     let reduced = $state(start.reduced);
     let pauseOnSelect = $state(start.pauseOnSelect);
-    $effect(() => saved.set({ leading, trailing, wpm, pad, radius, seekDelay, reduced, pauseOnSelect }));
+    $effect(() =>
+        saved.set({ leading, trailing, wpm, pad, radius, seekDelay, doubleClickWindow, reduced, pauseOnSelect }),
+    );
     function resetKnobs() {
-        ({ leading, trailing, wpm, pad, radius, seekDelay, reduced, pauseOnSelect } = DEFAULTS);
+        ({ leading, trailing, wpm, pad, radius, seekDelay, doubleClickWindow, reduced, pauseOnSelect } = DEFAULTS);
     }
+
+    // Double-click calibration: press-to-press intervals of Mia's own double-clicks, and of pairs she
+    // means as two separate clicks. Kept in localStorage; Export copies them as JSON.
+    const samples = persistentAtom<{ double: number[]; distinct: number[] }>(
+        'prototype-highlight:clicks',
+        { double: [], distinct: [] },
+        { encode: JSON.stringify, decode: JSON.parse },
+    );
+    let clicks = $state(samples.get());
+    $effect(() => samples.set($state.snapshot(clicks)));
+    /** Downloads the samples as clicks.json; the clipboard is off limits on a plain-http dev server. */
+    function exportClicks() {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([JSON.stringify(clicks)], { type: 'application/json' }));
+        link.download = 'clicks.json';
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+    const lastPress: Record<'double' | 'distinct', number | undefined> = { double: undefined, distinct: undefined };
+    /** The second press of a pair records the gap since the first; pairs never overlap. */
+    function press(kind: 'double' | 'distinct') {
+        const now = performance.now();
+        const first = lastPress[kind];
+        if (first !== undefined && now - first < 3000) {
+            clicks[kind].push(Math.round(now - first));
+            lastPress[kind] = undefined;
+        } else lastPress[kind] = now;
+    }
+    const median = (xs: number[]) => {
+        const sorted = [...xs].sort((a, b) => a - b);
+        return sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : undefined;
+    };
+    const describe = (xs: number[]) =>
+        xs.length ? `${xs.length} · ${Math.min(...xs)}–${Math.max(...xs)} ms · median ${median(xs)}` : 'none yet';
+    /** Halfway between Mia's slowest double-click and her quickest pair of separate clicks. */
+    const suggested = $derived(
+        clicks.double.length && clicks.distinct.length
+            ? Math.round((Math.max(...clicks.double) + Math.min(...clicks.distinct)) / 2)
+            : undefined,
+    );
 
     // State, shown in the panel.
     let playing = $state(false);
@@ -269,8 +313,6 @@
     /** Where the audio was before the last click, until a double-click can no longer follow it. */
     let beforeClick: { clock: number; index: number } | undefined;
     let forgetTimer: ReturnType<typeof setTimeout> | undefined;
-    /** Longer than any system's double-click interval, so a slow double-click still counts. */
-    const DOUBLE_CLICK_WINDOW = 800;
     /** Whether text was selected when the press began; by click time the press has cleared it. */
     let hadSelection = false;
     function onMouseDown(event: MouseEvent) {
@@ -297,7 +339,8 @@
         if (i < 0) return;
         beforeClick = { clock, index };
         clearTimeout(forgetTimer);
-        forgetTimer = setTimeout(() => (beforeClick = undefined), DOUBLE_CLICK_WINDOW);
+        // A second press after the window is a new click, not the end of a double-click.
+        forgetTimer = setTimeout(() => (beforeClick = undefined), doubleClickWindow);
         pending = true;
         moveTo(i);
         highlightWord(i);
@@ -532,6 +575,24 @@
     <div class="knob">Seek delay <span><input type="number" min="0" bind:value={seekDelay} /> ms</span><input type="range" min="0" max="600" bind:value={seekDelay} /></div>
     <div class="knob">Padding <span><input type="number" min="0" step="0.5" bind:value={pad} /> px</span><input type="range" min="0" max="10" step="0.5" bind:value={pad} /></div>
     <div class="knob">Corner radius <span><input type="number" min="0" bind:value={radius} /> px</span><input type="range" min="0" max="14" bind:value={radius} /></div>
+    <div class="knob">Double-click window <span><input type="number" min="0" bind:value={doubleClickWindow} /> ms</span><input type="range" min="100" max="1500" bind:value={doubleClickWindow} /></div>
+    <section class="calibrate">
+        <p>Double-click the left one as you'd double-click a word. Click the right one twice, as two separate clicks.</p>
+        <div class="row">
+            <button onmousedown={() => press('double')}>Double-click</button>
+            <button onmousedown={() => press('distinct')}>Two clicks</button>
+        </div>
+        <dl>
+            <dt>Double</dt><dd>{describe(clicks.double)}</dd>
+            <dt>Two</dt><dd>{describe(clicks.distinct)}</dd>
+            <dt>Cutoff</dt><dd>{suggested === undefined ? 'needs both' : `${suggested} ms`}</dd>
+        </dl>
+        <div class="row">
+            <button disabled={suggested === undefined} onclick={() => (doubleClickWindow = suggested!)}>Use cutoff</button>
+            <button onclick={exportClicks}>Export</button>
+            <button onclick={() => (clicks = { double: [], distinct: [] })}>Clear</button>
+        </div>
+    </section>
     <label class="check"><input type="checkbox" bind:checked={reduced} /> Reduced motion</label>
     <label class="check"><input type="checkbox" bind:checked={pauseOnSelect} /> Pause narration while selecting</label>
     <dl>
@@ -675,6 +736,22 @@
     .knob input[type='number']::-webkit-outer-spin-button {
         appearance: none;
         margin: 0;
+    }
+    .calibrate {
+        display: grid;
+        gap: 8px;
+        padding-top: 10px;
+        border-top: 1px solid var(--panel-line);
+    }
+    .calibrate p {
+        color: var(--ink-dim);
+        text-transform: none;
+        letter-spacing: 0;
+        line-height: 1.4;
+    }
+    .calibrate button:disabled {
+        opacity: 0.4;
+        cursor: default;
     }
     .check {
         display: flex;
