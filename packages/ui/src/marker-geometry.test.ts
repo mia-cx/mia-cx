@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeLines, shapePoints, shrinkTarget, wipeOrder } from './marker-geometry';
+import { mergeLines, shrinkTarget, wipeOrder } from './marker-geometry';
 
 const box = (l: number, r: number, t: number, b: number) => ({ l, r, t, b });
 
@@ -35,20 +35,5 @@ describe('wipeOrder', () => {
         const lines = [box(0, 1, 0, 10), box(0, 1, 20, 30), box(0, 1, 40, 50)];
         expect(wipeOrder(lines, { x: 0, y: 100 })).toEqual([lines[0], lines[1], lines[2]]);
         expect(wipeOrder(lines, { x: 0, y: -100 })).toEqual([lines[2], lines[1], lines[0]]);
-    });
-});
-
-describe('shapePoints', () => {
-    it('leans a skewed end like a marker stroke, its top further along the line', () => {
-        // 45° over a 10 px tall block leans each end by 10 px.
-        expect(
-            shapePoints(box(0, 100, 0, 10), { skewHead: 45, skewTail: 45, radius: 0 }).map(({ x }) => Math.round(x)),
-        ).toEqual([10, 100, 90, 0]);
-    });
-
-    it('never leans an end past the middle of a short block', () => {
-        const [tailTop, , headBottom] = shapePoints(box(0, 8, 0, 20), { skewHead: 60, skewTail: 60, radius: 0 });
-        expect(tailTop.x).toBe(4);
-        expect(headBottom.x).toBe(4);
     });
 });

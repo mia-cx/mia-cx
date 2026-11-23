@@ -57,56 +57,16 @@ export function wipeOrder<T extends Edges>(blocks: T[], point: Point): T[] {
     return [...blocks].sort((a, b) => distance(b) - distance(a));
 }
 
-export interface Shape {
-    /** Degrees the leading end leans, like a marker stroke. 0 is upright. */
-    skewHead: number;
-    /** Degrees the trailing end leans. */
-    skewTail: number;
-    radius: number;
-}
-
-/**
- * A block's corners, clockwise from the top of its trailing end. A skewed end leans like `/`: its top
- * sits further along the line than its bottom.
- */
-export function shapePoints({ l, r, t, b }: Edges, { skewHead, skewTail }: Shape): Point[] {
-    const height = b - t;
-    const lean = (degrees: number) => Math.min((r - l) / 2, height * Math.tan((degrees * Math.PI) / 180));
-    const tail = lean(skewTail);
-    const head = lean(skewHead);
-    return [
-        { x: l + tail, y: t },
-        { x: r, y: t },
-        { x: r - head, y: b },
-        { x: l, y: b },
-    ];
-}
-
 const round = (n: number) => Math.round(n * 100) / 100;
 
-/** One block as an SVG path, its corners rounded by `radius` where they have room. */
-export function shapePath(edges: Edges, shape: Shape): string {
-    const points = shapePoints(edges, shape);
-    if (shape.radius <= 0) return `M${points.map(({ x, y }) => `${round(x)} ${round(y)}`).join('L')}Z`;
-    const toward = (from: Point, to: Point, distance: number): Point => {
-        const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
-        return { x: from.x + ((to.x - from.x) / length) * distance, y: from.y + ((to.y - from.y) / length) * distance };
-    };
-    const corners = points.map((corner, i) => {
-        const previous = points[(i + points.length - 1) % points.length];
-        const next = points[(i + 1) % points.length];
-        const room =
-            Math.min(
-                Math.hypot(corner.x - previous.x, corner.y - previous.y),
-                Math.hypot(next.x - corner.x, next.y - corner.y),
-            ) / 2;
-        const r = Math.min(shape.radius, room);
-        return { corner, in: toward(corner, previous, r), out: toward(corner, next, r) };
-    });
-    const at = ({ x, y }: Point) => `${round(x)} ${round(y)}`;
-    return `M${at(corners[0].out)}${corners
-        .slice(1)
-        .concat(corners[0])
-        .map((c) => `L${at(c.in)}Q${at(c.corner)} ${at(c.out)}`)
-        .join('')}Z`;
+/** One block as an SVG path: a rectangle, its corners rounded by `radius` where they have room. */
+export function shapePath({ l, r, t, b }: Edges, radius: number): string {
+    const [x0, x1, y0, y1] = [l, r, t, b].map(round);
+    const c = round(Math.min(radius, (r - l) / 2, (b - t) / 2));
+    if (c <= 0) return `M${x0} ${y0}H${x1}V${y1}H${x0}Z`;
+    const arc = (x: number, y: number) => `A${c} ${c} 0 0 1 ${x} ${y}`;
+    return (
+        `M${x0 + c} ${y0}H${x1 - c}${arc(x1, y0 + c)}V${y1 - c}${arc(x1 - c, y1)}` +
+        `H${x0 + c}${arc(x0, y1 - c)}V${y0 + c}${arc(x0 + c, y0)}Z`
+    );
 }

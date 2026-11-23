@@ -2,7 +2,7 @@
  * `<mia-marker>`: one highlight for the text inside it, as the reader's selection and as a word
  * cursor a narration can drive.
  *
- *     <mia-marker skew-head="12">…article…</mia-marker>
+ *     <mia-marker class="prose">…article…</mia-marker>
  *     marker.word = 41; // highlight the 42nd word, e.g. from a narration's timings
  *
  * The highlight is a set of blocks drawn over the text, with the covered text redrawn in the block's
@@ -11,23 +11,14 @@
  * outward takes `leading` ms, an edge moving inward `trailing` ms.
  *
  * Attributes: `word` (index, -1 for none), `leading`, `trailing`, `stagger` (ms), `padding`, `radius`
- * (px), `skew-head`, `skew-tail` (degrees). Colours: `--marker-color` and `--marker-text`.
+ * (px). Colours: `--marker-color` and `--marker-text`.
  *
  * The redrawn text is a copy of the marker's children inside it, so style the content with
  * descendant selectors (`.prose p`), not child selectors on the marker. Form fields and forced-colors
  * mode keep the native selection; reduced motion, or `data-motion="reduce"` on `<html>`, makes every
  * change snap.
  */
-import {
-    mergeLines,
-    sameLine,
-    shapePath,
-    shrinkTarget,
-    wipeOrder,
-    type Edges,
-    type Point,
-    type Shape,
-} from './marker-geometry';
+import { mergeLines, sameLine, shapePath, shrinkTarget, wipeOrder, type Edges, type Point } from './marker-geometry';
 
 export const MARKER_TAG = 'mia-marker';
 
@@ -55,7 +46,7 @@ ${MARKER_TAG} > [data-marker-overlay] {
     ${MARKER_TAG} > [data-marker-overlay] { display: none; }
 }`;
 
-const DEFAULTS = { leading: 200, trailing: 200, stagger: 150, padding: 4, radius: 0, 'skew-head': 0, 'skew-tail': 0 };
+const DEFAULTS = { leading: 200, trailing: 200, stagger: 150, padding: 4, radius: 0 };
 type Setting = keyof typeof DEFAULTS;
 
 type Edge = keyof Edges;
@@ -326,18 +317,14 @@ function createMarker() {
         #tick = (now: number) => {
             this.#frame = 0;
             if (this.#copyStale) this.#refreshCopy();
-            const shape: Shape = {
-                skewHead: this.#setting('skew-head'),
-                skewTail: this.#setting('skew-tail'),
-                radius: this.#setting('radius'),
-            };
+            const radius = this.#setting('radius');
             const paths: string[] = [];
             let moving = false;
             for (const { tweens } of [...this.#blocks, this.#tail]) {
                 if (!tweens) continue;
                 const [l, r, t, b] = EDGES.map((edge) => valueOf(tweens[edge], now));
                 moving ||= EDGES.some((edge) => now < tweens[edge].start + tweens[edge].dur);
-                if (r - l > 0.5) paths.push(shapePath({ l, r, t, b }, shape));
+                if (r - l > 0.5) paths.push(shapePath({ l, r, t, b }, radius));
             }
             const clip = `path('${paths.join(' ') || 'M0 0Z'}')`;
             this.#paint.style.clipPath = clip;

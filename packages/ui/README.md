@@ -28,7 +28,7 @@ token names and changes the values; every component follows.
 `defineMarker()` once in the browser (in Svelte, `onMount(defineMarker)`), then wrap text in it:
 
 ```html
-<mia-marker class="prose" skew-head="12" skew-tail="12">…article…</mia-marker>
+<mia-marker class="prose">…article…</mia-marker>
 ```
 
 Selecting text inside it draws a highlight of its own: one block per line, as wide as that line's text,
@@ -44,13 +44,12 @@ timings drives it from its audio clock, and `marker.wordAt(x, y)` turns a click 
 audio.addEventListener('timeupdate', () => (marker.word = wordIndexAt(audio.currentTime)));
 ```
 
-| Attribute               | Default  | Meaning                                                           |
-| ----------------------- | -------- | ----------------------------------------------------------------- |
-| `word`                  | `-1`     | The highlighted word                                              |
-| `leading`, `trailing`   | `200`    | Milliseconds for an edge moving outward, and inward               |
-| `stagger`               | `150`    | Milliseconds between the first and last line clearing a selection |
-| `padding`, `radius`     | `4`, `0` | Pixels of padding, and corner rounding (see below)                |
-| `skew-head`,`skew-tail` | `0`      | Degrees the leading and trailing ends lean, like a marker stroke  |
+| Attribute             | Default  | Meaning                                                           |
+| --------------------- | -------- | ----------------------------------------------------------------- |
+| `word`                | `-1`     | The highlighted word                                              |
+| `leading`, `trailing` | `200`    | Milliseconds for an edge moving outward, and inward               |
+| `stagger`             | `150`    | Milliseconds between the first and last line clearing a selection |
+| `padding`, `radius`   | `4`, `0` | Pixels of padding, and corner rounding (see below)                |
 
 The word cursor takes `padding` on both sides and half of it above and below. Selected lines take only
 the half above and below: each ends exactly where its selected text does, so it shows whether a trailing
