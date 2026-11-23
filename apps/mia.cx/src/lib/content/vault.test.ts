@@ -103,14 +103,10 @@ describe('projects and posts', () => {
         ).rejects.toThrow('work/Tastebase/');
     });
 
-    it('fails the build when a post sits beside a card with no page of its own', async () => {
+    it('fails the build when a post sits in a folder with no index.md, beside a flat project', async () => {
         await expect(
             vaultOf([
-                note('work/Tastebase.md', '/work/tastebase/', {
-                    date: '2024-06-01',
-                    markdown: '',
-                    properties: { live: 'https://x.dev' },
-                }),
+                note('work/Tastebase.md', '/work/tastebase/', { date: '2024-06-01' }),
                 note('work/Tastebase/First import.md', '/work/tastebase/first-import/', {
                     tags: ['post'],
                     date: '2026-01-01',

@@ -39,6 +39,8 @@ export interface VaultEntry {
     path: string;
     /** Whether the note is a post: anything in `blog/`, or a note inside a project folder. */
     isPost: boolean;
+    /** Whether the note is a project folder's `index.md`, the only kind of project that has posts. */
+    isFolderNote: boolean;
     /** Where the note lives: its own page, or an outside link. Missing when it has neither. */
     href?: string;
     kinds: string[];
@@ -134,6 +136,7 @@ function toEntry(entry: IndexEntry): VaultEntry {
         section,
         path,
         isPost,
+        isFolderNote,
         // A project with no write-up is a card that links straight out.
         href: external ?? (hasPage ? path : (text(entry.properties.live) ?? text(entry.properties.source))),
         kinds: entry.tags.filter((tag) => tag.startsWith('work/')).map((tag) => tag.slice('work/'.length)),
@@ -169,8 +172,8 @@ export const work: WorkNote[] = entries
 
 function toPost(entry: VaultEntry): Post {
     const projectPath = entry.section === 'work' ? entry.path.slice(0, entry.path.lastIndexOf('/')) : undefined;
-    // A post's project is the page its folder belongs to; a card that links out has none to go back to.
-    const project = projectPath && work.find((note) => note.entry.path === projectPath && note.hasPage);
+    // A post's project is its folder's index.md. A flat note at the same URL is a project with no posts.
+    const project = projectPath && work.find((note) => note.entry.path === projectPath && note.entry.isFolderNote);
     if (projectPath && !project) throw new Error(`${entry.path} is in a project folder with no index.md`);
     const external = text(entry.properties.external);
     return {
