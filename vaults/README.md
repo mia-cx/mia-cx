@@ -54,4 +54,6 @@ The body is ordinary Obsidian Markdown and becomes the page. Start sections at `
 the heading. Every page lists the notes that mention it. `![[attachments]]` resolve anywhere in the vault.
 
 The URL comes from the filename (or `slug`), normalised: `Software I Use.md` is `/blog/software-i-use`. Renaming a note
-renames its URL, so set `slug` to keep an old one. A project folder's `index.md` takes the folder's name and URL.
+renames its URL, so set `slug` to keep an old one. A project folder's `index.md` takes its URL from the folder and
+cannot set `slug`; rename the folder instead. Give it a `title` too: the Svartz release this site uses still titles it
+"index".
