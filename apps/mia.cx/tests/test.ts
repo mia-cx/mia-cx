@@ -41,7 +41,9 @@ test('work links through to a project page', async ({ page }) => {
 
 test('blog lists posts newest first', async ({ page }) => {
     await page.goto('/blog');
-    const dates = await page.locator('main ul time').evaluateAll((times) => times.map((time) => time.dateTime));
+    const dates = await page
+        .locator('main ul time')
+        .evaluateAll((times) => times.map((time) => time.getAttribute('datetime') ?? ''));
     expect(dates.length).toBeGreaterThan(1);
     expect(dates).toEqual([...dates].sort().reverse());
 });
