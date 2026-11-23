@@ -457,6 +457,15 @@ function createMarker() {
             if (moving) this.#kick();
             // Once nothing is highlighted, the next highlight starts from an empty copy.
             else if (!paths.length && this.#shown.size) this.#reveal(null);
+            // Once the cursor settles, only its word's element stays shown; elements it passed over during
+            // the move drop out, so later edits to them leave the copy alone.
+            else if (!this.#selecting && this.#index >= 0 && this.#shown.size > 1) {
+                const holder = this.#wordRanges()[this.#index]?.startContainer.parentElement;
+                if (holder) {
+                    this.#shown = new Set([holder]);
+                    this.#markShown();
+                }
+            }
         };
 
         /** Copies the marker's content into the overlay, inset by the marker's padding like the original. */
