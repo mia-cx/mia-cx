@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'vitest';
-import { cv } from './content';
 import { LABEL_HEIGHT, TAIL, layoutTimeline } from './timeline';
 
 const today = new Date(2026, 9, 29);
 const HEIGHT = 92;
-const layout = layoutTimeline({ left: cv.timeline.work, right: cv.timeline.creative }, today, HEIGHT);
+const entry = (title: string, start: string, end?: string) => ({ title, subtitle: '', start, end });
+// Two overlapping jobs that ended, one ongoing; a creative practice running since 2015.
+const work = [entry('School', '2012-09', '2019-07'), entry('Shop', '2016-09', '2020-03'), entry('Job', '2026-09')];
+const creative = [entry('Music', '2015-01')];
+const layout = layoutTimeline({ left: work, right: creative }, today, HEIGHT);
 const yearY = (year: number) => layout.ticks.find((tick) => tick.year === year)!.y;
 
 describe('the CV timeline', () => {
@@ -17,12 +20,9 @@ describe('the CV timeline', () => {
     test('ends the axis at today, with ongoing entries running into the dashed tail', () => {
         expect(layout.axis.end).toBe(HEIGHT);
         expect(layout.height).toBeGreaterThanOrEqual(HEIGHT + TAIL);
-        const ongoing = [...layout.sides.left.bars, ...layout.sides.right.bars].filter((bar) => bar.ongoing);
-        // Humaris, then Music, Sound engineering, Design & development and mia.cx.
-        expect(ongoing).toHaveLength(5);
-        for (const bar of ongoing) expect(bar.y2).toBe(HEIGHT);
-        const ended = layout.sides.left.bars.filter((bar) => !bar.ongoing);
-        for (const bar of ended) expect(bar.y2).toBeLessThan(HEIGHT);
+        const bars = [...layout.sides.left.bars, ...layout.sides.right.bars];
+        expect(bars.filter((bar) => bar.ongoing).map((bar) => bar.y2)).toEqual([HEIGHT, HEIGHT]);
+        for (const bar of bars.filter((bar) => !bar.ongoing)) expect(bar.y2).toBeLessThan(HEIGHT);
     });
 
     test('keeps labels in entry order without overlapping', () => {
@@ -30,7 +30,7 @@ describe('the CV timeline', () => {
             for (let i = 1; i < labels.length; i++)
                 expect(labels[i].y - labels[i - 1].y).toBeGreaterThanOrEqual(LABEL_HEIGHT);
         }
-        expect(layout.sides.left.labels.map(({ title }) => title)).toEqual(cv.timeline.work.map(({ title }) => title));
+        expect(layout.sides.left.labels.map(({ title }) => title)).toEqual(['School', 'Shop', 'Job']);
     });
 
     test('gives recent years more room than older ones', () => {
@@ -38,16 +38,19 @@ describe('the CV timeline', () => {
     });
 
     test('gives overlapping entries their own lanes', () => {
-        const [vwo, albertHeijn] = layout.sides.left.bars;
-        expect(albertHeijn.offset).not.toBe(vwo.offset);
+        const [school, shop] = layout.sides.left.bars;
+        expect(shop.offset).not.toBe(school.offset);
     });
 
     test('counts an entry through its end month', () => {
-        const entry = (start: string, end: string) => ({ title: start, subtitle: '', start, end });
         // A one-month role, and two roles that both ran in July 2019.
         const { bars } = layoutTimeline(
             {
-                left: [entry('2018-03', '2018-03'), entry('2019-01', '2019-07'), entry('2019-07', '2020-01')],
+                left: [
+                    entry('A', '2018-03', '2018-03'),
+                    entry('B', '2019-01', '2019-07'),
+                    entry('C', '2019-07', '2020-01'),
+                ],
                 right: [],
             },
             today,

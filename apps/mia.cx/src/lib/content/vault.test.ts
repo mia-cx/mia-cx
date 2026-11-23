@@ -6,7 +6,11 @@ vi.mock('virtual:svartz/host', () => ({
 }));
 
 /** A note as Svartz indexes it, with the fields mia.cx reads. */
-const note = (path: string, href: string, overrides: { tags?: string[]; date?: string; markdown?: string } = {}) => ({
+const note = (
+    path: string,
+    href: string,
+    overrides: { tags?: string[]; date?: string; updated?: string; markdown?: string } = {},
+) => ({
     slug: href.replace(/^\/|\/$/g, ''),
     href,
     path,
@@ -20,6 +24,7 @@ const note = (path: string, href: string, overrides: { tags?: string[]; date?: s
     description: `About ${path}`,
     markdown: overrides.markdown ?? 'Body.',
     createdAt: overrides.date ? new Date(overrides.date) : undefined,
+    modifiedAt: overrides.updated ? new Date(overrides.updated) : undefined,
 });
 
 /** The vault module, built from these notes. */
@@ -70,6 +75,14 @@ describe('projects and posts', () => {
             href: '/work/tastebase',
         });
         expect(postAt('/blog/crunch-time')!.project).toBeUndefined();
+    });
+
+    it('shows an update date only when it differs from the post date', async () => {
+        const { posts } = await vaultOf([
+            note('blog/Edited.md', '/blog/edited/', { tags: ['post'], date: '2026-01-01', updated: '2026-02-01' }),
+            note('blog/Same day.md', '/blog/same-day/', { tags: ['post'], date: '2025-01-01', updated: '2025-01-01' }),
+        ]);
+        expect(posts.map((post) => post.updated)).toEqual(['2026-02-01', undefined]);
     });
 
     it.each([
