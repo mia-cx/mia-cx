@@ -193,12 +193,21 @@
      * Shrinks a block out of existence instead of dropping it: into its start, its end or its middle,
      * then hides it once the trailing edge has arrived.
      */
-    function retire(which: number | Block, into: 'start' | 'end' | 'middle') {
+    function retire(which: number | Block, into: 'start' | 'end' | 'middle' | { x: number; y: number }) {
         const b = typeof which === 'number' ? block(which) : which;
         if (!b.at || b.fading) return;
         if (reduced) return setEdges(b, null);
-        const { l, r } = b.at;
-        const x = into === 'start' ? l : into === 'end' ? r : (l + r) / 2;
+        const { l, r, t, bottom } = { ...b.at, bottom: b.at.b };
+        // Toward a point: its spot on this line, or the end facing it when it is on another line.
+        if (typeof into === 'object') into = into.y < t ? 'start' : into.y > bottom ? 'end' : into;
+        const x =
+            into === 'start'
+                ? l
+                : into === 'end'
+                  ? r
+                  : into === 'middle'
+                    ? (l + r) / 2
+                    : Math.min(r, Math.max(l, into.x));
         setEdges(b, { ...b.at, l: x, r: x });
         b.fading = setTimeout(() => setEdges(b, null), trailing);
     }
@@ -436,6 +445,14 @@
         );
     }
 
+    /** Where a collapsed selection's caret sits, in document coordinates, if it sits in text. */
+    function caretPoint(selection: Selection | null) {
+        if (!selection?.rangeCount) return undefined;
+        const rect = selection.getRangeAt(0).getClientRects()[0] ?? selection.getRangeAt(0).getBoundingClientRect();
+        if (!rect || (rect.top === 0 && rect.left === 0 && rect.height === 0)) return undefined;
+        return { x: rect.left + scrollX, y: rect.top + rect.height / 2 + scrollY };
+    }
+
     let selectionFrame = 0;
     function onSelectionChange() {
         cancelAnimationFrame(selectionFrame);
@@ -445,12 +462,14 @@
             if (!inside) {
                 if (mode === 'selection') {
                     mode = 'narration';
-                    // Every line shrinks away; with narration on, block 0 travels back to the voice instead.
-                    for (let i = 1; i < blocks.length; i++) retire(i, 'middle');
+                    // Every line shrinks toward the caret the deselect left behind; with narration on,
+                    // block 0 travels back to the voice instead.
+                    const into = caretPoint(selection) ?? 'middle';
+                    for (let i = 1; i < blocks.length; i++) retire(i, into);
                     if (index >= 0) {
                         moveTo(index);
                         highlightWord(index);
-                    } else retire(0, 'middle');
+                    } else retire(0, into);
                     if (pausedBySelection) play();
                 }
                 return;
