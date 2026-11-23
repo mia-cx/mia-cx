@@ -177,6 +177,10 @@ function createMarker() {
             // Capture, to read the selection before the press clears it.
             document.addEventListener('mousedown', this.#onMouseDown, true);
             addEventListener('scroll', this.#onScroll, { passive: true });
+            this.#rootChanges.observe(document.documentElement, {
+                attributes: true,
+                attributeFilter: ['style', 'class'],
+            });
         }
 
         disconnectedCallback() {
@@ -185,6 +189,7 @@ function createMarker() {
             document.removeEventListener('selectionchange', this.#onSelectionChange);
             document.removeEventListener('mousedown', this.#onMouseDown, true);
             removeEventListener('scroll', this.#onScroll);
+            this.#rootChanges.disconnect();
             cancelAnimationFrame(this.#frame);
             this.#frame = 0;
             if ('highlights' in CSS) CSS.highlights.delete(`${MARKER_TAG}-word`);
@@ -406,14 +411,24 @@ function createMarker() {
             this.#deselectAt = this.#selecting ? { x: local.l, y: local.t } : undefined;
         };
 
-        #scrolled = false;
-        #onScroll = () => {
-            if (!this.#selecting) return;
-            this.#scrolled = true;
-            // Content that restyles itself on scroll, such as a sticky header, would leave the copy behind.
-            this.#copyStale = true;
-            this.#onSelectionChange();
-        };
+        /** Set when text moved under a still highlight, so the next measure snaps instead of animating. */
+        #moved = false;
+        // Content that restyles itself on scroll, such as a sticky header, would leave the copy behind.
+        #onScroll = () => this.#followLayout(true);
+        /** A page can move text from styles on `<html>`, like a parallax hero; the copy follows those itself. */
+        #rootChanges = new MutationObserver(() => this.#followLayout(false));
+
+        /** Re-measures a showing highlight after the text under it moved without the selection changing. */
+        #followLayout(restyled: boolean) {
+            if (this.#selecting) {
+                this.#moved = true;
+                if (restyled) this.#copyStale = true;
+                this.#onSelectionChange();
+            } else if (this.#index >= 0 && this.#blocks[0].at) {
+                if (restyled) this.#copyStale = true;
+                this.#setEdges(this.#blocks[0], this.#wordEdges(this.#index), true);
+            }
+        }
 
         #onSelectionChange = () => {
             cancelAnimationFrame(this.#selectionFrame);
@@ -435,9 +450,9 @@ function createMarker() {
             clearTimeout(this.#wrapTimer);
             this.#setEdges(this.#tail, null);
             const lines = this.#selectedLines(range);
-            if (this.#scrolled) {
-                // A selection in fixed content moves against the marker as the page scrolls: follow it at once.
-                this.#scrolled = false;
+            if (this.#moved) {
+                // The text moved, not the selection: follow it at once.
+                this.#moved = false;
                 lines.forEach((to, i) => this.#setEdges((this.#blocks[i] ??= newBlock()), to, true));
                 for (const block of this.#blocks.slice(lines.length)) this.#setEdges(block, null);
                 return;
