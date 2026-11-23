@@ -17,6 +17,7 @@
         pad: 3,
         radius: 4,
         doubleClickWindow: 330,
+        stagger: 20,
         reduced: false,
         pauseOnSelect: true,
     };
@@ -31,13 +32,14 @@
     let pad = $state(start.pad);
     let radius = $state(start.radius);
     let doubleClickWindow = $state(start.doubleClickWindow);
+    let stagger = $state(start.stagger);
     let reduced = $state(start.reduced);
     let pauseOnSelect = $state(start.pauseOnSelect);
     $effect(() =>
-        saved.set({ leading, trailing, wpm, pad, radius, doubleClickWindow, reduced, pauseOnSelect }),
+        saved.set({ leading, trailing, wpm, pad, radius, doubleClickWindow, stagger, reduced, pauseOnSelect }),
     );
     function resetKnobs() {
-        ({ leading, trailing, wpm, pad, radius, doubleClickWindow, reduced, pauseOnSelect } = DEFAULTS);
+        ({ leading, trailing, wpm, pad, radius, doubleClickWindow, stagger, reduced, pauseOnSelect } = DEFAULTS);
     }
 
     // Double-click calibration: press-to-press intervals of Mia's own double-clicks, and of pairs she
@@ -350,8 +352,11 @@
     let firstPress = 0;
     /** Whether text was selected when the press began; by click time the press has cleared it. */
     let hadSelection = false;
+    /** Where a press that clears a selection landed, in document coordinates; the lines wipe toward it. */
+    let deselectAt: { x: number; y: number } | undefined;
     function onMouseDown(event: MouseEvent) {
         hadSelection = !getSelection()?.isCollapsed;
+        deselectAt = hadSelection ? { x: event.clientX + scrollX, y: event.clientY + scrollY } : undefined;
         if (event.detail < 2) {
             firstPress = performance.now();
             return;
@@ -445,6 +450,31 @@
         );
     }
 
+    /**
+     * Wipes a cleared selection toward one point, a line at a time, farthest line first: lines above
+     * the point shrink into their end, lines below into their start, and a line level with it into
+     * the point's spot. The point is the narration highlight when one will remain, else the click
+     * that cleared the selection, else the caret a drag left behind.
+     */
+    function wipeToward(leaving: Block[], point: { x: number; y: number }) {
+        const centre = (b: Block) => (b.at!.t + b.at!.b) / 2;
+        const lines = leaving.filter((b) => b.at).sort((a, b) => Math.abs(centre(b) - point.y) - Math.abs(centre(a) - point.y));
+        lines.forEach((b, i) => {
+            if (reduced || i === 0) return retire(b, point);
+            clearTimeout(b.fading);
+            b.fading = setTimeout(() => {
+                b.fading = undefined;
+                retire(b, point);
+            }, i * stagger);
+        });
+    }
+
+    /** The centre of the word the voice is on, in document coordinates. */
+    function narrationPoint() {
+        const rect = index >= 0 ? words[index].range.getClientRects()[0] : undefined;
+        return rect && { x: rect.left + rect.width / 2 + scrollX, y: rect.top + rect.height / 2 + scrollY };
+    }
+
     /** Where a collapsed selection's caret sits, in document coordinates, if it sits in text. */
     function caretPoint(selection: Selection | null) {
         if (!selection?.rangeCount) return undefined;
@@ -462,14 +492,16 @@
             if (!inside) {
                 if (mode === 'selection') {
                     mode = 'narration';
-                    // Every line shrinks toward the caret the deselect left behind; with narration on,
-                    // block 0 travels back to the voice instead.
-                    const into = caretPoint(selection) ?? 'middle';
-                    for (let i = 1; i < blocks.length; i++) retire(i, into);
+                    // With narration on, block 0 travels back to the voice; every other line shrinks away.
+                    const leaving = blocks.filter((b, i) => b.at && (i > 0 || index < 0));
+                    const point = narrationPoint() ?? deselectAt ?? caretPoint(selection);
+                    if (point) wipeToward(leaving, point);
+                    else for (const b of leaving) retire(b, 'middle');
+                    deselectAt = undefined;
                     if (index >= 0) {
                         moveTo(index);
                         highlightWord(index);
-                    } else retire(0, into);
+                    }
                     if (pausedBySelection) play();
                 }
                 return;
@@ -626,6 +658,7 @@
     <div class="knob">Voice speed <span><input type="number" min="1" bind:value={wpm} /> wpm</span><input type="range" min="60" max="400" bind:value={wpm} /></div>
     <div class="knob">Padding <span><input type="number" min="0" step="0.5" bind:value={pad} /> px</span><input type="range" min="0" max="10" step="0.5" bind:value={pad} /></div>
     <div class="knob">Corner radius <span><input type="number" min="0" bind:value={radius} /> px</span><input type="range" min="0" max="14" bind:value={radius} /></div>
+    <div class="knob">Deselect stagger <span><input type="number" min="0" bind:value={stagger} /> ms</span><input type="range" min="0" max="150" bind:value={stagger} /></div>
     <div class="knob">Double-click window <span><input type="number" min="0" bind:value={doubleClickWindow} /> ms</span><input type="range" min="100" max="1500" bind:value={doubleClickWindow} /></div>
     <section class="calibrate">
         <p>Double-click the left one as you'd double-click a word. Click the right one twice, as two separate clicks.</p>
