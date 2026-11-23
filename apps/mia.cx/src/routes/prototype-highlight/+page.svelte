@@ -59,15 +59,25 @@
         link.click();
         URL.revokeObjectURL(link.href);
     }
-    const lastPress: Record<'double' | 'distinct', number | undefined> = { double: undefined, distinct: undefined };
+    type Kind = 'double' | 'distinct';
+    const lastPress: Record<Kind, number | undefined> = { double: undefined, distinct: undefined };
+    /** A first press older than this starts over, so one missed press can't pair with the next pair's first. */
+    const PAIR_TIMEOUT = 1500;
+    /** Which list took the latest sample, for Undo. */
+    let lastKind = $state<Kind | undefined>();
     /** The second press of a pair records the gap since the first; pairs never overlap. */
-    function press(kind: 'double' | 'distinct') {
+    function press(kind: Kind) {
         const now = performance.now();
         const first = lastPress[kind];
-        if (first !== undefined && now - first < 3000) {
+        if (first !== undefined && now - first < PAIR_TIMEOUT) {
             clicks[kind].push(Math.round(now - first));
             lastPress[kind] = undefined;
+            lastKind = kind;
         } else lastPress[kind] = now;
+    }
+    function undo() {
+        if (lastKind) clicks[lastKind].pop();
+        lastKind = undefined;
     }
     const median = (xs: number[]) => {
         const sorted = [...xs].sort((a, b) => a - b);
@@ -587,7 +597,17 @@
             <dt>Two</dt><dd>{describe(clicks.distinct)}</dd>
             <dt>Cutoff</dt><dd>{suggested === undefined ? 'needs both' : `${suggested} ms`}</dd>
         </dl>
+        {#each ['double', 'distinct'] as const as kind (kind)}
+            {#if clicks[kind].length}
+                <div class="samples" aria-label="{kind === 'double' ? 'Double-click' : 'Two-click'} samples">
+                    {#each clicks[kind] as gap, i (i)}
+                        <button title="Delete this sample" onclick={() => clicks[kind].splice(i, 1)}>{gap} ×</button>
+                    {/each}
+                </div>
+            {/if}
+        {/each}
         <div class="row">
+            <button disabled={!lastKind} onclick={undo}>Undo last</button>
             <button disabled={suggested === undefined} onclick={() => (doubleClickWindow = suggested!)}>Use cutoff</button>
             <button onclick={exportClicks}>Export</button>
             <button onclick={() => (clicks = { double: [], distinct: [] })}>Clear</button>
@@ -748,6 +768,25 @@
         text-transform: none;
         letter-spacing: 0;
         line-height: 1.4;
+    }
+    .samples {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        max-height: 96px;
+        overflow-y: auto;
+    }
+    .samples button {
+        padding: 2px 6px;
+        border: 1px solid var(--panel-line);
+        color: var(--ink);
+        background: none;
+        font: inherit;
+        cursor: pointer;
+    }
+    .samples button:hover {
+        border-color: var(--accent);
+        color: var(--accent);
     }
     .calibrate button:disabled {
         opacity: 0.4;
