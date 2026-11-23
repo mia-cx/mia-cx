@@ -86,16 +86,24 @@
         dur: number;
     }
     /** `at` is where the block is heading; `tweens` animate each edge there on its own clock. */
-    const blocks: { el: HTMLDivElement; at: Edges | null; tweens: Record<Edge, Tween> | null }[] = [];
+    interface Block {
+        el: HTMLDivElement;
+        at: Edges | null;
+        tweens: Record<Edge, Tween> | null;
+    }
+    const blocks: Block[] = [];
+    function makeBlock(): Block {
+        const el = document.createElement('div');
+        el.className = 'hl-block';
+        layer.append(el);
+        return { el, at: null, tweens: null };
+    }
     function block(i: number) {
-        while (blocks.length <= i) {
-            const el = document.createElement('div');
-            el.className = 'hl-block';
-            layer.append(el);
-            blocks.push({ el, at: null, tweens: null });
-        }
+        while (blocks.length <= i) blocks.push(makeBlock());
         return blocks[i];
     }
+    /** Shrinks out of the old line at a wrap while block 0 already grows on the new one. */
+    let tail: Block;
 
     /** Close to cubic-bezier(.2, .9, .3, 1): fast out, soft landing. */
     const ease = (x: number) => 1 - (1 - x) ** 4;
@@ -108,7 +116,7 @@
      */
     function render(now: number) {
         const rects: Edges[] = [];
-        for (const { el, at, tweens } of blocks) {
+        for (const { el, at, tweens } of [...blocks, tail]) {
             if (!at || !tweens) {
                 el.style.display = 'none';
                 continue;
@@ -134,8 +142,8 @@
     }
 
     /** Moves a block's edges: an edge moving outward leads, an edge moving inward trails. */
-    function setEdges(i: number, to: Edges | null, snap = false) {
-        const b = block(i);
+    function setEdges(which: number | Block, to: Edges | null, snap = false) {
+        const b = typeof which === 'number' ? block(which) : which;
         if (!to) {
             b.at = null;
             b.tweens = null;
@@ -160,23 +168,28 @@
     }
 
     let wrapTimer: ReturnType<typeof setTimeout> | undefined;
-    /** Block 0 to word i. Across a line wrap it shrinks into the old line and grows out of the new one. */
+    /**
+     * Block 0 to word i. Across a line wrap the old shape passes to the tail, which shrinks into the
+     * old line, while block 0 grows out of the new line at the same moment.
+     */
     function moveTo(i: number) {
-        clearTimeout(wrapTimer);
         const rect = words[i]?.range.getClientRects()[0];
         if (!rect) return;
         const to = local(rect);
-        const from = block(0).at;
+        const head = block(0);
+        const from = head.at;
         const sameLine = from && Math.abs(from.t - to.t) < 4;
         if (!from || sameLine || reduced) return setEdges(0, to);
         const forward = to.t > from.t;
+        clearTimeout(wrapTimer);
+        tail.at = from;
+        tail.tweens = head.tweens;
         const edge = forward ? from.r : from.l;
-        setEdges(0, { ...from, l: edge, r: edge });
-        wrapTimer = setTimeout(() => {
-            const start = forward ? to.l : to.r;
-            setEdges(0, { ...to, l: start, r: start }, true);
-            setEdges(0, to);
-        }, trailing);
+        setEdges(tail, { ...from, l: edge, r: edge });
+        wrapTimer = setTimeout(() => setEdges(tail, null), trailing);
+        const start = forward ? to.l : to.r;
+        setEdges(0, { ...to, l: start, r: start }, true);
+        setEdges(0, to);
     }
 
     /** While a selection holds the block, the spoken word gets a quieter underline instead. */
@@ -211,6 +224,9 @@
     // Click to seek: the block moves now, the "audio" (the clock) follows after seekDelay unless a
     // second click turns it into a double-click.
     let seekTimer: ReturnType<typeof setTimeout> | undefined;
+    /** Whether text was selected when the press began; by click time the press has cleared it. */
+    let hadSelection = false;
+    const onPointerDown = () => (hadSelection = !getSelection()?.isCollapsed);
     function onClick(event: MouseEvent) {
         if (!started) return;
         if (event.detail !== 1) {
@@ -219,7 +235,8 @@
             return;
         }
         if ((event.target as Element).closest('a, button')) return;
-        if (!getSelection()?.isCollapsed) return;
+        // A click that clears a selection only deselects; one that ends a drag only selects.
+        if (hadSelection || !getSelection()?.isCollapsed) return;
         const caret = document.caretPositionFromPoint?.(event.clientX, event.clientY);
         const node = caret?.offsetNode;
         const i = words.findIndex((w) => w.node === node && w.from <= caret!.offset && caret!.offset <= w.to);
@@ -271,6 +288,7 @@
                 } else lines.push({ l: rect.left, r: rect.right, t: rect.top, b: rect.bottom });
             }
             clearTimeout(wrapTimer);
+            setEdges(tail, null);
             lines.forEach((line, i) => {
                 const to = local(line);
                 // A new line's block grows out of the side the selection is coming from.
@@ -282,6 +300,7 @@
     }
 
     onMount(() => {
+        tail = makeBlock();
         collectWords();
         let last = performance.now();
         let frame = requestAnimationFrame(function tick(now) {
@@ -302,10 +321,13 @@
         });
         const onResize = () => mode === 'narration' && index >= 0 && setEdges(0, local(words[index].range.getClientRects()[0]), true);
         document.addEventListener('selectionchange', onSelectionChange);
+        // Capture, so it reads the selection before the press clears it.
+        document.addEventListener('pointerdown', onPointerDown, true);
         addEventListener('resize', onResize);
         return () => {
             cancelAnimationFrame(frame);
             document.removeEventListener('selectionchange', onSelectionChange);
+            document.removeEventListener('pointerdown', onPointerDown, true);
             removeEventListener('resize', onResize);
             CSS.highlights.clear();
         };
