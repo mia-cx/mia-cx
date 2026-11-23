@@ -17,7 +17,7 @@
         pad: 3,
         radius: 4,
         doubleClickWindow: 330,
-        stagger: 20,
+        spread: 40,
         reduced: false,
         pauseOnSelect: true,
     };
@@ -32,14 +32,14 @@
     let pad = $state(start.pad);
     let radius = $state(start.radius);
     let doubleClickWindow = $state(start.doubleClickWindow);
-    let stagger = $state(start.stagger);
+    let spread = $state(start.spread);
     let reduced = $state(start.reduced);
     let pauseOnSelect = $state(start.pauseOnSelect);
     $effect(() =>
-        saved.set({ leading, trailing, wpm, pad, radius, doubleClickWindow, stagger, reduced, pauseOnSelect }),
+        saved.set({ leading, trailing, wpm, pad, radius, doubleClickWindow, spread, reduced, pauseOnSelect }),
     );
     function resetKnobs() {
-        ({ leading, trailing, wpm, pad, radius, doubleClickWindow, stagger, reduced, pauseOnSelect } = DEFAULTS);
+        ({ leading, trailing, wpm, pad, radius, doubleClickWindow, spread, reduced, pauseOnSelect } = DEFAULTS);
     }
 
     // Double-click calibration: press-to-press intervals of Mia's own double-clicks, and of pairs she
@@ -195,7 +195,11 @@
      * Shrinks a block out of existence instead of dropping it: into its start, its end or its middle,
      * then hides it once the trailing edge has arrived.
      */
-    function retire(which: number | Block, into: 'start' | 'end' | 'middle' | { x: number; y: number }) {
+    function retire(
+        which: number | Block,
+        into: 'start' | 'end' | 'middle' | { x: number; y: number },
+        ms = trailing,
+    ) {
         const b = typeof which === 'number' ? block(which) : which;
         if (!b.at || b.fading) return;
         if (reduced) return setEdges(b, null);
@@ -210,8 +214,8 @@
                   : into === 'middle'
                     ? (l + r) / 2
                     : Math.min(r, Math.max(l, into.x));
-        setEdges(b, { ...b.at, l: x, r: x });
-        b.fading = setTimeout(() => setEdges(b, null), trailing);
+        setEdges(b, { ...b.at, l: x, r: x }, false, ms);
+        b.fading = setTimeout(() => setEdges(b, null), ms);
     }
     function makeBlock(): Block {
         const el = document.createElement('div');
@@ -262,7 +266,8 @@
     }
 
     /** Moves a block's edges: an edge moving outward leads, an edge moving inward trails. */
-    function setEdges(which: number | Block, to: Edges | null, snap = false) {
+    /** `ms` sets every edge's duration at once; by default outward edges lead and inward edges trail. */
+    function setEdges(which: number | Block, to: Edges | null, snap = false, ms?: number) {
         const b = typeof which === 'number' ? block(which) : which;
         clearTimeout(b.fading);
         b.fading = undefined;
@@ -283,7 +288,7 @@
         b.tweens = Object.fromEntries(
             EDGES.map((edge) => {
                 const from = instant ? to[edge] : valueOf(current![edge], now);
-                return [edge, { from, to: to[edge], start: now, dur: instant ? 0 : durations[edge] }];
+                return [edge, { from, to: to[edge], start: now, dur: instant ? 0 : (ms ?? durations[edge]) }];
             }),
         ) as Record<Edge, Tween>;
         b.at = to;
@@ -455,17 +460,21 @@
      * the point shrink into their end, lines below into their start, and a line level with it into
      * the point's spot. The point is the narration highlight when one will remain, else the click
      * that cleared the selection, else the caret a drag left behind.
+     *
+     * The whole wipe starts within `spread`, however many lines there are, and each line shrinks at
+     * the leading edge's speed, so a cleared section goes as fast as it was selected.
      */
     function wipeToward(leaving: Block[], point: { x: number; y: number }) {
         const centre = (b: Block) => (b.at!.t + b.at!.b) / 2;
         const lines = leaving.filter((b) => b.at).sort((a, b) => Math.abs(centre(b) - point.y) - Math.abs(centre(a) - point.y));
+        const step = lines.length > 1 ? spread / (lines.length - 1) : 0;
         lines.forEach((b, i) => {
-            if (reduced || i === 0) return retire(b, point);
+            if (reduced || i === 0) return retire(b, point, leading);
             clearTimeout(b.fading);
             b.fading = setTimeout(() => {
                 b.fading = undefined;
-                retire(b, point);
-            }, i * stagger);
+                retire(b, point, leading);
+            }, i * step);
         });
     }
 
@@ -658,7 +667,7 @@
     <div class="knob">Voice speed <span><input type="number" min="1" bind:value={wpm} /> wpm</span><input type="range" min="60" max="400" bind:value={wpm} /></div>
     <div class="knob">Padding <span><input type="number" min="0" step="0.5" bind:value={pad} /> px</span><input type="range" min="0" max="10" step="0.5" bind:value={pad} /></div>
     <div class="knob">Corner radius <span><input type="number" min="0" bind:value={radius} /> px</span><input type="range" min="0" max="14" bind:value={radius} /></div>
-    <div class="knob">Deselect stagger <span><input type="number" min="0" bind:value={stagger} /> ms</span><input type="range" min="0" max="150" bind:value={stagger} /></div>
+    <div class="knob">Deselect spread <span><input type="number" min="0" bind:value={spread} /> ms</span><input type="range" min="0" max="200" bind:value={spread} /></div>
     <div class="knob">Double-click window <span><input type="number" min="0" bind:value={doubleClickWindow} /> ms</span><input type="range" min="100" max="1500" bind:value={doubleClickWindow} /></div>
     <section class="calibrate">
         <p>Double-click the left one as you'd double-click a word. Click the right one twice, as two separate clicks.</p>
