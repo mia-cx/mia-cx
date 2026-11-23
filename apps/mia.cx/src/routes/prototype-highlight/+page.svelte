@@ -309,13 +309,31 @@
             }
             clearTimeout(wrapTimer);
             setEdges(tail, null);
-            lines.forEach((line, i) => {
-                const to = local(line);
-                // A new line's block grows out of the side the selection is coming from.
-                if (!block(i).at) setEdges(i, { ...to, r: to.l }, true);
-                setEdges(i, to);
-            });
-            for (let i = lines.length; i < blocks.length; i++) setEdges(i, null);
+            block(0);
+            const targets = lines.map(local);
+            const placed = new Map<Edges, Block>();
+            // A block stays on the line it already covers, so extending up or down never shifts the others.
+            for (const to of targets) {
+                const same = blocks.find((b) => b.at && ![...placed.values()].includes(b) && Math.abs(b.at.t - to.t) < 4);
+                if (same) placed.set(to, same);
+            }
+            for (const to of targets) {
+                if (placed.has(to)) continue;
+                const taken = [...placed.values()];
+                // The narration block travels to the selection's first new line; other lines grow in place.
+                const head = blocks[0];
+                if (head.at && !taken.includes(head)) {
+                    placed.set(to, head);
+                    continue;
+                }
+                const fresh = blocks.find((b) => !b.at && !taken.includes(b)) ?? block(blocks.length);
+                // A new line grows out of the side joined to the rest of the selection.
+                const above = taken.some((b) => b.at!.t > to.t);
+                setEdges(fresh, above ? { ...to, l: to.r } : { ...to, r: to.l }, true);
+                placed.set(to, fresh);
+            }
+            for (const [to, b] of placed) setEdges(b, to);
+            for (const b of blocks) if (![...placed.values()].includes(b)) setEdges(b, null);
         });
     }
 
