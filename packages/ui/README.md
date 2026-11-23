@@ -67,3 +67,4 @@ Colours come from `--marker-color` and `--marker-text` (system highlight colours
 redrawn text is a copy of the marker's children inside it, so style its content with descendant
 selectors (`.prose p`), not child selectors on the marker. Form fields and forced-colors mode keep the
 native selection, and reduced motion (or `data-motion="reduce"` on `<html>`) makes every change snap.
+Safari on iOS still draws its system selection around the highlight, with its handles.
