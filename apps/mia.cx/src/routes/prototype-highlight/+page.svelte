@@ -17,7 +17,7 @@
         pad: 3,
         radius: 4,
         doubleClickWindow: 330,
-        spread: 40,
+        spread: 150,
         reduced: false,
         pauseOnSelect: true,
     };
