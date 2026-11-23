@@ -3,6 +3,7 @@
     import Mentions from '$lib/components/Mentions.svelte';
     import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
+    import { formatDate } from '$lib/content/vault';
 
     let { data } = $props();
     const note = $derived(data.note);
@@ -26,6 +27,25 @@
     <!-- Mia's own note body, from the vault. -->
     <!-- eslint-disable-next-line svelte/no-at-html-tags -- rendered from the vault, which is authored in this repo -->
     <div class="prose">{@html data.html}</div>
+
+    {#if data.posts.length}
+        <section class="posts" aria-labelledby="posts">
+            <h2 id="posts" class="mono">Posts</h2>
+            <ul>
+                {#each data.posts as post (post.href)}
+                    <li>
+                        <a href={post.href} rel={post.external ? 'external' : undefined}>
+                            <span class="title"
+                                >{post.title}{#if post.external}<span class="away"> ↗</span>{/if}</span
+                            >
+                            <span class="note">{post.summary}</span>
+                            <time class="mono" datetime={post.date}>{formatDate(post.date)}</time>
+                        </a>
+                    </li>
+                {/each}
+            </ul>
+        </section>
+    {/if}
 
     <dl class="facts mono">
         {#if note.stack.length}
@@ -86,6 +106,45 @@
     }
     .page-actions {
         margin-top: 18px;
+    }
+    /* Styled as the Mentions list, with each post's date under it. */
+    .posts {
+        margin-top: clamp(40px, 8vh, 72px);
+        padding-top: 20px;
+        border-top: 1px solid var(--panel-line);
+    }
+    .posts h2 {
+        margin-bottom: 12px;
+        color: var(--ink-dim);
+        font-size: inherit;
+        font-weight: inherit;
+    }
+    .posts ul {
+        display: grid;
+        gap: 18px;
+    }
+    .posts a {
+        display: grid;
+        justify-items: start;
+        gap: 4px;
+        width: fit-content;
+        text-decoration: none;
+    }
+    .posts a:hover .title,
+    .posts a:focus-visible .title {
+        color: var(--accent);
+    }
+    .posts .title {
+        font-size: 19px;
+        font-weight: 600;
+        font-stretch: 80%;
+    }
+    .posts .away,
+    .posts time {
+        color: var(--ink-dim);
+    }
+    .posts .note {
+        font-size: 15px;
     }
     .facts {
         display: grid;

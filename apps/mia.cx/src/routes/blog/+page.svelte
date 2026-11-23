@@ -13,15 +13,16 @@
     <h1>Blog</h1>
 
     <ul>
-        {#each posts as post (post.slug)}
+        {#each posts as post (post.href)}
             <li>
-                <a href={post.external ?? `/blog/${post.slug}`} rel={post.external ? 'external' : undefined}>
+                <a href={post.href} rel={post.external ? 'external' : undefined}>
                     <span class="title"
                         >{post.title}{#if post.external}<span class="away"> ↗</span>{/if}</span
                     >
                     <span class="summary">{post.summary}</span>
                     <span class="meta mono">
                         <time datetime={post.date}>{formatDate(post.date)}</time>
+                        {#if post.project}<span>{post.project.title}</span>{/if}
                         {#if post.external}<span>{new URL(post.external).hostname.replace('www.', '')}</span>{/if}
                     </span>
                 </a>

@@ -1,6 +1,6 @@
 /** Route loaders, shared so pages stay presentation-only. */
 import { error } from '@sveltejs/kit';
-import { mentionsOf, postBySlug, posts, render, work, workBySlug, workWithPages } from './vault';
+import { mentionsOf, postAt, posts, render, work, workBySlug, workWithPages } from './vault';
 
 export const workEntries = () => workWithPages.map(({ slug }) => ({ slug }));
 
@@ -11,7 +11,10 @@ export function loadWork(slug: string) {
     return {
         note,
         html: render(note.entry.markdown),
-        mentions: mentionsOf(note.entry),
+        // The list under the body needs no post bodies.
+        posts: note.posts.map(({ title, summary, date, href, external }) => ({ title, summary, date, href, external })),
+        // Its own posts are listed already, whether or not they link back.
+        mentions: mentionsOf(note.entry).filter((entry) => !note.posts.some((post) => post.entry === entry)),
         previous: workWithPages[index - 1] ?? null,
         next: workWithPages[index + 1] ?? null,
     };
@@ -20,11 +23,23 @@ export function loadWork(slug: string) {
 /** Posts with pages: never the ones hosted elsewhere. */
 export const publishedPosts = posts.filter((post) => !post.external);
 
-export const postEntries = () => publishedPosts.map(({ slug }) => ({ slug }));
+/** The last segment of each blog post's path, for `/blog/[slug]`. */
+export const postEntries = () =>
+    publishedPosts.filter(({ project }) => !project).map(({ entry }) => ({ slug: entry.path.slice('/blog/'.length) }));
 
-export function loadPost(slug: string) {
-    const post = postBySlug(slug);
-    if (!post || !publishedPosts.includes(post)) error(404, 'No such post');
+/** Each project post's project and name, for `/work/[slug]/[post]`. */
+export const projectPostEntries = () =>
+    publishedPosts
+        .filter(({ project }) => project)
+        .map(({ entry }) => {
+            const [, , slug, post] = entry.path.split('/');
+            return { slug, post };
+        });
+
+/** The post with a page at `path`, from /blog or a project folder alike. */
+export function loadPost(path: string) {
+    const post = postAt(path);
+    if (!post) error(404, 'No such post');
     return { post, html: render(post.entry.markdown), mentions: mentionsOf(post.entry) };
 }
 

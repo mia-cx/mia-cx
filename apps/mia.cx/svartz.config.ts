@@ -1,8 +1,10 @@
 import { defineConfig } from '@svartz/config';
 
 /**
- * The vaults at the repository root, one per section. Svartz is only the backend: it publishes
- * each vault's index with every body as resolved Markdown, and mia.cx renders and styles the pages.
+ * One vault, `vaults/` at the repository root, mounted at the site root: its `work/` and `blog/`
+ * folders are the site's /work and /blog, so Svartz's URLs and links are the site's own. Svartz is
+ * only the backend: it publishes the index with every body as resolved Markdown, and mia.cx renders
+ * and styles the pages.
  */
 export default defineConfig({
     version: '1.0.0',
@@ -18,18 +20,13 @@ export default defineConfig({
     },
     vaults: [
         {
-            id: 'work',
-            path: '../../vaults/work',
-            mountPath: '/work',
+            id: 'site',
+            path: '../../vaults',
+            mountPath: '/',
+            // The vault's own documentation, for whoever opens it.
+            exclude: ['README.md'],
             target: { type: 'host' },
-            site: { title: 'Work' },
-        },
-        {
-            id: 'blog',
-            path: '../../vaults/blog',
-            mountPath: '/blog',
-            target: { type: 'host' },
-            site: { title: 'Blog' },
+            site: { title: 'mia.cx' },
         },
     ],
 });
