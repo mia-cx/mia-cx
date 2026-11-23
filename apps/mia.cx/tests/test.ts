@@ -65,16 +65,29 @@ test('a project keeps its URL and its filename as its title', async ({ page }) =
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('hypertrance.eu');
 });
 
-test('blog lists posts newest first', async ({ page }) => {
+test('blog lists posts newest first, project posts included', async ({ page }) => {
     await page.goto('/blog');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Blog');
     const posts = page.locator('main ul a');
-    await expect(posts).toHaveCount(5);
-    await expect(posts.first()).toHaveAttribute('href', '/blog/the-quiet-cost-of-carelessness');
+    await expect(posts).toHaveCount(6);
+    await expect(posts.first()).toHaveAttribute('href', '/work/caelestis/yet-another-overlay-mod');
+    await expect(posts.nth(1)).toHaveAttribute('href', '/blog/the-quiet-cost-of-carelessness');
     await expect(page.getByRole('link', { name: /My Approach to Mastering/ })).toHaveAttribute(
         'href',
         '/blog/my-approach-to-mastering',
     );
+});
+
+test('a project lists its posts, and each post links back to it', async ({ page }) => {
+    await page.goto('/work/caelestis');
+    await page
+        .getByRole('region', { name: 'Posts' })
+        .getByRole('link', { name: /yet another/ })
+        .click();
+    await expect(page).toHaveURL(/\/work\/caelestis\/yet-another-overlay-mod$/);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/yet another fucking wplace overlay mod/);
+    await page.getByRole('link', { name: '← Caelestis' }).click();
+    await expect(page).toHaveURL(/\/work\/caelestis$/);
 });
 
 test('a post renders its body from the vault', async ({ page }) => {
