@@ -49,8 +49,12 @@ audio.addEventListener('timeupdate', () => (marker.word = wordIndexAt(audio.curr
 | `word`                  | `-1`     | The highlighted word                                              |
 | `leading`, `trailing`   | `200`    | Milliseconds for an edge moving outward, and inward               |
 | `stagger`               | `150`    | Milliseconds between the first and last line clearing a selection |
-| `padding`, `radius`     | `4`, `0` | Pixels around each line, and corner rounding                      |
+| `padding`, `radius`     | `4`, `0` | Pixels of padding, and corner rounding (see below)                |
 | `skew-head`,`skew-tail` | `0`      | Degrees the leading and trailing ends lean, like a marker stroke  |
+
+The word cursor takes `padding` on both sides and half of it above and below. Selected lines take only
+the half above and below: each ends exactly where its selected text does, so it shows whether a trailing
+space is selected.
 
 Colours come from `--marker-color` and `--marker-text` (system highlight colours by default). The
 redrawn text is a copy of the marker's children inside it, so style its content with descendant

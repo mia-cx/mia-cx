@@ -218,18 +218,20 @@ function createMarker() {
             }
         }
 
-        /** A viewport rect in the marker's own coordinates, padded. */
-        #local(rect: DOMRect | Edges, pad = this.#setting('padding')): Edges {
+        /** A viewport rect in the marker's own coordinates, grown by `padX` each side and `padY` above and below. */
+        #local(rect: DOMRect | Edges, padX = 0, padY = 0): Edges {
             const box = this.getBoundingClientRect();
             const x = box.left + this.clientLeft;
             const y = box.top + this.clientTop;
             const { l, r, t, b } = 'l' in rect ? rect : { l: rect.left, r: rect.right, t: rect.top, b: rect.bottom };
-            return { l: l - x - pad, r: r - x + pad, t: t - y - pad / 2, b: b - y + pad / 2 };
+            return { l: l - x - padX, r: r - x + padX, t: t - y - padY, b: b - y + padY };
         }
 
+        /** The word cursor is padded all round, so the word sits inside it. */
         #wordEdges(index: number) {
             const rect = this.#wordRanges()[index]?.getClientRects()[0];
-            return rect ? this.#local(rect) : null;
+            const pad = this.#setting('padding');
+            return rect ? this.#local(rect, pad, pad / 2) : null;
         }
 
         #wordPoint(): Point | undefined {
@@ -355,7 +357,7 @@ function createMarker() {
         }
 
         #onMouseDown = (event: MouseEvent) => {
-            const local = this.#local({ l: event.clientX, r: event.clientX, t: event.clientY, b: event.clientY }, 0);
+            const local = this.#local({ l: event.clientX, r: event.clientX, t: event.clientY, b: event.clientY });
             this.#deselectAt = this.#selecting ? { x: local.l, y: local.t } : undefined;
         };
 
@@ -439,7 +441,9 @@ function createMarker() {
                     if (whole.has(el)) return true;
                 return false;
             };
-            const edges = lines.map((line) => this.#local(line));
+            // No horizontal padding: a line ends exactly where its selected text does, trailing space or not.
+            const padY = this.#setting('padding') / 2;
+            const edges = lines.map((line) => this.#local(line, 0, padY));
             for (let i = 0; i < edges.length - 1; i++) {
                 const [here, next] = [lines[i].item, lines[i + 1].item];
                 const sameUnit = unit(here) && unit(here) === unit(next) && covers(range, unit(here)!);
@@ -501,7 +505,7 @@ function createMarker() {
             if (!selection?.rangeCount) return undefined;
             const rect = selection.getRangeAt(0).getClientRects()[0];
             if (!rect) return undefined;
-            const local = this.#local(rect, 0);
+            const local = this.#local(rect);
             return { x: local.l, y: (local.t + local.b) / 2 };
         }
     };
