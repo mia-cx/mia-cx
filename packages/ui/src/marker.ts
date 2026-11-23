@@ -61,8 +61,11 @@ ${MARKER_TAG} > [data-marker-overlay] {
  * nothing (a tooltip waiting for hover) or clipped to a pixel for screen readers; the highlight must not.
  */
 function visible(el: Element) {
-    if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
-    const box = el.getBoundingClientRect();
+    // A `display: contents` wrapper has no box of its own; its text shows as part of the parent's.
+    let boxed: Element | null = el;
+    while (boxed && getComputedStyle(boxed).display === 'contents') boxed = boxed.parentElement;
+    if (!boxed?.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+    const box = boxed.getBoundingClientRect();
     return box.width > 1 || box.height > 1;
 }
 
@@ -96,6 +99,8 @@ interface Block {
     tweens: Record<Edge, Tween> | null;
     /** Hides the block once it has shrunk away, or starts a staggered shrink; cleared on reuse. */
     fading?: ReturnType<typeof setTimeout>;
+    /** The element holding the block's text and where it was, so the block can move when the element does. */
+    ref?: { el: Element; x: number; y: number };
 }
 const newBlock = (): Block => ({ at: null, tweens: null });
 
@@ -167,9 +172,45 @@ function createMarker() {
             this.#setWord(index);
         }
 
-        /** How many words the marker holds: whitespace-separated runs of text, outside `<pre>`. */
+        /** How many words the marker holds: whitespace-separated runs of text, outside `<pre>` and `aria-hidden`. */
         get wordCount() {
             return this.#wordRanges().length;
+        }
+
+        // Typed listeners, so `seek` arrives as a `MarkerSeekEvent`.
+        addEventListener<K extends keyof MarkerEventMap>(
+            type: K,
+            listener: (this: HTMLElement, event: MarkerEventMap[K]) => unknown,
+            options?: boolean | AddEventListenerOptions,
+        ): void;
+        addEventListener(
+            type: string,
+            listener: EventListenerOrEventListenerObject,
+            options?: boolean | AddEventListenerOptions,
+        ): void;
+        addEventListener(
+            type: string,
+            listener: EventListenerOrEventListenerObject,
+            options?: boolean | AddEventListenerOptions,
+        ) {
+            super.addEventListener(type, listener, options);
+        }
+        removeEventListener<K extends keyof MarkerEventMap>(
+            type: K,
+            listener: (this: HTMLElement, event: MarkerEventMap[K]) => unknown,
+            options?: boolean | EventListenerOptions,
+        ): void;
+        removeEventListener(
+            type: string,
+            listener: EventListenerOrEventListenerObject,
+            options?: boolean | EventListenerOptions,
+        ): void;
+        removeEventListener(
+            type: string,
+            listener: EventListenerOrEventListenerObject,
+            options?: boolean | EventListenerOptions,
+        ) {
+            super.removeEventListener(type, listener, options);
         }
 
         /** The index of the word at a viewport point, such as a click, or -1. */
@@ -194,7 +235,8 @@ function createMarker() {
             document.addEventListener('pointerdown', this.#onPointerDown, true);
             document.addEventListener('mousedown', this.#onMouseDown, true);
             this.addEventListener('click', this.#onClick);
-            addEventListener('scroll', this.#onScroll, { passive: true });
+            // Capture on the document hears the page scroll and every nested scroller too.
+            document.addEventListener('scroll', this.#onScroll, { capture: true, passive: true });
             this.#rootChanges.observe(document.documentElement, {
                 attributes: true,
                 attributeFilter: ['style', 'class'],
@@ -209,7 +251,7 @@ function createMarker() {
             document.removeEventListener('mousedown', this.#onMouseDown, true);
             this.removeEventListener('click', this.#onClick);
             clearTimeout(this.#seekTimer);
-            removeEventListener('scroll', this.#onScroll);
+            document.removeEventListener('scroll', this.#onScroll, { capture: true });
             this.#rootChanges.disconnect();
             cancelAnimationFrame(this.#frame);
             this.#frame = 0;
@@ -225,11 +267,15 @@ function createMarker() {
             return this.hasAttribute(name) && Number.isFinite(value) ? value : DEFAULTS[name];
         }
 
+        /**
+         * The marker's words. They follow the content, not what is visible right now, so an index stays
+         * put while a tooltip fades in; text marked `aria-hidden` is never a word.
+         */
         #wordRanges() {
             if (this.#words) return this.#words;
             const words: Range[] = [];
-            for (const node of this.#textNodes()) {
-                if (node.parentElement?.closest('pre')) continue;
+            for (const node of this.#textNodes(false)) {
+                if (node.parentElement?.closest('pre, [aria-hidden="true"]')) continue;
                 for (const match of node.data.matchAll(/\S+/g)) {
                     const range = document.createRange();
                     range.setStart(node, match.index);
@@ -240,8 +286,8 @@ function createMarker() {
             return (this.#words = words);
         }
 
-        /** The marker's text a reader can see: not in the overlay, not hidden, not see-through. */
-        *#textNodes() {
+        /** The marker's text, outside the overlay; with `onlyVisible`, only what a reader can see right now. */
+        *#textNodes(onlyVisible: boolean) {
             const seen = new Map<Element, boolean>();
             const walker = document.createTreeWalker(this, NodeFilter.SHOW_TEXT);
             for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -249,8 +295,8 @@ function createMarker() {
                 const parent = text.parentElement;
                 if (!text.data.trim() || !parent || this.#overlay.contains(text)) continue;
                 if (parent.closest('script, style, noscript')) continue;
-                if (!seen.has(parent)) seen.set(parent, visible(parent));
-                if (seen.get(parent)) yield text;
+                if (onlyVisible && !seen.has(parent)) seen.set(parent, visible(parent));
+                if (!onlyVisible || seen.get(parent)) yield text;
             }
         }
 
@@ -285,6 +331,8 @@ function createMarker() {
             if (next === this.#index) return;
             this.#index = next;
             this.#markQuietWord();
+            // No word, no narration to seek in.
+            if (next < 0) this.#dropSeek();
             // A click waiting to seek holds the cursor on its word until the seek lands or is dropped.
             if (this.#selecting || this.#seeking >= 0) return;
             if (next < 0) this.#retire(this.#blocks[0], undefined);
@@ -303,13 +351,16 @@ function createMarker() {
         #moveTo(index: number) {
             const to = this.#wordEdges(index);
             if (!to) return;
-            this.#reveal([this.#wordRanges()[index].startContainer.parentElement!]);
+            const holder = this.#wordRanges()[index].startContainer.parentElement!;
+            this.#reveal([holder]);
             const head = this.#blocks[0];
             const from = head.at;
+            const previous = head.ref;
+            head.ref = this.#refOf(holder);
             if (!from || sameLine(from, to) || reducedMotion()) return this.#setEdges(head, to);
             const forward = to.t > from.t;
             clearTimeout(this.#wrapTimer);
-            Object.assign(this.#tail, { at: from, tweens: head.tweens });
+            Object.assign(this.#tail, { at: from, tweens: head.tweens, ref: previous });
             const edge = forward ? from.r : from.l;
             this.#setEdges(this.#tail, { ...from, l: edge, r: edge });
             this.#wrapTimer = setTimeout(() => this.#setEdges(this.#tail, null), this.#setting('trailing'));
@@ -392,8 +443,32 @@ function createMarker() {
             this.#shownStale = true;
             const style = getComputedStyle(this);
             this.#copy.style.padding = style.padding;
-            this.#copy.replaceChildren(...this.#content().map((node) => node.cloneNode(true)));
-            for (const el of this.#copy.querySelectorAll('[id]')) el.removeAttribute('id');
+            // Copied into a document with no custom elements defined, so nothing in the copy upgrades and
+            // runs its own code a second time. A plain box of the same display stands in for each one.
+            const originals = [...this.querySelectorAll('*')].filter(
+                (el) => el.localName.includes('-') && !this.#overlay.contains(el),
+            );
+            const inert = document.implementation.createHTMLDocument('');
+            const holder = inert.createElement('div');
+            holder.append(...this.#content().map((node) => inert.importNode(node, true)));
+            [...holder.querySelectorAll('*')]
+                .filter((el) => el.localName.includes('-'))
+                .forEach((el, i) => {
+                    const plain = inert.createElement('div');
+                    for (const { name, value } of el.attributes) plain.setAttribute(name, value);
+                    if (originals[i]) plain.style.display = getComputedStyle(originals[i]).display;
+                    plain.append(...el.childNodes);
+                    el.replaceWith(plain);
+                });
+            for (const el of holder.querySelectorAll('[id]')) el.removeAttribute('id');
+            this.#copy.replaceChildren(...holder.childNodes);
+            // A scrolled box starts at the top in a fresh copy; put it where the original is.
+            for (const el of this.querySelectorAll('*'))
+                if ((el.scrollLeft || el.scrollTop) && !this.#overlay.contains(el)) this.#syncScroll(el);
+        }
+
+        #syncScroll(el: Element) {
+            this.#copyOf(el)?.scrollTo(el.scrollLeft, el.scrollTop);
         }
 
         #content() {
@@ -422,6 +497,8 @@ function createMarker() {
 
         /** The copy of an element inside the marker, found by its position among its siblings. */
         #copyOf(el: Element) {
+            // A page navigation can replace what the highlight was on before its copy catches up.
+            if (!this.contains(el) || this.#overlay.contains(el)) return null;
             const path: number[] = [];
             for (let node: Node = el; node !== this; node = node.parentNode!) {
                 const siblings = node.parentNode === this ? this.#content() : [...node.parentNode!.childNodes];
@@ -486,7 +563,7 @@ function createMarker() {
             this.#seeking = -1;
             this.#index = word;
             this.#moveTo(word);
-            this.dispatchEvent(new CustomEvent('seek', { detail: { word } }));
+            this.dispatchEvent(new CustomEvent('seek', { detail: { word } }) satisfies MarkerSeekEvent);
         }
 
         /** Drops a waiting seek; the browser selects the double-clicked word instead. */
@@ -495,53 +572,66 @@ function createMarker() {
             this.#seeking = -1;
         }
 
-        // Content that restyles itself on scroll, such as a sticky header, would leave the copy behind.
-        #onScroll = () => this.#followLayout(true);
+        #onScroll = (event: Event) => {
+            if (!this.#showing()) return;
+            // A scrolled box inside the marker: scroll its copy along.
+            if (event.target instanceof Element && this.contains(event.target)) this.#syncScroll(event.target);
+            // Content that restyles itself on page scroll, such as a sticky header, would leave the copy behind.
+            else this.#copyStale = true;
+            this.#followLayout();
+        };
         /** A page can move text from styles on `<html>`, like a parallax hero; the copy follows those itself. */
-        #rootChanges = new MutationObserver(() => this.#followLayout(false));
+        #rootChanges = new MutationObserver(() => this.#showing() && this.#followLayout());
 
-        /**
-         * Keeps a showing highlight on text that moved without the selection changing. A selection
-         * re-measures as usual, and its anchor tells how far the text moved (see `#followSelection`);
-         * the word cursor slides by however far its word moved.
-         */
-        #followLayout(restyled: boolean) {
-            if (restyled) this.#copyStale = true;
-            if (this.#selecting) return this.#onSelectionChange();
-            const head = this.#blocks[0];
-            const to = this.#index >= 0 && head.at ? this.#wordEdges(this.#index) : null;
-            if (to && head.at) this.#slide(to.l - head.at.l, to.t - head.at.t, [head, this.#tail]);
-            else if (restyled) this.#kick();
+        #showing() {
+            return [...this.#blocks, this.#tail].some((block) => block.at);
         }
 
         /**
-         * Moves blocks with the text under them, animations and all: every edge of every tween shifts by
-         * the same amount, so a block mid-move keeps moving, just from where the text went.
+         * Keeps a showing highlight on text that moved without the selection changing. A selection
+         * re-measures as usual (see `#followSelection`); the word cursor moves with its word and takes its
+         * new size.
          */
-        #slide(dx: number, dy: number, blocks: Block[] = [...this.#blocks, this.#tail]) {
-            if (!dx && !dy) return;
-            const by: Record<Edge, number> = { l: dx, r: dx, t: dy, b: dy };
-            for (const block of blocks) {
-                if (block.at) for (const edge of EDGES) block.at[edge] += by[edge];
-                if (block.tweens)
-                    for (const edge of EDGES) {
-                        block.tweens[edge].from += by[edge];
-                        block.tweens[edge].to += by[edge];
-                    }
+        #followLayout() {
+            if (this.#selecting) return this.#onSelectionChange();
+            this.#followRefs();
+            const head = this.#blocks[0];
+            const to = this.#index >= 0 && head.at && head.tweens ? this.#wordEdges(this.#index) : null;
+            if (to && head.tweens) {
+                for (const edge of EDGES) head.tweens[edge].to = to[edge];
+                head.at = to;
             }
             this.#kick();
         }
 
-        /** Where the selection's anchor sits, in the marker's coordinates, while it stays the same anchor. */
-        #anchor: { node: Node; offset: number; x: number; y: number } | undefined;
-        #anchorOf(selection: Selection) {
-            const { anchorNode: node, anchorOffset: offset } = selection;
-            if (!(node instanceof Text)) return undefined;
-            const caret = document.createRange();
-            caret.setStart(node, offset);
-            const rect = caret.getClientRects()[0] ?? caret.getBoundingClientRect();
-            const local = this.#local(rect);
-            return { node, offset, x: local.l, y: local.t };
+        /** Where an element sits, to tell later how far it moved. */
+        #refOf(el: Element) {
+            const { l, t } = this.#local(el.getBoundingClientRect());
+            return { el, x: l, y: t };
+        }
+
+        /**
+         * Moves each block as far as the element holding its text moved, animations and all: every edge
+         * of every tween shifts by the same amount, so a block mid-move keeps moving, just from where its
+         * text went. Blocks over a fixed header, a scrolled box or a parallax layer each move their own way.
+         */
+        #followRefs() {
+            for (const block of [...this.#blocks, this.#tail]) {
+                const ref = block.ref;
+                if (!ref?.el.isConnected || !block.at) continue;
+                const now = this.#refOf(ref.el);
+                const [dx, dy] = [now.x - ref.x, now.y - ref.y];
+                block.ref = now;
+                if (!dx && !dy) continue;
+                const by: Record<Edge, number> = { l: dx, r: dx, t: dy, b: dy };
+                for (const edge of EDGES) {
+                    block.at[edge] += by[edge];
+                    if (!block.tweens) continue;
+                    block.tweens[edge].from += by[edge];
+                    block.tweens[edge].to += by[edge];
+                }
+            }
+            this.#kick();
         }
 
         #onSelectionChange = () => {
@@ -555,27 +645,20 @@ function createMarker() {
             const inField = (node: Node | null) =>
                 !!(node instanceof Element ? node : node?.parentElement)?.closest('input, textarea');
             const mine = range && range.intersectsNode(this) && !inField(selection!.anchorNode);
-            if (!mine) {
-                this.#anchor = undefined;
-                return this.#selecting && this.#clearSelection(selection);
-            }
+            if (!mine) return this.#selecting && this.#clearSelection(selection);
 
             if (!this.#selecting) {
                 this.#selecting = true;
                 this.#markQuietWord();
             }
-            // If the same anchor moved, the text moved under the selection (a scroll past fixed content,
-            // a parallax hero): carry the blocks along before animating whatever the selection changed.
-            const anchor = this.#anchorOf(selection!);
-            const last = this.#anchor;
-            if (anchor && last && anchor.node === last.node && anchor.offset === last.offset)
-                this.#slide(anchor.x - last.x, anchor.y - last.y);
-            this.#anchor = anchor;
+            // Carry the blocks along with any text that moved under them first, then animate whatever
+            // the selection itself changed.
+            this.#followRefs();
             clearTimeout(this.#wrapTimer);
             this.#setEdges(this.#tail, null);
             const lines = this.#selectedLines(range);
             // A block stays on the line it already covers, so extending up or down never shifts the others.
-            const placed = new Map<Edges, Block>();
+            const placed = new Map<(typeof lines)[number], Block>();
             const taken = () => [...placed.values()];
             for (const to of lines) {
                 const same = this.#blocks.find((b) => b.at && !taken().includes(b) && sameLine(b.at, to));
@@ -596,7 +679,10 @@ function createMarker() {
                 this.#setEdges(fresh, above ? { ...to, l: to.r } : { ...to, r: to.l }, true);
                 placed.set(to, fresh);
             }
-            for (const [to, block] of placed) this.#setEdges(block, to);
+            for (const [to, block] of placed) {
+                this.#setEdges(block, to);
+                block.ref = this.#refOf(to.holder);
+            }
             // A line that left the selection shrinks into the side joined to what remains.
             for (const block of this.#blocks) {
                 if (taken().includes(block) || !block.at) continue;
@@ -615,9 +701,9 @@ function createMarker() {
          * between the lines of an element the selection covers whole, then between elements once a
          * whole heading section is selected.
          */
-        #selectedLines(range: Range): Edges[] {
+        #selectedLines(range: Range): (Edges & { holder: Element })[] {
             const items: { rect: Edges; item: Text }[] = [];
-            for (const node of this.#textNodes()) {
+            for (const node of this.#textNodes(true)) {
                 if (!range.intersectsNode(node)) continue;
                 const part = document.createRange();
                 part.setStart(node, node === range.startContainer ? range.startOffset : 0);
@@ -642,7 +728,7 @@ function createMarker() {
             };
             // No horizontal padding: a line ends exactly where its selected text does, trailing space or not.
             const padY = this.#setting('padding') / 2;
-            const edges = lines.map((line) => this.#local(line, 0, padY));
+            const edges = lines.map((line) => ({ ...this.#local(line, 0, padY), holder: line.item.parentElement! }));
             for (let i = 0; i < edges.length - 1; i++) {
                 const [here, next] = [lines[i].item, lines[i + 1].item];
                 const sameUnit = unit(here) && unit(here) === unit(next) && covers(range, unit(here)!);
@@ -712,6 +798,18 @@ function createMarker() {
 
 /** `<mia-marker>`'s element type, for `querySelector<MarkerElement>`. */
 export type MarkerElement = InstanceType<ReturnType<typeof createMarker>>;
+
+/** Fired when the reader clicks or taps a word to seek to it. */
+export type MarkerSeekEvent = CustomEvent<{ word: number }>;
+export interface MarkerEventMap extends HTMLElementEventMap {
+    seek: MarkerSeekEvent;
+}
+
+declare global {
+    interface HTMLElementTagNameMap {
+        'mia-marker': MarkerElement;
+    }
+}
 
 /**
  * Whether a range covers all of an element's text. Browsers move a selection's ends into the nearest
