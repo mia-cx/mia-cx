@@ -16,8 +16,7 @@
         wpm: 170,
         pad: 3,
         radius: 4,
-        seekDelay: 250,
-        doubleClickWindow: 800,
+        doubleClickWindow: 330,
         reduced: false,
         pauseOnSelect: true,
     };
@@ -31,15 +30,14 @@
     let wpm = $state(start.wpm);
     let pad = $state(start.pad);
     let radius = $state(start.radius);
-    let seekDelay = $state(start.seekDelay);
     let doubleClickWindow = $state(start.doubleClickWindow);
     let reduced = $state(start.reduced);
     let pauseOnSelect = $state(start.pauseOnSelect);
     $effect(() =>
-        saved.set({ leading, trailing, wpm, pad, radius, seekDelay, doubleClickWindow, reduced, pauseOnSelect }),
+        saved.set({ leading, trailing, wpm, pad, radius, doubleClickWindow, reduced, pauseOnSelect }),
     );
     function resetKnobs() {
-        ({ leading, trailing, wpm, pad, radius, seekDelay, doubleClickWindow, reduced, pauseOnSelect } = DEFAULTS);
+        ({ leading, trailing, wpm, pad, radius, doubleClickWindow, reduced, pauseOnSelect } = DEFAULTS);
     }
 
     // Double-click calibration: press-to-press intervals of Mia's own double-clicks, and of pairs she
@@ -317,22 +315,23 @@
         play();
     }
 
-    // Click to seek: the block moves now, the "audio" (the clock) follows after seekDelay. A second
-    // press makes it a double-click instead: no seek, the audio pauses and the browser selects.
+    // Click to seek: the block moves at once, and the "audio" (the clock) holds still until the
+    // double-click window, counted from the first press, closes. A second press inside the window
+    // makes it a double-click: the seek is dropped, the audio pauses and the browser selects.
     let seekTimer: ReturnType<typeof setTimeout> | undefined;
-    /** Where the audio was before the last click, until a double-click can no longer follow it. */
-    let beforeClick: { clock: number; index: number } | undefined;
-    let forgetTimer: ReturnType<typeof setTimeout> | undefined;
+    /** When the latest first press began; the window runs from here, as the calibration measured it. */
+    let firstPress = 0;
     /** Whether text was selected when the press began; by click time the press has cleared it. */
     let hadSelection = false;
     function onMouseDown(event: MouseEvent) {
         hadSelection = !getSelection()?.isCollapsed;
-        if (event.detail < 2 || !beforeClick) return;
-        // The second press of a double-click: drop the seek, or undo it if it already happened.
+        if (event.detail < 2) {
+            firstPress = performance.now();
+            return;
+        }
+        if (!pending) return;
         clearTimeout(seekTimer);
         pending = false;
-        ({ clock, index } = beforeClick);
-        beforeClick = undefined;
         if (playing) {
             playing = false;
             pausedBySelection = true;
@@ -347,19 +346,18 @@
         const node = caret?.offsetNode;
         const i = words.findIndex((w) => w.node === node && w.from <= caret!.offset && caret!.offset <= w.to);
         if (i < 0) return;
-        beforeClick = { clock, index };
-        clearTimeout(forgetTimer);
-        // A second press after the window is a new click, not the end of a double-click.
-        forgetTimer = setTimeout(() => (beforeClick = undefined), doubleClickWindow);
         pending = true;
         moveTo(i);
         highlightWord(i);
         clearTimeout(seekTimer);
-        seekTimer = setTimeout(() => {
-            pending = false;
-            clock = words[i].start;
-            index = i;
-        }, seekDelay);
+        seekTimer = setTimeout(
+            () => {
+                pending = false;
+                clock = words[i].start;
+                index = i;
+            },
+            Math.max(0, firstPress + doubleClickWindow - performance.now()),
+        );
     }
 
     /** The rects of the selected text alone, without the boxes of elements it covers whole. */
@@ -582,7 +580,6 @@
     <div class="knob">Leading edge <span><input type="number" min="0" bind:value={leading} /> ms</span><input type="range" min="20" max="400" bind:value={leading} /></div>
     <div class="knob">Trailing edge <span><input type="number" min="0" bind:value={trailing} /> ms</span><input type="range" min="20" max="600" bind:value={trailing} /></div>
     <div class="knob">Voice speed <span><input type="number" min="1" bind:value={wpm} /> wpm</span><input type="range" min="60" max="400" bind:value={wpm} /></div>
-    <div class="knob">Seek delay <span><input type="number" min="0" bind:value={seekDelay} /> ms</span><input type="range" min="0" max="600" bind:value={seekDelay} /></div>
     <div class="knob">Padding <span><input type="number" min="0" step="0.5" bind:value={pad} /> px</span><input type="range" min="0" max="10" step="0.5" bind:value={pad} /></div>
     <div class="knob">Corner radius <span><input type="number" min="0" bind:value={radius} /> px</span><input type="range" min="0" max="14" bind:value={radius} /></div>
     <div class="knob">Double-click window <span><input type="number" min="0" bind:value={doubleClickWindow} /> ms</span><input type="range" min="100" max="1500" bind:value={doubleClickWindow} /></div>
