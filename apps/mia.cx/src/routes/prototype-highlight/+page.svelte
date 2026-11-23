@@ -4,19 +4,39 @@
 -->
 <script lang="ts">
     import '$lib/styles/prose.css';
+    import { persistentAtom } from '@nanostores/persistent';
     import { onMount } from 'svelte';
 
     let { data } = $props();
 
-    // Knobs.
-    let leading = $state(90);
-    let trailing = $state(170);
-    let wpm = $state(170);
-    let pad = $state(3);
-    let radius = $state(4);
-    let seekDelay = $state(250);
-    let reduced = $state(false);
-    let pauseOnSelect = $state(true);
+    // Knobs, kept in localStorage so a reload or HMR keeps them.
+    const DEFAULTS = {
+        leading: 90,
+        trailing: 170,
+        wpm: 170,
+        pad: 3,
+        radius: 4,
+        seekDelay: 250,
+        reduced: false,
+        pauseOnSelect: true,
+    };
+    const saved = persistentAtom('prototype-highlight:knobs', DEFAULTS, {
+        encode: JSON.stringify,
+        decode: (raw) => ({ ...DEFAULTS, ...JSON.parse(raw) }),
+    });
+    const start = saved.get();
+    let leading = $state(start.leading);
+    let trailing = $state(start.trailing);
+    let wpm = $state(start.wpm);
+    let pad = $state(start.pad);
+    let radius = $state(start.radius);
+    let seekDelay = $state(start.seekDelay);
+    let reduced = $state(start.reduced);
+    let pauseOnSelect = $state(start.pauseOnSelect);
+    $effect(() => saved.set({ leading, trailing, wpm, pad, radius, seekDelay, reduced, pauseOnSelect }));
+    function resetKnobs() {
+        ({ leading, trailing, wpm, pad, radius, seekDelay, reduced, pauseOnSelect } = DEFAULTS);
+    }
 
     // State, shown in the panel.
     let playing = $state(false);
@@ -358,13 +378,15 @@
             {playing ? 'Pause' : started ? 'Resume' : 'Play'}
         </button>
         <button onclick={restart}>Restart</button>
+        <button onclick={resetKnobs}>Defaults</button>
     </div>
-    <label>Leading edge <span>{leading} ms</span><input type="range" min="20" max="400" bind:value={leading} /></label>
-    <label>Trailing edge <span>{trailing} ms</span><input type="range" min="20" max="600" bind:value={trailing} /></label>
-    <label>Voice speed <span>{wpm} wpm</span><input type="range" min="60" max="400" bind:value={wpm} /></label>
-    <label>Seek delay <span>{seekDelay} ms</span><input type="range" min="0" max="600" bind:value={seekDelay} /></label>
-    <label>Padding <span>{pad} px</span><input type="range" min="0" max="10" bind:value={pad} /></label>
-    <label>Corner radius <span>{radius} px</span><input type="range" min="0" max="14" bind:value={radius} /></label>
+    <!-- Each knob is a slider plus a number field for typing an exact value, past the slider's range too. -->
+    <div class="knob">Leading edge <span><input type="number" min="0" bind:value={leading} /> ms</span><input type="range" min="20" max="400" bind:value={leading} /></div>
+    <div class="knob">Trailing edge <span><input type="number" min="0" bind:value={trailing} /> ms</span><input type="range" min="20" max="600" bind:value={trailing} /></div>
+    <div class="knob">Voice speed <span><input type="number" min="1" bind:value={wpm} /> wpm</span><input type="range" min="60" max="400" bind:value={wpm} /></div>
+    <div class="knob">Seek delay <span><input type="number" min="0" bind:value={seekDelay} /> ms</span><input type="range" min="0" max="600" bind:value={seekDelay} /></div>
+    <div class="knob">Padding <span><input type="number" min="0" step="0.5" bind:value={pad} /> px</span><input type="range" min="0" max="10" step="0.5" bind:value={pad} /></div>
+    <div class="knob">Corner radius <span><input type="number" min="0" bind:value={radius} /> px</span><input type="range" min="0" max="14" bind:value={radius} /></div>
     <label class="check"><input type="checkbox" bind:checked={reduced} /> Reduced motion</label>
     <label class="check"><input type="checkbox" bind:checked={pauseOnSelect} /> Pause narration while selecting</label>
     <dl>
@@ -457,16 +479,34 @@
         font: inherit;
         cursor: pointer;
     }
-    label {
+    .knob {
         display: grid;
         grid-template-columns: 1fr auto;
+        align-items: center;
         gap: 2px 8px;
     }
-    label input[type='range'] {
+    .knob input[type='range'] {
         grid-column: 1 / -1;
     }
-    label span {
+    .knob span {
         color: var(--ink-dim);
+    }
+    .knob input[type='number'] {
+        box-sizing: content-box;
+        width: 6ch;
+        padding: 2px 6px;
+        border: 1px solid color-mix(in oklab, var(--ink) 30%, transparent);
+        color: var(--ink);
+        background: none;
+        font: inherit;
+        text-align: right;
+        /* No spinner arrows: they eat the field's width. Typing and arrow keys still work. */
+        appearance: textfield;
+    }
+    .knob input[type='number']::-webkit-inner-spin-button,
+    .knob input[type='number']::-webkit-outer-spin-button {
+        appearance: none;
+        margin: 0;
     }
     .check {
         display: flex;
