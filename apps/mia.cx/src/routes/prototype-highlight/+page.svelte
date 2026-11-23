@@ -272,6 +272,63 @@
         }, seekDelay);
     }
 
+    /** The rects of the selected text alone, without the boxes of elements it covers whole. */
+    function textRects(range: Range) {
+        const out: { rect: DOMRect; node: Text }[] = [];
+        const walker = document.createTreeWalker(prose, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+            if (!node.data.trim() || !range.intersectsNode(node)) continue;
+            const part = document.createRange();
+            part.setStart(node, node === range.startContainer ? range.startOffset : 0);
+            part.setEnd(node, node === range.endContainer ? range.endOffset : node.length);
+            for (const rect of part.getClientRects()) if (rect.width >= 1) out.push({ rect, node });
+        }
+        return out;
+    }
+
+    const headingLevel = (el: Element) => Number(/^H([1-6])$/.exec(el.tagName)?.[1] ?? 0);
+
+    /**
+     * The prose's top-level elements that sit in a heading section the selection covers whole: the
+     * heading and everything after it up to the next heading of the same or a higher level.
+     */
+    function wholeSections(selection: Selection) {
+        const range = selection.getRangeAt(0);
+        const kids = [...prose.children];
+        const whole = new Set<Element>();
+        kids.forEach((heading, i) => {
+            const level = headingLevel(heading);
+            if (!level) return;
+            const members = [heading];
+            for (const kid of kids.slice(i + 1)) {
+                const next = headingLevel(kid);
+                if (next && next <= level) break;
+                members.push(kid);
+            }
+            if (members.every((member) => covers(range, member))) members.forEach((m) => whole.add(m));
+        });
+        return whole;
+    }
+
+    /**
+     * Whether the selection covers all of an element's text. Browsers move a selection's ends into
+     * the nearest text, so comparing against the element's own boundaries would never match.
+     */
+    function covers(range: Range, el: Element) {
+        const texts: Text[] = [];
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null)
+            if (node.data.trim()) texts.push(node);
+        if (!texts.length) return range.intersectsNode(el);
+        const own = document.createRange();
+        own.setStart(texts[0], texts[0].data.search(/\S/));
+        own.setEnd(texts.at(-1)!, texts.at(-1)!.data.trimEnd().length);
+        return (
+            range.compareBoundaryPoints(Range.START_TO_START, own) <= 0 &&
+            range.compareBoundaryPoints(Range.END_TO_END, own) >= 0
+        );
+    }
+
     let selectionFrame = 0;
     function onSelectionChange() {
         cancelAnimationFrame(selectionFrame);
@@ -296,21 +353,41 @@
                 pausedBySelection = true;
             }
             highlightWord(index);
-            // One block per line: merge the selection's rects that share a line.
-            const lines: Edges[] = [];
-            for (const rect of selection.getRangeAt(0).getClientRects()) {
-                if (rect.width < 1) continue;
+            // One block per line of selected text, as wide as that line's text and never wider.
+            const range = selection.getRangeAt(0);
+            const lines: (Edges & { block: Element | null; top: Element | null })[] = [];
+            for (const { rect, node } of textRects(range)) {
                 const line = lines.find((l) => Math.abs(l.t - rect.top) < 4);
                 if (line) {
                     line.l = Math.min(line.l, rect.left);
                     line.r = Math.max(line.r, rect.right);
                     line.b = Math.max(line.b, rect.bottom);
-                } else lines.push({ l: rect.left, r: rect.right, t: rect.top, b: rect.bottom });
+                    continue;
+                }
+                const parent = node.parentElement!;
+                lines.push({
+                    l: rect.left,
+                    r: rect.right,
+                    t: rect.top,
+                    b: rect.bottom,
+                    block: parent.closest('p, li, h1, h2, h3, h4, h5, h6, blockquote, pre'),
+                    top: [...prose.children].find((kid) => kid.contains(parent)) ?? null,
+                });
             }
             clearTimeout(wrapTimer);
             setEdges(tail, null);
             block(0);
+            lines.sort((a, b) => a.t - b.t);
             const targets = lines.map(local);
+            // Gaps fill in levels: between the lines of a paragraph the selection covers whole, then
+            // between paragraphs once their whole heading section is selected. Every row keeps its width.
+            const whole = wholeSections(selection);
+            for (let i = 0; i < targets.length - 1; i++) {
+                const [here, next] = [lines[i], lines[i + 1]];
+                const sameBlock = here.block && here.block === next.block && covers(range, here.block);
+                const sameSection = here.top && next.top && whole.has(here.top) && whole.has(next.top);
+                if (sameBlock || sameSection) targets[i].b = Math.max(targets[i].b, targets[i + 1].t);
+            }
             const placed = new Map<Edges, Block>();
             // A block stays on the line it already covers, so extending up or down never shifts the others.
             for (const to of targets) {
