@@ -459,7 +459,14 @@ function createMarker() {
             else if (!paths.length && this.#shown.size) this.#reveal(null);
             // Once the cursor settles, only its word's element stays shown; elements it passed over during
             // the move drop out, so later edits to them leave the copy alone.
-            else if (!this.#selecting && this.#cursorWord() >= 0 && this.#shown.size > 1) {
+            else if (
+                !this.#selecting &&
+                this.#cursorWord() >= 0 &&
+                this.#shown.size > 1 &&
+                // Only once the cursor is all that shows: lines of a wipe still waiting their turn need their text.
+                !this.#tail.at &&
+                this.#blocks.every((block, i) => i === 0 || !block.at)
+            ) {
                 const holder = this.#wordRanges()[this.#cursorWord()]?.startContainer.parentElement;
                 if (holder) {
                     this.#shown = new Set([holder]);
