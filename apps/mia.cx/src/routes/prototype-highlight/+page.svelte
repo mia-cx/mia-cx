@@ -664,10 +664,11 @@
     <!-- Each knob is a slider plus a number field for typing an exact value, past the slider's range too. -->
     <div class="knob">Leading edge <span><input type="number" min="0" bind:value={leading} /> ms</span><input type="range" min="20" max="400" bind:value={leading} /></div>
     <div class="knob">Trailing edge <span><input type="number" min="0" bind:value={trailing} /> ms</span><input type="range" min="20" max="600" bind:value={trailing} /></div>
+    <!-- Total time from the first line of a cleared selection starting to shrink to the last. -->
+    <div class="knob">Deselect stagger <span><input type="number" min="0" bind:value={spread} /> ms</span><input type="range" min="0" max="200" bind:value={spread} /></div>
     <div class="knob">Voice speed <span><input type="number" min="1" bind:value={wpm} /> wpm</span><input type="range" min="60" max="400" bind:value={wpm} /></div>
     <div class="knob">Padding <span><input type="number" min="0" step="0.5" bind:value={pad} /> px</span><input type="range" min="0" max="10" step="0.5" bind:value={pad} /></div>
     <div class="knob">Corner radius <span><input type="number" min="0" bind:value={radius} /> px</span><input type="range" min="0" max="14" bind:value={radius} /></div>
-    <div class="knob">Deselect spread <span><input type="number" min="0" bind:value={spread} /> ms</span><input type="range" min="0" max="200" bind:value={spread} /></div>
     <div class="knob">Double-click window <span><input type="number" min="0" bind:value={doubleClickWindow} /> ms</span><input type="range" min="100" max="1500" bind:value={doubleClickWindow} /></div>
     <section class="calibrate">
         <p>Double-click the left one as you'd double-click a word. Click the right one twice, as two separate clicks.</p>
@@ -792,6 +793,10 @@
         display: grid;
         gap: 8px;
         width: min(300px, calc(100vw - 32px));
+        /* Taller than short windows: it scrolls instead of losing its top off screen. */
+        max-height: calc(100dvh - 32px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
         padding: 14px;
         border: 1px solid var(--panel-line);
         background: color-mix(in oklab, var(--bg) 88%, transparent);
