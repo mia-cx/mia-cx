@@ -6,3 +6,4 @@ export { default as Socials } from './Socials.svelte';
 export { default as ThemeToggle } from './ThemeToggle.svelte';
 export { SOCIAL_IDS, type Social, type SocialId } from './socials';
 export { isExternalHref } from './links';
+export { defineMarker, MARKER_TAG, type MarkerElement } from './marker';
