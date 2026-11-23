@@ -61,10 +61,12 @@ ${MARKER_TAG} > [data-marker-overlay] {
  * nothing (a tooltip waiting for hover) or clipped to a pixel for screen readers; the highlight must not.
  */
 function visible(el: Element) {
+    // `visibility` inherits, so the text's own element already answers for every wrapper above it.
+    if (getComputedStyle(el).visibility !== 'visible') return false;
     // A `display: contents` wrapper has no box of its own; its text shows as part of the parent's.
     let boxed: Element | null = el;
     while (boxed && getComputedStyle(boxed).display === 'contents') boxed = boxed.parentElement;
-    if (!boxed?.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+    if (!boxed?.checkVisibility({ opacityProperty: true })) return false;
     const box = boxed.getBoundingClientRect();
     return box.width > 1 || box.height > 1;
 }
@@ -227,7 +229,14 @@ function createMarker() {
 
         connectedCallback() {
             this.append(this.#overlay);
-            this.#mutations.observe(this, { subtree: true, childList: true, characterData: true });
+            // `aria-hidden` decides which text counts as words, so toggling it changes them too.
+            this.#mutations.observe(this, {
+                subtree: true,
+                childList: true,
+                characterData: true,
+                attributes: true,
+                attributeFilter: ['aria-hidden'],
+            });
             this.#resize.observe(this);
             document.addEventListener('selectionchange', this.#onSelectionChange);
             // Capture, to read the selection before the press clears it. Pointer events arrive before a
@@ -312,7 +321,9 @@ function createMarker() {
         /** The word cursor is padded all round, so the word sits inside it. */
         #wordEdges(index: number) {
             const word = this.#wordRanges()[index];
-            const rect = word?.getClientRects()[0];
+            // A word stays in the index while hidden, so numbering holds; it just gets no highlight.
+            if (!word || !visible(word.startContainer.parentElement!)) return null;
+            const rect = word.getClientRects()[0];
             if (!rect) return null;
             const pad = this.#setting('padding');
             const edges = this.#local(rect, pad, pad / 2);
@@ -350,7 +361,7 @@ function createMarker() {
         /** Block 0 to a word. Across a line wrap, the old shape shrinks out as the new one grows in. */
         #moveTo(index: number) {
             const to = this.#wordEdges(index);
-            if (!to) return;
+            if (!to) return this.#retire(this.#blocks[0], undefined);
             const holder = this.#wordRanges()[index].startContainer.parentElement!;
             this.#reveal([holder]);
             const head = this.#blocks[0];
@@ -456,7 +467,20 @@ function createMarker() {
                 .forEach((el, i) => {
                     const plain = inert.createElement('div');
                     for (const { name, value } of el.attributes) plain.setAttribute(name, value);
-                    if (originals[i]) plain.style.display = getComputedStyle(originals[i]).display;
+                    // Styles that select the custom element's tag won't match its stand-in, so the
+                    // stand-in takes the original's box as computed: the space it holds stays the same.
+                    if (originals[i]) {
+                        const box = getComputedStyle(originals[i]);
+                        const { width, height } = originals[i].getBoundingClientRect();
+                        Object.assign(plain.style, {
+                            display: box.display,
+                            boxSizing: 'border-box',
+                            width: `${width}px`,
+                            height: `${height}px`,
+                            margin: box.margin,
+                            padding: box.padding,
+                        });
+                    }
                     plain.append(...el.childNodes);
                     el.replaceWith(plain);
                 });
@@ -573,7 +597,11 @@ function createMarker() {
         }
 
         #onScroll = (event: Event) => {
-            if (!this.#showing()) return;
+            // With nothing showing, only note that the copy is out of date; the next highlight rebuilds it.
+            if (!this.#showing()) {
+                this.#copyStale = true;
+                return;
+            }
             // A scrolled box inside the marker: scroll its copy along.
             if (event.target instanceof Element && this.contains(event.target)) this.#syncScroll(event.target);
             // Content that restyles itself on page scroll, such as a sticky header, would leave the copy behind.
