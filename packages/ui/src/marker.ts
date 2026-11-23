@@ -459,8 +459,8 @@ function createMarker() {
             else if (!paths.length && this.#shown.size) this.#reveal(null);
             // Once the cursor settles, only its word's element stays shown; elements it passed over during
             // the move drop out, so later edits to them leave the copy alone.
-            else if (!this.#selecting && this.#index >= 0 && this.#shown.size > 1) {
-                const holder = this.#wordRanges()[this.#index]?.startContainer.parentElement;
+            else if (!this.#selecting && this.#cursorWord() >= 0 && this.#shown.size > 1) {
+                const holder = this.#wordRanges()[this.#cursorWord()]?.startContainer.parentElement;
                 if (holder) {
                     this.#shown = new Set([holder]);
                     this.#markShown();
@@ -647,6 +647,11 @@ function createMarker() {
             this.#followRefs();
             if (this.#index >= 0 && this.#seeking < 0) this.#placeCursor();
             this.#kick();
+        }
+
+        /** The word the cursor shows: a clicked word while its seek waits, otherwise the narration's word. */
+        #cursorWord() {
+            return this.#seeking >= 0 ? this.#seeking : this.#index;
         }
 
         /** The word cursor onto its word as it is now: moved and resized, shown again, or shrunk away. */
