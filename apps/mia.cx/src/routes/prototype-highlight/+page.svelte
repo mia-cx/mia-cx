@@ -32,6 +32,7 @@
     let wrapper: HTMLDivElement;
     let layer: HTMLDivElement;
     let prose: HTMLDivElement;
+    let clone: HTMLDivElement;
 
     interface Word {
         range: Range;
@@ -76,15 +77,53 @@
         t: number;
         b: number;
     }
-    const blocks: { el: HTMLDivElement; at: Edges | null }[] = [];
+    type Edge = keyof Edges;
+    const EDGES: Edge[] = ['l', 'r', 't', 'b'];
+    interface Tween {
+        from: number;
+        to: number;
+        start: number;
+        dur: number;
+    }
+    /** `at` is where the block is heading; `tweens` animate each edge there on its own clock. */
+    const blocks: { el: HTMLDivElement; at: Edges | null; tweens: Record<Edge, Tween> | null }[] = [];
     function block(i: number) {
         while (blocks.length <= i) {
             const el = document.createElement('div');
             el.className = 'hl-block';
             layer.append(el);
-            blocks.push({ el, at: null });
+            blocks.push({ el, at: null, tweens: null });
         }
         return blocks[i];
+    }
+
+    /** Close to cubic-bezier(.2, .9, .3, 1): fast out, soft landing. */
+    const ease = (x: number) => 1 - (1 - x) ** 4;
+    const valueOf = ({ from, to, start, dur }: Tween, now: number) =>
+        dur <= 0 || now >= start + dur ? to : from + (to - from) * ease((now - start) / dur);
+
+    /**
+     * Draws every block where its edges are this frame, and clips the dark copy of the prose to the
+     * same rectangles, so text turns dark exactly where a block covers it.
+     */
+    function render(now: number) {
+        const rects: Edges[] = [];
+        for (const { el, at, tweens } of blocks) {
+            if (!at || !tweens) {
+                el.style.display = 'none';
+                continue;
+            }
+            const [l, r, t, b] = EDGES.map((edge) => valueOf(tweens[edge], now));
+            el.style.display = 'block';
+            el.style.left = `${l}px`;
+            el.style.top = `${t}px`;
+            el.style.width = `${Math.max(0, r - l)}px`;
+            el.style.height = `${Math.max(0, b - t)}px`;
+            el.style.borderRadius = `${radius}px`;
+            if (r - l > 0.5) rects.push({ l, r, t, b });
+        }
+        const path = rects.map(({ l, r, t, b }) => `M${l} ${t}H${r}V${b}H${l}Z`).join(' ');
+        clone.style.clipPath = `path('${path || 'M0 0Z'}')`;
     }
 
     /** A rect in the wrapper's coordinates, padded. */
@@ -97,29 +136,26 @@
     /** Moves a block's edges: an edge moving outward leads, an edge moving inward trails. */
     function setEdges(i: number, to: Edges | null, snap = false) {
         const b = block(i);
-        const { el } = b;
         if (!to) {
-            el.style.opacity = '0';
             b.at = null;
+            b.tweens = null;
             return;
         }
-        const from = b.at;
-        const width = wrapper.clientWidth;
-        if (snap || reduced || !from) {
-            el.style.transition = 'none';
-        } else {
-            const leftMs = to.l < from.l ? leading : trailing;
-            const rightMs = to.r > from.r ? leading : trailing;
-            const ease = 'cubic-bezier(.2,.9,.3,1)';
-            el.style.transition = `left ${leftMs}ms ${ease}, right ${rightMs}ms ${ease}, top ${trailing}ms ${ease}, bottom ${trailing}ms ${ease}, opacity 120ms`;
-        }
-        el.style.left = `${to.l}px`;
-        el.style.right = `${width - to.r}px`;
-        el.style.top = `${to.t}px`;
-        el.style.bottom = `${wrapper.clientHeight - to.b}px`;
-        el.style.borderRadius = `${radius}px`;
-        el.style.opacity = '1';
-        if (snap) void el.offsetWidth; // commit the snap before the next transition
+        const now = performance.now();
+        const current = b.tweens;
+        const instant = snap || reduced || !current;
+        const durations: Record<Edge, number> = {
+            l: to.l < (b.at?.l ?? to.l) ? leading : trailing,
+            r: to.r > (b.at?.r ?? to.r) ? leading : trailing,
+            t: trailing,
+            b: trailing,
+        };
+        b.tweens = Object.fromEntries(
+            EDGES.map((edge) => {
+                const from = instant ? to[edge] : valueOf(current![edge], now);
+                return [edge, { from, to: to[edge], start: now, dur: instant ? 0 : durations[edge] }];
+            }),
+        ) as Record<Edge, Tween>;
         b.at = to;
     }
 
@@ -143,12 +179,11 @@
         }, trailing);
     }
 
+    /** While a selection holds the block, the spoken word gets a quieter underline instead. */
     function highlightWord(i: number) {
         const word = words[i];
-        CSS.highlights.delete('hl-word');
         CSS.highlights.delete('hl-quiet');
-        if (!word) return;
-        CSS.highlights.set(mode === 'narration' ? 'hl-word' : 'hl-quiet', new Highlight(word.range));
+        if (word && mode === 'selection') CSS.highlights.set('hl-quiet', new Highlight(word.range));
     }
 
     function wordAt(time: number) {
@@ -262,6 +297,7 @@
                     highlightWord(i);
                 }
             }
+            render(now);
             frame = requestAnimationFrame(tick);
         });
         const onResize = () => mode === 'narration' && index >= 0 && setEdges(0, local(words[index].range.getClientRects()[0]), true);
@@ -288,6 +324,9 @@
         <div class="prose proto-prose" bind:this={prose} onclick={onClick} role="presentation">
             {@html data.html}
         </div>
+        <!-- The same prose in the block's text colour, clipped to the blocks each frame. -->
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -- prototype -->
+        <div class="prose clone" bind:this={clone} aria-hidden="true">{@html data.html}</div>
     </div>
 </main>
 
@@ -342,15 +381,28 @@
     }
     .layer :global(.hl-block) {
         position: absolute;
+        display: none;
         background: var(--accent);
-        opacity: 0;
+    }
+    /* Both copies keep their paragraphs' margins inside, so their lines sit at the same height. */
+    .proto-prose,
+    .clone {
+        display: flow-root;
     }
     .proto-prose :global(::selection) {
         background: transparent;
+    }
+    .clone {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        user-select: none;
+        clip-path: path('M0 0Z');
         color: var(--bg);
     }
-    :global(::highlight(hl-word)) {
-        color: var(--bg);
+    .clone :global(*) {
+        color: var(--bg) !important;
+        text-decoration-color: var(--bg) !important;
     }
     :global(::highlight(hl-quiet)) {
         text-decoration: underline 2px var(--accent);
