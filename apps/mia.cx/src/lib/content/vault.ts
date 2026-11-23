@@ -1,21 +1,26 @@
 /**
- * The site's view of the vaults, read from the index Svartz publishes for each mount
- * (svartz.config.ts). Svartz resolves everything Obsidian-specific and hands over each body as
- * plain Markdown; this module adds what mia.cx needs on top (cards, kinds, outside links,
- * mentions) and renders the Markdown with the site's own renderer.
+ * The site's view of the vault, read from the index Svartz publishes for it (svartz.config.ts).
+ * Svartz resolves everything Obsidian-specific and hands over each body as plain Markdown; this
+ * module adds what mia.cx needs on top (projects, posts, cards, kinds, outside links, mentions) and
+ * renders the Markdown with the site's own renderer.
+ *
+ * The vault's `work/` folder holds projects: a flat note, or a folder whose `index.md` is the
+ * overview. Every other note in a project folder is a post. `blog/` holds the rest of the posts;
+ * /blog lists both kinds.
  */
 import { marked } from 'marked';
 import { vaults } from 'virtual:svartz/host';
 
-/** A vault in svartz.config.ts, by id, and the section of the site it fills. */
+/** A top-level folder of the vault, and the section of the site it fills. */
 export type SectionId = 'work' | 'blog';
+const SECTIONS: readonly string[] = ['work', 'blog'];
 
 export type Kind = 'code' | 'audio' | 'visual';
 const KINDS: readonly string[] = ['code', 'audio', 'visual'];
 
 type IndexEntry = (typeof vaults)[number]['artifacts']['index']['entries'][number];
 
-/** One published note in a mia.cx section. */
+/** One published note in the vault. */
 export interface VaultEntry {
     /** Svartz's canonical slug: the vault-relative path, normalised. */
     slug: string;
@@ -30,29 +35,35 @@ export interface VaultEntry {
     modifiedAt?: string;
 
     section: SectionId;
-    /** The URL segment inside the section. */
-    name: string;
+    /** The note's own URL on the site, such as `/work/vesta`, whether or not a page is built there. */
+    path: string;
+    /** Whether the note is a post: anything in `blog/`, or a note inside a project folder. */
+    isPost: boolean;
     /** Where the note lives: its own page, or an outside link. Missing when it has neither. */
     href?: string;
     kinds: string[];
 }
 
 export interface Post {
-    slug: string;
     title: string;
     summary: string;
     /** ISO date, from the note's `created_at` property. */
     date: string;
     /** Set when `updated_at` differs from `created_at`. */
     updated?: string;
+    /** Where the index links: the post's page, or `external`. */
+    href: string;
     /** Set when the writing lives somewhere else; the index links out and no page is built. */
     external?: string;
     /** Where a vendored copy came from. */
     source?: string;
+    /** The project a post in a project folder belongs to. */
+    project?: { title: string; href: string };
     entry: VaultEntry;
 }
 
 export interface WorkNote {
+    /** The URL segment: the project lives at `/work/<slug>`. */
     slug: string;
     title: string;
     summary: string;
@@ -62,13 +73,15 @@ export interface WorkNote {
     stack: string[];
     live?: string;
     source?: string;
-    /** Whether the note has a write-up; a bare entry gets no page of its own. */
+    /** Whether the project has a page; a bare entry is a card that links straight out. */
     hasPage: boolean;
     /** Shown on the home page. */
     featured: boolean;
     /** Shown on /work; everything else stays in the vault. */
     listed: boolean;
     date: string;
+    /** The posts in the project's folder, newest first. */
+    posts: Post[];
     entry: VaultEntry;
 }
 
@@ -79,34 +92,36 @@ const UNSTATED = 0;
 /** Dates are calendar days at UTC midnight; an unstated date is none. */
 const isoDay = (date: Date | undefined) =>
     date && date.getTime() !== UNSTATED ? date.toISOString().slice(0, 10) : undefined;
+const newestFirst = (a: { date: string }, b: { date: string }) => b.date.localeCompare(a.date);
 
-function sectionVault(section: SectionId) {
-    const vault = vaults.find((candidate) => candidate.id === section);
-    if (!vault) throw new Error(`svartz.config.ts has no "${section}" vault`);
-    return vault;
-}
+const vault = vaults.find((candidate) => candidate.id === 'site');
+if (!vault) throw new Error('svartz.config.ts has no "site" vault');
+const { index } = vault.artifacts;
 
-/** Where a note lives on the site, or nowhere when it has no page of its own. */
-function hrefOf(section: SectionId, name: string, entry: IndexEntry, hasBody: boolean): string | undefined {
-    const { properties } = entry;
-    if (section === 'blog' && properties.external) return String(properties.external);
-    // A work entry with no write-up is a card that links straight out.
-    if (!hasBody) return text(properties.live) ?? text(properties.source);
-    return `/${section}/${name}`;
-}
+const isSection = (folder: string): folder is SectionId => SECTIONS.includes(folder);
 
-function toEntry(section: SectionId, entry: IndexEntry): VaultEntry {
-    // Svartz's href is `/<mount>/<name>/`; mia.cx serves the same page without the trailing slash.
-    const name = entry.href.replace(/\/+$/, '').split('/').pop()!;
+function toEntry(entry: IndexEntry): VaultEntry {
+    // Svartz's href is the canonical `/<folder>/<name>/`; mia.cx serves it without the trailing slash.
+    const path = entry.href.replace(/\/+$/, '');
+    const [section, ...rest] = path.split('/').filter(Boolean);
+    const where = entry.path;
+    if (!isSection(section)) throw new Error(`${where} is outside the vault's work/ and blog/ folders`);
+    // blog/<post>, work/<project> or work/<project>/<post>; nothing deeper has a route.
+    const isPost = section === 'blog' || rest.length === 2;
+    if (rest.length > (section === 'blog' ? 1 : 2)) throw new Error(`${where} is nested too deep to have a page`);
+    if (section === 'work' && isPost && !entry.tags.includes('post'))
+        throw new Error(`${where} is in a project folder, so it is a post: tag it \`post\``);
+
     const markdown = entry.markdown?.trim() ?? '';
-    const hasBody = markdown !== '';
-    const where = `${section}/${entry.path}`;
+    // A project folder's index.md always gets a page, to list the folder's posts.
+    const isFolderNote = section === 'work' && !isPost && entry.path.split('/').length > 2;
+    const hasPage = markdown !== '' || isFolderNote;
     if (!entry.description) throw new Error(`${where} has no \`description\``);
     const createdAt = isoDay(entry.createdAt);
-    if (section === 'blog' && !createdAt) throw new Error(`${where} has no valid \`created_at\` date`);
+    if (isPost && !createdAt) throw new Error(`${where} has no valid \`created_at\` date`);
+    const external = isPost ? text(entry.properties.external) : undefined;
     // A post with neither a body nor an outside link would list a dead entry.
-    if (section === 'blog' && !hasBody && !entry.properties.external)
-        throw new Error(`${where} has no body and no \`external\` link`);
+    if (isPost && !hasPage && !external) throw new Error(`${where} has no body and no \`external\` link`);
     return {
         slug: entry.slug,
         title: entry.title,
@@ -117,28 +132,18 @@ function toEntry(section: SectionId, entry: IndexEntry): VaultEntry {
         createdAt,
         modifiedAt: isoDay(entry.modifiedAt),
         section,
-        name,
-        href: hrefOf(section, name, entry, hasBody),
+        path,
+        isPost,
+        // A project with no write-up is a card that links straight out.
+        href: external ?? (hasPage ? path : (text(entry.properties.live) ?? text(entry.properties.source))),
         kinds: entry.tags.filter((tag) => tag.startsWith('work/')).map((tag) => tag.slice('work/'.length)),
     };
 }
 
-const entriesOf = (section: SectionId) =>
-    sectionVault(section).artifacts.index.entries.map((entry) => toEntry(section, entry));
-
-const toPost = (entry: VaultEntry): Post => ({
-    slug: entry.name,
-    title: entry.title,
-    summary: entry.description,
-    date: entry.createdAt ?? '',
-    updated: entry.modifiedAt && entry.modifiedAt !== entry.createdAt ? entry.modifiedAt : undefined,
-    external: text(entry.properties.external),
-    source: text(entry.properties.source),
-    entry,
-});
+const entries = index.entries.map(toEntry);
 
 const toWork = (entry: VaultEntry): WorkNote => ({
-    slug: entry.name,
+    slug: entry.path.slice('/work/'.length),
     title: entry.title,
     summary: entry.description,
     kinds: entry.kinds.filter((kind): kind is Kind => KINDS.includes(kind)),
@@ -148,39 +153,61 @@ const toWork = (entry: VaultEntry): WorkNote => ({
     stack: list(entry.properties.stack),
     live: text(entry.properties.live),
     source: text(entry.properties.source),
-    hasPage: entry.markdown !== '',
+    hasPage: entry.href === entry.path,
     featured: entry.properties.featured === true,
     listed: entry.properties.listed === true,
     date: entry.createdAt ?? '',
+    posts: [],
     entry,
 });
 
-export const posts: Post[] = entriesOf('blog')
-    .map(toPost)
-    .sort((a, b) => b.date.localeCompare(a.date));
-export const work: WorkNote[] = entriesOf('work')
+/** Every project, newest first. Never their posts. */
+export const work: WorkNote[] = entries
+    .filter((entry) => entry.section === 'work' && !entry.isPost)
     .map(toWork)
-    .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+    .sort((a, b) => newestFirst(a, b) || a.title.localeCompare(b.title));
 
-export const postBySlug = (slug: string) => posts.find((post) => post.slug === slug);
+function toPost(entry: VaultEntry): Post {
+    const projectPath = entry.section === 'work' ? entry.path.slice(0, entry.path.lastIndexOf('/')) : undefined;
+    const project = projectPath && work.find((note) => note.entry.path === projectPath);
+    if (projectPath && !project) throw new Error(`${entry.path} is in a project folder with no index.md`);
+    const external = text(entry.properties.external);
+    return {
+        title: entry.title,
+        summary: entry.description,
+        date: entry.createdAt ?? '',
+        updated: entry.modifiedAt && entry.modifiedAt !== entry.createdAt ? entry.modifiedAt : undefined,
+        href: external ?? entry.path,
+        external,
+        source: text(entry.properties.source),
+        project: project ? { title: project.title, href: project.entry.path } : undefined,
+        entry,
+    };
+}
+
+/** Every post, from blog/ and from project folders alike, newest first. */
+export const posts: Post[] = entries
+    .filter((entry) => entry.isPost)
+    .map(toPost)
+    .sort(newestFirst);
+
+for (const post of posts) work.find((note) => note.entry.path === post.project?.href)?.posts.push(post);
+
 export const workBySlug = (slug: string) => work.find((note) => note.slug === slug);
+/** The post whose page is at this path, if it has one. */
+export const postAt = (path: string) => posts.find((post) => post.href === path);
 
-/** Only notes with a body get a page; the rest are cards that link straight out. */
+/** Only projects with a page get one; the rest are cards that link straight out. */
 export const workWithPages = work.filter((note) => note.hasPage);
 export const featuredWork = work.filter((note) => note.featured);
 export const listedWork = work.filter((note) => note.listed);
 
-const bySlug = new Map(
-    [...work.map((note) => note.entry), ...posts.map((post) => post.entry)].map((entry) => [
-        `${entry.section}:${entry.slug}`,
-        entry,
-    ]),
-);
+const bySlug = new Map(entries.map((entry) => [entry.slug, entry]));
 
-/** Notes on the site that link to this one, for a "Mentioned in" list. Svartz links within one vault. */
+/** Notes on the site that link to this one, for a "Mentioned in" list. */
 export const mentionsOf = (entry: VaultEntry) =>
-    (sectionVault(entry.section).artifacts.index.backlinks[entry.slug] ?? [])
-        .map((slug) => bySlug.get(`${entry.section}:${slug}`))
+    (index.backlinks[entry.slug] ?? [])
+        .map((slug) => bySlug.get(slug))
         .filter((linking): linking is VaultEntry & { href: string } => !!linking?.href);
 
 export const kindLabels: Record<Kind | 'all', string> = {

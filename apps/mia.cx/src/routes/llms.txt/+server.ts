@@ -26,7 +26,7 @@ export async function GET({ fetch }) {
                 .map(({ label, href }) => link(label, href)),
         ],
         ['Work', workWithPages.map((note) => link(note.title, `/work/${note.slug}`, note.summary))],
-        ['Blog', publishedPosts.map((post) => link(post.title, `/blog/${post.slug}`, post.summary))],
+        ['Blog', publishedPosts.map((post) => link(post.title, post.href, post.summary))],
     ] as const;
     const body = [
         `# ${site.name}`,

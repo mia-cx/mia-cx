@@ -2,6 +2,16 @@
 
 Mia Riezebos's personal site: work, writing, biography and contact, plus what each page prints.
 
+## Content
+
+**Project**:
+A piece of Mia's work in the vault's `work/` folder: a flat note, or a folder whose `index.md` is its overview. /work lists projects.
+_Avoid_: Work note, portfolio item
+
+**Project post**:
+A post written in a project's folder. It lives at `/work/<project>/<post>` and is listed on its project's page and on /blog.
+_Avoid_: Work post, devlog
+
 ## Printing
 
 **Article**:

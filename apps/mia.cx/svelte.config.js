@@ -8,6 +8,12 @@ const config = {
         // Deployed as a Worker with static assets; the settings live in wrangler.jsonc. The adapter
         // reads its own config, because it writes its Worker over whatever `main` names.
         adapter: adapter({ config: 'wrangler.sveltekit.jsonc' }),
+        prerender: {
+            // Project posts have nothing to prerender until some project has one; every other unseen route fails.
+            handleUnseenRoutes: ({ routes, message }) => {
+                if (routes.some((route) => route !== '/work/[slug]/[post]')) throw new Error(message);
+            },
+        },
     },
 };
 

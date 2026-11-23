@@ -14,10 +14,13 @@ uses the organisation's Cloudflare account variable and token rather than Cloudf
 
 ## Content
 
-Work and posts live in two Obsidian vaults, `vaults/work` and `vaults/blog`, mounted at `/work` and `/blog` by
-`apps/mia.cx/svartz.config.ts`. Svartz indexes them and hands over each body as Markdown; the site renders and styles
-everything itself, and its pages and layout stay in `apps/mia.cx`. Fix gaps in what Svartz publishes in `mia-cx/svartz`
-rather than working around them here where you can.
+Work and posts live in one Obsidian vault, `vaults/`, mounted at the site root by `apps/mia.cx/svartz.config.ts`, so its
+`work/` and `blog/` folders are `/work` and `/blog` and wikilinks cross between them. A Project is a flat note or a
+folder in `work/` with an `index.md` overview; every other note in a project folder is a Project post, with one page at
+`/work/<project>/<post>`, listed on its project's page and on /blog. /work lists projects only. Drafts of project posts
+live in their project folder with `draft: true` (see `vaults/README.md`). Svartz indexes the vault and hands over each
+body as Markdown; the site renders and styles everything itself, and its pages and layout stay in `apps/mia.cx`. Fix
+gaps in what Svartz publishes in `mia-cx/svartz` rather than working around them here where you can.
 
 ## Textile policies
 

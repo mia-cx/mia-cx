@@ -1,17 +1,23 @@
 <!-- @format -->
 
-# mia.cx content vaults
+# mia.cx content vault
 
-Two Obsidian vaults, one per section of mia.cx. Open `work` or `blog` as a vault on its own.
-[Svartz](https://github.com/mia-cx/svartz) publishes both, as configured in `apps/mia.cx/svartz.config.ts`:
+One Obsidian vault: open this `vaults` folder. [Svartz](https://github.com/mia-cx/svartz) publishes it at the site root,
+as configured in `apps/mia.cx/svartz.config.ts`, so each folder is the section of the same name:
 
-| Vault  | Section | Pages          |
-| ------ | ------- | -------------- |
-| `work` | `/work` | `/work/<note>` |
-| `blog` | `/blog` | `/blog/<note>` |
+| Note                       | Is a         | Page                     |
+| -------------------------- | ------------ | ------------------------ |
+| `work/<Project>.md`        | project      | `/work/<project>`        |
+| `work/<Project>/index.md`  | project      | `/work/<project>`        |
+| `work/<Project>/<Post>.md` | project post | `/work/<project>/<post>` |
+| `blog/<Post>.md`           | post         | `/blog/<post>`           |
 
-Every published note in a vault, at any depth, is an entry in its section. A note gets a page of its own when it has a
-body; otherwise its card links straight out.
+A project is a flat note, or a folder whose `index.md` is its overview. Every other note in a project folder is a post
+about that project and must be tagged `post`. Its project's page lists it under the body, and /blog lists it beside the
+posts in `blog/`, linking to its page under the project. /work and the home page list projects only.
+
+A flat project gets a page of its own when it has a body; otherwise its card links straight out. A project folder always
+gets a page, to list its posts. Nothing nests deeper than a project folder.
 
 ## Properties
 
@@ -36,15 +42,16 @@ All flat, so Obsidian's core Properties view can edit every one of them. Nothing
 | `listed`      | checkbox | work       | Shown on /work; unlisted notes still get their page            |
 | `external`    | text     | post       | URL. The blog links straight out and no page is generated      |
 
-`description` is required on a note without a body; Svartz takes one from the first sentences of a body otherwise. Posts
-need a `created_at`. A note tagged with more than one `work/*` kind appears under each of those filters.
+`description` is required on a note without a body; Svartz takes one from the first sentences of a body otherwise.
+Posts, project posts included, need a `created_at`. A draft is invisible everywhere, so a post can be written in its
+project folder with `draft: true` and published by unticking it. A note tagged with more than one `work/*` kind appears
+under each of those filters.
 
 ## Body
 
 The body is ordinary Obsidian Markdown and becomes the page. Start sections at `##`: the page's title is its only `#`.
-`[[Wikilinks]]` resolve by filename, `title` or `aliases`, and `[[Note#Heading]]` links to the heading. A link to a note
-in the other vault doesn't resolve yet; link to its URL instead. Every page lists the notes in its vault that mention
-it. `![[attachments]]` resolve anywhere in the vault.
+`[[Wikilinks]]` resolve by filename, `title` or `aliases`, across `work/` and `blog/`, and `[[Note#Heading]]` links to
+the heading. Every page lists the notes that mention it. `![[attachments]]` resolve anywhere in the vault.
 
 The URL comes from the filename (or `slug`), normalised: `Software I Use.md` is `/blog/software-i-use`. Renaming a note
-renames its URL, so set `slug` to keep an old one.
+renames its URL, so set `slug` to keep an old one. A project folder's `index.md` takes the folder's name and URL.
