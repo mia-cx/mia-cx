@@ -148,9 +148,16 @@ function createMarker() {
         #mutations = new MutationObserver((records) => {
             if (records.every((r) => this.#overlay.contains(r.target))) return;
             this.#words = undefined;
-            // The copy rebuilds on the next frame that draws; a change that moves nothing draws nothing, so
-            // a counter ticking elsewhere costs nothing.
+            // The copy rebuilds on the next frame that draws, so a counter ticking elsewhere costs nothing.
+            // A change to highlighted text itself, or one that removes it, has to draw now.
             this.#copyStale = true;
+            const shown = [...this.#shown];
+            const touchesShown = records.some(
+                (r) =>
+                    shown.some((el) => el.contains(r.target)) ||
+                    [...r.removedNodes].some((node) => shown.some((el) => node.contains(el))),
+            );
+            if (touchesShown) this.#kick();
             // The cursor's index may now name another word, or none: retarget it without restarting its move.
             if (this.#index >= 0 && !this.#selecting && this.#seeking < 0) this.#placeCursor();
         });
@@ -639,6 +646,12 @@ function createMarker() {
             const to = this.#wordEdges(this.#index);
             if (!to) return this.#retire(head, undefined);
             if (!head.at || !head.tweens || head.fading) return this.#moveTo(this.#index);
+            // The word's element may have been replaced: show the copy of the one it is in now.
+            const holder = this.#wordRanges()[this.#index].startContainer.parentElement!;
+            if (!this.#shown.has(holder)) {
+                this.#reveal([holder]);
+                head.ref = this.#refOf(holder);
+            }
             const at = head.at;
             if (EDGES.every((edge) => Math.abs(at[edge] - to[edge]) < 0.5)) return;
             for (const edge of EDGES) head.tweens[edge].to = to[edge];
