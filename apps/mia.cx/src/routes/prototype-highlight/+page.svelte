@@ -263,19 +263,31 @@
         play();
     }
 
-    // Click to seek: the block moves now, the "audio" (the clock) follows after seekDelay unless a
-    // second click turns it into a double-click.
+    // Click to seek: the block moves now, the "audio" (the clock) follows after seekDelay. A second
+    // press makes it a double-click instead: no seek, the audio pauses and the browser selects.
     let seekTimer: ReturnType<typeof setTimeout> | undefined;
+    /** Where the audio was before the last click, until a double-click can no longer follow it. */
+    let beforeClick: { clock: number; index: number } | undefined;
+    let forgetTimer: ReturnType<typeof setTimeout> | undefined;
+    /** Longer than any system's double-click interval, so a slow double-click still counts. */
+    const DOUBLE_CLICK_WINDOW = 800;
     /** Whether text was selected when the press began; by click time the press has cleared it. */
     let hadSelection = false;
-    const onPointerDown = () => (hadSelection = !getSelection()?.isCollapsed);
-    function onClick(event: MouseEvent) {
-        if (!started) return;
-        if (event.detail !== 1) {
-            clearTimeout(seekTimer);
-            pending = false;
-            return;
+    function onMouseDown(event: MouseEvent) {
+        hadSelection = !getSelection()?.isCollapsed;
+        if (event.detail < 2 || !beforeClick) return;
+        // The second press of a double-click: drop the seek, or undo it if it already happened.
+        clearTimeout(seekTimer);
+        pending = false;
+        ({ clock, index } = beforeClick);
+        beforeClick = undefined;
+        if (playing) {
+            playing = false;
+            pausedBySelection = true;
         }
+    }
+    function onClick(event: MouseEvent) {
+        if (!started || event.detail !== 1) return;
         if ((event.target as Element).closest('a, button')) return;
         // A click that clears a selection only deselects; one that ends a drag only selects.
         if (hadSelection || !getSelection()?.isCollapsed) return;
@@ -283,6 +295,9 @@
         const node = caret?.offsetNode;
         const i = words.findIndex((w) => w.node === node && w.from <= caret!.offset && caret!.offset <= w.to);
         if (i < 0) return;
+        beforeClick = { clock, index };
+        clearTimeout(forgetTimer);
+        forgetTimer = setTimeout(() => (beforeClick = undefined), DOUBLE_CLICK_WINDOW);
         pending = true;
         moveTo(i);
         highlightWord(i);
@@ -475,13 +490,13 @@
         const onScroll = () => mode === 'selection' && onSelectionChange();
         document.addEventListener('selectionchange', onSelectionChange);
         // Capture, so it reads the selection before the press clears it.
-        document.addEventListener('pointerdown', onPointerDown, true);
+        document.addEventListener('mousedown', onMouseDown, true);
         addEventListener('resize', onResize);
         addEventListener('scroll', onScroll, { passive: true });
         return () => {
             cancelAnimationFrame(frame);
             document.removeEventListener('selectionchange', onSelectionChange);
-            document.removeEventListener('pointerdown', onPointerDown, true);
+            document.removeEventListener('mousedown', onMouseDown, true);
             removeEventListener('resize', onResize);
             removeEventListener('scroll', onScroll);
             CSS.highlights.clear();
