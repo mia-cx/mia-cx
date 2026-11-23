@@ -4,14 +4,19 @@
  *
  *     <mia-marker class="prose">…article…</mia-marker>
  *     marker.word = 41; // highlight the 42nd word, e.g. from a narration's timings
+ *     marker.addEventListener('seek', (e) => seekTo(e.detail.word)); // a click or tap on a word
  *
  * The highlight is a set of blocks drawn over the text, with the covered text redrawn in the block's
  * text colour, cut to the same shape every frame, so text changes colour exactly where a block covers
  * it. Each block hugs one line of text. A block's edges move on their own clocks: an edge moving
  * outward takes `leading` ms, an edge moving inward `trailing` ms.
  *
- * Attributes: `word` (index, -1 for none), `leading`, `trailing`, `stagger` (ms), `padding`, `radius`
- * (px). Colours: `--marker-color` and `--marker-text`.
+ * Attributes: `word` (index, -1 for none), `leading`, `trailing`, `stagger`, `double-click` (ms),
+ * `padding`, `radius` (px). Colours: `--marker-color` and `--marker-text`.
+ *
+ * Selections come from the mouse or a touch long-press alike. While a word is highlighted, clicking or
+ * tapping another word fires `seek`: a tap at once, a click once `double-click` ms pass without a
+ * second click, since a double-click selects the word instead.
  *
  * The redrawn text is a copy of the marker's children inside it, so style the content with
  * descendant selectors (`.prose p`), not child selectors on the marker. Form fields and forced-colors
@@ -51,6 +56,16 @@ ${MARKER_TAG} > [data-marker-overlay] {
     ${MARKER_TAG} > [data-marker-overlay] { display: none; }
 }`;
 
+/**
+ * Whether a reader can see an element's text. Selections and word lists still include text faded to
+ * nothing (a tooltip waiting for hover) or clipped to a pixel for screen readers; the highlight must not.
+ */
+function visible(el: Element) {
+    if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+    const box = el.getBoundingClientRect();
+    return box.width > 1 || box.height > 1;
+}
+
 /** How far an italic glyph leans past its text box at the end of a run, in ems: about a 12° slant. */
 const ITALIC_LEAN = 0.15;
 /** Extra width at the end of a text run whose glyphs lean past their box. */
@@ -59,7 +74,7 @@ function overhang(node: Text) {
     return /italic|oblique/.test(style.fontStyle) ? Number.parseFloat(style.fontSize) * ITALIC_LEAN : 0;
 }
 
-const DEFAULTS = { leading: 200, trailing: 200, stagger: 150, padding: 4, radius: 0 };
+const DEFAULTS = { leading: 200, trailing: 200, stagger: 150, padding: 4, radius: 0, 'double-click': 330 };
 type Setting = keyof typeof DEFAULTS;
 
 type Edge = keyof Edges;
@@ -174,8 +189,11 @@ function createMarker() {
             this.#mutations.observe(this, { subtree: true, childList: true, characterData: true });
             this.#resize.observe(this);
             document.addEventListener('selectionchange', this.#onSelectionChange);
-            // Capture, to read the selection before the press clears it.
+            // Capture, to read the selection before the press clears it. Pointer events arrive before a
+            // touch clears the selection; only mouse events count clicks for double-clicks.
+            document.addEventListener('pointerdown', this.#onPointerDown, true);
             document.addEventListener('mousedown', this.#onMouseDown, true);
+            this.addEventListener('click', this.#onClick);
             addEventListener('scroll', this.#onScroll, { passive: true });
             this.#rootChanges.observe(document.documentElement, {
                 attributes: true,
@@ -187,7 +205,10 @@ function createMarker() {
             this.#mutations.disconnect();
             this.#resize.disconnect();
             document.removeEventListener('selectionchange', this.#onSelectionChange);
+            document.removeEventListener('pointerdown', this.#onPointerDown, true);
             document.removeEventListener('mousedown', this.#onMouseDown, true);
+            this.removeEventListener('click', this.#onClick);
+            clearTimeout(this.#seekTimer);
             removeEventListener('scroll', this.#onScroll);
             this.#rootChanges.disconnect();
             cancelAnimationFrame(this.#frame);
@@ -219,13 +240,17 @@ function createMarker() {
             return (this.#words = words);
         }
 
+        /** The marker's text a reader can see: not in the overlay, not hidden, not see-through. */
         *#textNodes() {
+            const seen = new Map<Element, boolean>();
             const walker = document.createTreeWalker(this, NodeFilter.SHOW_TEXT);
             for (let node = walker.nextNode(); node; node = walker.nextNode()) {
                 const text = node as Text;
-                if (!text.data.trim() || this.#overlay.contains(text)) continue;
-                if (text.parentElement?.closest('script, style, noscript')) continue;
-                yield text;
+                const parent = text.parentElement;
+                if (!text.data.trim() || !parent || this.#overlay.contains(text)) continue;
+                if (parent.closest('script, style, noscript')) continue;
+                if (!seen.has(parent)) seen.set(parent, visible(parent));
+                if (seen.get(parent)) yield text;
             }
         }
 
@@ -260,7 +285,8 @@ function createMarker() {
             if (next === this.#index) return;
             this.#index = next;
             this.#markQuietWord();
-            if (this.#selecting) return;
+            // A click waiting to seek holds the cursor on its word until the seek lands or is dropped.
+            if (this.#selecting || this.#seeking >= 0) return;
             if (next < 0) this.#retire(this.#blocks[0], undefined);
             else this.#moveTo(next);
         }
@@ -406,10 +432,68 @@ function createMarker() {
             return at instanceof Element ? at : null;
         }
 
-        #onMouseDown = (event: MouseEvent) => {
+        /** The kind of pointer behind the latest press: `mouse`, `touch` or `pen`. */
+        #pointer = 'mouse';
+        /** Whether text was selected when the press began; by click time the press has cleared it. */
+        #hadSelection = false;
+        /** When the latest first click began; the double-click window runs from here. */
+        #firstPress = 0;
+        /** The word a click is waiting to seek to, or -1. */
+        #seeking = -1;
+        #seekTimer: ReturnType<typeof setTimeout> | undefined;
+
+        #onPointerDown = (event: PointerEvent) => {
+            this.#pointer = event.pointerType;
+            this.#hadSelection = !getSelection()?.isCollapsed;
             const local = this.#local({ l: event.clientX, r: event.clientX, t: event.clientY, b: event.clientY });
             this.#deselectAt = this.#selecting ? { x: local.l, y: local.t } : undefined;
         };
+
+        /** Mouse events count clicks: the second press of a double-click drops a waiting seek. */
+        #onMouseDown = (event: MouseEvent) => {
+            if (event.detail < 2) this.#firstPress = performance.now();
+            else if (this.#seeking >= 0) this.#dropSeek();
+        };
+
+        /**
+         * Click or tap a word to seek there, while a word is highlighted. A tap seeks at once: touch
+         * selects by long press, so no double-tap can follow. A click moves the cursor at once and seeks
+         * when the double-click window closes, unless a second click makes it a double-click.
+         */
+        #onClick = (event: MouseEvent) => {
+            if (this.#index < 0 || event.detail !== 1 || event.button !== 0) return;
+            if (
+                (event.target as Element).closest(
+                    'a, button, input, textarea, select, label, summary, [contenteditable]',
+                )
+            )
+                return;
+            // A click that clears a selection only deselects; one that ends a drag only selects.
+            if (this.#hadSelection || !getSelection()?.isCollapsed) return;
+            const word = this.wordAt(event.clientX, event.clientY);
+            if (word < 0) return;
+            if (this.#pointer !== 'mouse') return this.#seek(word);
+            this.#seeking = word;
+            this.#moveTo(word);
+            clearTimeout(this.#seekTimer);
+            const wait = this.#firstPress + this.#setting('double-click') - performance.now();
+            this.#seekTimer = setTimeout(() => this.#seek(word), Math.max(0, wait));
+        };
+
+        /** Lands a seek: the cursor stays on the word, and `seek` tells the narration where to go. */
+        #seek(word: number) {
+            clearTimeout(this.#seekTimer);
+            this.#seeking = -1;
+            this.#index = word;
+            this.#moveTo(word);
+            this.dispatchEvent(new CustomEvent('seek', { detail: { word } }));
+        }
+
+        /** Drops a waiting seek; the browser selects the double-clicked word instead. */
+        #dropSeek() {
+            clearTimeout(this.#seekTimer);
+            this.#seeking = -1;
+        }
 
         // Content that restyles itself on scroll, such as a sticky header, would leave the copy behind.
         #onScroll = () => this.#followLayout(true);
