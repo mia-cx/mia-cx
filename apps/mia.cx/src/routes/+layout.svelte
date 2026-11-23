@@ -11,8 +11,11 @@
     import Footer from '$lib/components/Footer.svelte';
     import { markdownHref } from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
+    import { defineMarker } from '@mia-cx/ui/marker';
+    import { onMount } from 'svelte';
 
     let { children }: { children: Snippet } = $props();
+    onMount(defineMarker);
 
     /** Only the home page has a hero for the header's blur to key off. */
     const hasHero = $derived(page.url.pathname === '/');
@@ -73,13 +76,16 @@
 {#if bare}
     {@render children()}
 {:else}
-    <Header {hasHero} />
+    <!-- Every selection on the site, and later the narration's word, is drawn by the marker. -->
+    <mia-marker>
+        <Header {hasHero} />
 
-    <div class="page">
-        {@render children()}
-    </div>
+        <div class="page">
+            {@render children()}
+        </div>
 
-    <Footer />
+        <Footer />
+    </mia-marker>
 {/if}
 
 <!--
