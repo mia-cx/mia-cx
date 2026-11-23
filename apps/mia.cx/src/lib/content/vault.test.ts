@@ -9,12 +9,18 @@ vi.mock('virtual:svartz/host', () => ({
 const note = (
     path: string,
     href: string,
-    overrides: { tags?: string[]; date?: string; updated?: string; markdown?: string } = {},
+    overrides: {
+        tags?: string[];
+        date?: string;
+        updated?: string;
+        markdown?: string;
+        properties?: Record<string, unknown>;
+    } = {},
 ) => ({
     slug: href.replace(/^\/|\/$/g, ''),
     href,
     path,
-    properties: {},
+    properties: overrides.properties ?? {},
     // Svartz titles a note by its filename, and a folder's index.md by the folder.
     title: path
         .replace(/\/index\.md$|\.md$/, '')
@@ -95,6 +101,36 @@ describe('projects and posts', () => {
         await expect(
             vaultOf([note('work/Tastebase/index.md', '/work/tastebase/', { date: '2024-06-01' }), broken]),
         ).rejects.toThrow('work/Tastebase/');
+    });
+
+    it('fails the build when a post sits beside a card with no page of its own', async () => {
+        await expect(
+            vaultOf([
+                note('work/Tastebase.md', '/work/tastebase/', {
+                    date: '2024-06-01',
+                    markdown: '',
+                    properties: { live: 'https://x.dev' },
+                }),
+                note('work/Tastebase/First import.md', '/work/tastebase/first-import/', {
+                    tags: ['post'],
+                    date: '2026-01-01',
+                }),
+            ]),
+        ).rejects.toThrow('/work/tastebase/first-import is in a project folder with no index.md');
+    });
+});
+
+describe('links between notes', () => {
+    it('send a link to a note without a page where its card goes, or leave plain text', async () => {
+        const { render } = await vaultOf([
+            note('work/Maal.md', '/work/maal/', { date: '2025-01-01' }),
+            note('work/Theme.md', '/work/theme/', { markdown: '', properties: { live: 'https://theme.dev' } }),
+            note('work/Sketch.md', '/work/sketch/', { markdown: '' }),
+        ]);
+        const html = render('[Maal](/work/maal/) [Theme](/work/theme/) [Sketch](/work/sketch/#idea)');
+        expect(html).toContain('<a href="/work/maal">Maal</a>');
+        expect(html).toContain('<a href="https://theme.dev">Theme</a>');
+        expect(html).toContain(' Sketch</p>');
     });
 });
 

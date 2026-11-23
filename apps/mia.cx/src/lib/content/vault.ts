@@ -169,7 +169,8 @@ export const work: WorkNote[] = entries
 
 function toPost(entry: VaultEntry): Post {
     const projectPath = entry.section === 'work' ? entry.path.slice(0, entry.path.lastIndexOf('/')) : undefined;
-    const project = projectPath && work.find((note) => note.entry.path === projectPath);
+    // A post's project is the page its folder belongs to; a card that links out has none to go back to.
+    const project = projectPath && work.find((note) => note.entry.path === projectPath && note.hasPage);
     if (projectPath && !project) throw new Error(`${entry.path} is in a project folder with no index.md`);
     const external = text(entry.properties.external);
     return {
@@ -237,6 +238,9 @@ function headingId(text: string) {
 /** Svartz links to canonical URLs, `/work/vesta/`; the site serves them without the trailing slash. */
 const sitePath = (href: string) => href.replace(/^(\/[^?#]*?)\/+(?=[?#]|$)/, '$1');
 
+/** Where a link to each note's URL leads: its page, an outside link, or nowhere. */
+const destinations = new Map(entries.map((entry) => [entry.path, entry.href]));
+
 export function render(markdown: string): string {
     const renderer = new marked.Renderer();
     const link = renderer.link.bind(renderer);
@@ -248,6 +252,14 @@ export function render(markdown: string): string {
         const id = count === 0 ? base : `${base}-${count}`;
         return `<h${depth} id="${id}">${renderer.parser.parseInline(tokens)}</h${depth}>`;
     };
-    renderer.link = (token) => link({ ...token, href: sitePath(token.href) });
+    renderer.link = (token) => {
+        const href = sitePath(token.href);
+        const [path] = href.split('#');
+        if (!destinations.has(path)) return link({ ...token, href });
+        // Svartz links to every note's URL; a note without a page goes where its card goes, or nowhere.
+        const destination = destinations.get(path);
+        if (destination === path) return link({ ...token, href });
+        return destination ? link({ ...token, href: destination }) : renderer.parser.parseInline(token.tokens);
+    };
     return marked.parse(markdown, { renderer, async: false, gfm: true }) as string;
 }
