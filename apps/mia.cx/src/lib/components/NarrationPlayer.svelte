@@ -1,7 +1,8 @@
 <!--
     Plays a post's narration, highlighting the word being spoken with the page's `<mia-marker>`;
-    clicking a word while it plays seeks there. The moving highlight is the progress, so the control is
-    one icon button: headphones before it starts, then pause or play. It finds the audio by a hash of
+    clicking a word while it plays seeks there, and with the button focused the arrow keys skip between
+    paragraphs. The moving highlight is the progress, so the control is one icon button: headphones
+    before it starts, then pause or play. It finds the audio by a hash of
     exactly what the page reads (`$lib/narration/extract`), so it appears only once that text has been
     narrated.
 -->
@@ -29,6 +30,8 @@
     /** The narrated words, in reading order, and when each starts, in seconds. */
     let spoken: NarratedWord[] = [];
     let starts: number[] = [];
+    /** The narrated word each block (a paragraph, heading or list item) starts at, for skipping by keyboard. */
+    let blockStarts: number[] = [];
 
     /**
      * A narrated word's index among the marker's words, looked up when it is needed: text elsewhere in
@@ -134,6 +137,8 @@
             if (manifest.words.length !== read.length * 2) return;
             spoken = read;
             starts = read.map((_, i) => manifest.words[i * 2]);
+            let first = 0;
+            blockStarts = blocks.map((block) => (first += block.words.length) - block.words.length);
             host.addEventListener('seek', seek);
             marker = host;
             src = `/narration/audio/${manifest.audio}.mp3`;
@@ -156,6 +161,24 @@
             else high = mid;
         }
         return low - 1;
+    }
+
+    /** Within this long of a block's start, going back goes to the previous block rather than this one's start. */
+    const RESTART_WITHIN = 1.5;
+
+    /** The keyboard's way to seek: the next block, or back to this block's start or the one before it. */
+    function skip(event: KeyboardEvent) {
+        const by = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+        if (!by) return;
+        event.preventDefault();
+        const current = Math.max(0, spokenAt(time));
+        const block = Math.max(
+            0,
+            blockStarts.findLastIndex((start) => start <= current),
+        );
+        const into = time - starts[blockStarts[block]];
+        const to = by > 0 ? block + 1 : into > RESTART_WITHIN ? block : block - 1;
+        if (to >= 0 && to < blockStarts.length) seekTo(blockStarts[to]);
     }
 
     $effect(() => {
@@ -185,7 +208,9 @@
         type="button"
         class="listen"
         onclick={() => (playing ? pause() : play())}
+        onkeydown={skip}
         aria-label={playing ? 'Pause' : started ? 'Resume listening' : 'Listen to this post'}
+        aria-keyshortcuts="ArrowLeft ArrowRight"
         data-print-hide
         data-markdown="skip"
         data-narration-skip
