@@ -32,10 +32,14 @@
 <main class="container">
     <a class="back mono" href={back.href} data-print-hide>← {back.title}</a>
 
-    <article>
+    <!--
+        Narrated when the post's `narration` property is on: the title and body; dates, buttons, the
+        source line and mentions stay silent.
+    -->
+    <article data-narration={post.narration ? '' : undefined}>
         <header>
             <h1>{post.title}</h1>
-            <div class="page-actions">
+            <div class="page-actions" data-narration-skip>
                 <p class="meta mono">
                     <time datetime={post.date}>{formatted(post.date)}</time>
                     {#if post.updated}<span>Updated {formatted(post.updated)}</span>{/if}
@@ -50,12 +54,12 @@
         <div class="prose">{@html html}</div>
 
         {#if post.source}
-            <p class="source mono">
+            <p class="source mono" data-narration-skip>
                 Originally posted <a href={post.source} rel="external">here ↗</a>
             </p>
         {/if}
 
-        <Mentions {mentions} />
+        <div data-narration-skip><Mentions {mentions} /></div>
     </article>
 </main>
 

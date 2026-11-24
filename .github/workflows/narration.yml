@@ -1,0 +1,61 @@
+name: Narration
+
+# Narrates every post on main in Mia's cloned voice, into the mia-cx-narration R2 bucket that staging,
+# mia.cx and `pnpm dev` all play from. Audio is stored under a hash of the text it reads, so this only
+# pays for paragraphs that changed, and a release finds its audio already there. A run that would spend
+# more than its budget generates nothing and fails; run it by hand with a bigger budget to allow it.
+on:
+    push:
+        branches:
+            - main
+    workflow_dispatch:
+        inputs:
+            budget:
+                description: Most ElevenLabs characters this run may spend
+                type: number
+                default: 25000
+
+# One run at a time: they share the bucket's index.json. A newer waiting run replaces an older waiting
+# one, since it narrates everything the older one would have.
+concurrency:
+    group: narration
+    cancel-in-progress: false
+
+jobs:
+    narrate:
+        name: Narrate posts
+        runs-on: ubuntu-latest
+        timeout-minutes: 60
+        permissions:
+            contents: read
+        env:
+            CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+            CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+            ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+            ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID }}
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Set up pnpm
+              uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+            - name: Set up Node.js
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version-file: .nvmrc
+                  cache: pnpm
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Install ffmpeg
+              run: sudo apt-get update -q && sudo apt-get install -yq --no-install-recommends ffmpeg
+
+            - name: Build the site
+              run: pnpm --filter @mia-cx/mia.cx build
+
+            - name: Narrate what is missing
+              env:
+                  BUDGET: ${{ inputs.budget || 25000 }}
+              run: pnpm --filter @mia-cx/mia.cx narrate --budget "$BUDGET"

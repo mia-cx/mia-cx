@@ -25,10 +25,26 @@ declare global {
                 CV_PRESETS?: { get(key: string): Promise<string | null> };
                 /** Cloudflare Browser Rendering, which prints /cv.pdf. */
                 BROWSER?: import('@cloudflare/puppeteer').BrowserWorker;
+                /** Narration audio and word timings, served at /narration/…. */
+                NARRATION?: NarrationBucket;
             };
             /** Keeps the Worker alive for work that finishes after the response. */
             ctx: { waitUntil(promise: Promise<unknown>): void };
         }
+    }
+
+    /** The part of an R2 bucket the narration route uses. */
+    interface NarrationBucket {
+        get(key: string, options?: { range?: Headers; onlyIf?: Headers }): Promise<NarrationObject | null>;
+    }
+    /** An R2 object; `body` is missing when one of the request's preconditions failed. */
+    interface NarrationObject {
+        size: number;
+        httpEtag: string;
+        uploaded: Date;
+        range?: { offset?: number; length?: number; suffix?: number };
+        body?: ReadableStream;
+        writeHttpMetadata(headers: Headers): void;
     }
 }
 

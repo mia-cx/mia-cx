@@ -5,6 +5,7 @@ description: "AI is a force multiplier for whatever you already do, careful or c
 created_at: "2026-05-09T00:00"
 updated_at: "2026-11-06T00:00"
 source: "https://www.linkedin.com/pulse/quiet-cost-carelessness-mia-riezebos-unope"
+narration: true
 ---
 
 *On AI, mindfulness, and what we lose when we stop being intentional with our tools*

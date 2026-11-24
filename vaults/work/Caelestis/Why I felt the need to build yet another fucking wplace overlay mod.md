@@ -4,6 +4,7 @@ tags:
   - post
 created_at: 2026-11-23T00:00
 slug: yet-another-overlay-mod
+narration: true
 ---
 
 In August last year, my alliance started a pretty big project: painting every room from Celeste on Wplace.

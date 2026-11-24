@@ -5,6 +5,7 @@ description: "A missed deadline, procrastination, and the first panic attack of 
 created_at: "2023-01-28T00:00"
 updated_at: "2024-05-30T00:00"
 source: "https://github.com/mia-riezebos/mia-riezebos/wiki/Blog:-Crunch-Time"
+narration: true
 ---
 
 I had a panic attack for the first time in my life, caused by crunch time, a missed deadline and procrastination.
