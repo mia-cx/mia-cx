@@ -10,11 +10,12 @@ describe('ShaderCanvas', () => {
         expect(source).not.toContain("renderer?.backend === 'webgpu'");
     });
 
-    it('decays and uploads while base evolution is paused, but freezes in hidden tabs', () => {
+    it('freezes the cursor and its density trail while still or in a hidden tab', () => {
         const animation = source.slice(source.indexOf('const animateCursor'), source.indexOf('const visibility'));
-        expect(animation).toContain('if (!document.hidden)');
-        expect(animation).toContain('if (!paused)');
-        expect(animation.indexOf('cursorState.tick(dt)')).toBeGreaterThan(animation.indexOf('if (!paused)'));
+        const gate = animation.indexOf('if (!document.hidden && !paused)');
+        expect(gate).toBeGreaterThan(-1);
+        expect(animation.indexOf('cursorState.tick(dt)')).toBeGreaterThan(gate);
+        expect(animation.indexOf('cursorDensityField.tick(')).toBeGreaterThan(gate);
     });
 
     it('seeds every page load and honours the render scale prop', () => {

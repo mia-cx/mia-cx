@@ -72,3 +72,29 @@ test('the first-load entrance clears itself', async ({ page }) => {
     // Revealed when the first shader frame is on screen, when graphics fail, or after the failsafe.
     await expect(page.locator('html')).not.toHaveAttribute('data-boot', /.+/, { timeout: 16000 });
 });
+
+test('settings chosen in the popover apply again before paint on the next load', async ({ page }) => {
+    // A light system, so Dark is a choice to store rather than the system's own.
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/about');
+    const button = page.getByRole('button', { name: 'Settings' });
+    await button.click();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await page.getByText('Dark', { exact: true }).click();
+    await page.getByRole('switch', { name: 'Field' }).click();
+    await page.keyboard.press('Escape');
+    await expect(button).toBeFocused();
+
+    // Read before any app code runs: only the pre-paint script can have set these.
+    await page.addInitScript(() =>
+        document.addEventListener('DOMContentLoaded', () => {
+            (window as unknown as { painted: object }).painted = { ...document.documentElement.dataset };
+        }),
+    );
+    await page.reload();
+    expect(await page.evaluate(() => (window as unknown as { painted: object }).painted)).toMatchObject({
+        theme: 'dark',
+        field: 'off',
+    });
+    await expect(page.locator('canvas.field')).toHaveCount(0);
+});

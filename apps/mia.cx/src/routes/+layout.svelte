@@ -12,6 +12,7 @@
     import MarkerTuning from '$lib/components/MarkerTuning.svelte';
     import { markdownHref } from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
+    import { settings } from '$lib/settings.svelte';
     import { jsonLd, person, website } from '$lib/content/structured-data';
     import { defineMarker } from '@mia-cx/marker';
     import { onMount } from 'svelte';
@@ -64,14 +65,18 @@
     {#if !bare}{@html jsonLd(person, website)}{/if}
 </svelte:head>
 
-<!-- Full strength behind the hero and on the share card; half behind reading pages. -->
-{#if !stills}
+<!--
+    Full strength behind the hero and on the share card; half behind reading pages. The reader can
+    turn it off or hold it still in Settings; the share card always has it.
+-->
+{#if !stills && (settings.field.value || bare)}
     <!-- /cv's sheets carry their own field, so the site's stays behind them there. -->
     <ShaderCanvas
         class="field"
         dims={hasHero}
         opacity={hasHero || bare ? 1 : 0.5}
         layer={page.url.pathname === '/cv' ? 'back' : 'front'}
+        still={!bare && settings.motion.value === 'reduce'}
         onsettle={reveal}
     />
 {/if}
@@ -82,7 +87,7 @@
     {@render children()}
 {:else}
     <!-- Every selection on the site, and the narration's word, is drawn by the marker. -->
-    <mia-marker>
+    <mia-marker double-click={settings.doubleClick.value}>
         <Header {hasHero} />
 
         <div class="page">

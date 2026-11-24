@@ -13,10 +13,11 @@
  * The home hero's camera. The page sets --pan-x and --pan-y on the root from the mouse, from -1 to
  * 1, and the layers follow it without easing. Each layer shifts by its depth times one step: the
  * background stays put, the portrait moves two steps, the text three, the field four. Touch and
- * reduced motion keep the steps undefined, so every layer stays still.
+ * reduced motion keep the steps undefined, so every layer stays still. Motion here and below follows
+ * `data-motion`, the reader's setting, which app.html sets before paint.
  */
-@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-    :root {
+@media (hover: hover) and (pointer: fine) {
+    :root[data-motion='full'] {
         --pan-step-x: calc(var(--pan-x, 0) * 7px);
         --pan-step-y: calc(var(--pan-y, 0) * 4px);
     }
@@ -140,10 +141,8 @@ mia-marker {
     border: 0;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    html {
-        scroll-behavior: smooth;
-    }
+:root[data-motion='full'] {
+    scroll-behavior: smooth;
 }
 
 /*
@@ -251,22 +250,18 @@ mia-marker {
     }
 }
 
-@media (prefers-reduced-motion: reduce) {
-    :root[data-boot='entering'] header[data-header] .bar,
-    :root[data-boot='entering'] .page main > :not(.hero),
-    :root[data-boot='entering'] [data-enter],
-    :root[data-boot='entering'] footer .inner {
-        animation: boot-fade 300ms ease backwards;
-    }
-    :root[data-boot='loading'] .boot span {
-        animation: boot-ring-in 300ms ease 350ms backwards;
-    }
-    :root[data-boot='entering'] .boot span {
-        animation: none;
-    }
-    @keyframes boot-fade {
-        from {
-            opacity: 0;
-        }
+:root[data-motion='reduce'][data-boot='entering']
+    :is(header[data-header] .bar, .page main > :not(.hero), [data-enter], footer .inner) {
+    animation: boot-fade 300ms ease backwards;
+}
+:root[data-motion='reduce'][data-boot='loading'] .boot span {
+    animation: boot-ring-in 300ms ease 350ms backwards;
+}
+:root[data-motion='reduce'][data-boot='entering'] .boot span {
+    animation: none;
+}
+@keyframes boot-fade {
+    from {
+        opacity: 0;
     }
 }

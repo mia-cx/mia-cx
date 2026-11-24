@@ -30,6 +30,8 @@
         label = 'Animated coloured noise field',
         /** Called once, when the first frame is up or when graphics fail; the page reveals on it. */
         onsettle,
+        /** Holds the field on its current frame. Unset, it follows `prefers-reduced-motion` at mount. */
+        still,
     }: {
         renderScale?: number;
         dprCap?: number;
@@ -40,6 +42,7 @@
         dims?: boolean;
         label?: string;
         onsettle?: () => void;
+        still?: boolean;
     } = $props();
 
     let canvas: HTMLCanvasElement;
@@ -57,6 +60,12 @@
     const cursorDensityField = new CursorDensityField();
     let densityPoints: { x: number; y: number; timeStamp: number }[] = [];
     let paused = false;
+    $effect(() => {
+        paused = still ?? matchMedia('(prefers-reduced-motion: reduce)').matches;
+        renderer?.setPaused(document.hidden || paused);
+        // Going still lets go of the cursor, so the first move after resuming starts a fresh stroke.
+        if (paused) pointerLeave();
+    });
 
     /*
      * Route changes hand the dim between the scroll animation and the base opacity. A browser will
@@ -145,6 +154,7 @@
             renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
     }
     function pointerMove(event: PointerEvent, depositDensity = true) {
+        if (paused) return;
         const samples = event.getCoalescedEvents?.() ?? [event];
         const rect = canvas.getBoundingClientRect();
         resizeCursorDensity(rect);
@@ -162,11 +172,13 @@
         sendCursor();
     }
     function pointerDown(event: PointerEvent) {
+        if (paused) return;
         pointerMove(event, false);
         cursorState.pointerDown();
         sendCursor();
     }
     function pointerUp() {
+        if (paused) return;
         cursorState.pointerUp();
         sendCursor();
     }
@@ -185,7 +197,6 @@
         let disposed = false;
         const pageSeed = Math.random() * 1000;
         options = { ...BAKED_RENDER_OPTIONS, seed: pageSeed, renderScale, dprCap };
-        paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
         const calmMask = new CalmMask();
         loadBakedRenderOptions()
             .then((loadedOptions) => {
@@ -243,15 +254,15 @@
         let cursorFrame = 0;
         let cursorTime = performance.now();
         const animateCursor = (now: number) => {
-            if (!document.hidden) {
+            if (!document.hidden && calmMask.update(canvas.getBoundingClientRect()))
+                renderer?.setCalmMask(calmMask.canvas);
+            // A still field holds its frame: the cursor's trail neither moves nor fades.
+            if (!document.hidden && !paused) {
                 const dt = Math.max(0, (now - cursorTime) / 1000);
-                if (!paused) {
-                    cursorState.tick(dt);
-                    sendCursor();
-                }
+                cursorState.tick(dt);
+                sendCursor();
                 const rect = canvas.getBoundingClientRect();
                 resizeCursorDensity(rect);
-                if (calmMask.update(rect)) renderer?.setCalmMask(calmMask.canvas);
                 const batch = densityPoints;
                 densityPoints = [];
                 const gpuPath = renderer?.gpuCursorDensity === true;
