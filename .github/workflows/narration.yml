@@ -2,8 +2,9 @@ name: Narration
 
 # Narrates every post on main in Mia's cloned voice, into the mia-cx-narration R2 bucket that staging,
 # mia.cx and `pnpm dev` all play from. Audio is stored under a hash of the text it reads, so this only
-# pays for paragraphs that changed, and a release finds its audio already there. A run that would spend
+# pays for sections that changed, and a release finds its audio already there. A run that would spend
 # more than its budget generates nothing and fails; run it by hand with a bigger budget to allow it.
+# Most pushes change no narrated text, so ffmpeg is installed only when there is something to narrate.
 on:
     push:
         branches:
@@ -49,13 +50,22 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
-            - name: Install ffmpeg
-              run: sudo apt-get update -q && sudo apt-get install -yq --no-install-recommends ffmpeg
-
             - name: Build the site
               run: pnpm --filter @mia-cx/mia.cx build
 
+            - name: See what is missing
+              id: plan
+              run: |
+                  pnpm --filter @mia-cx/mia.cx narrate --dry-run | tee plan.txt
+                  if grep -q '; 0 to narrate' plan.txt; then pending=false; else pending=true; fi
+                  echo "pending=$pending" >> "$GITHUB_OUTPUT"
+
+            - name: Install ffmpeg
+              if: steps.plan.outputs.pending == 'true'
+              run: sudo apt-get update -q && sudo apt-get install -yq --no-install-recommends ffmpeg
+
             - name: Narrate what is missing
+              if: steps.plan.outputs.pending == 'true'
               env:
                   BUDGET: ${{ inputs.budget || 25000 }}
               run: pnpm --filter @mia-cx/mia.cx narrate --budget "$BUDGET"
