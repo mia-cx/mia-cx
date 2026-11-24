@@ -5,11 +5,12 @@ import type { RequestHandler } from './$types';
 export const prerender = false;
 
 /**
- * A narrated page's word timings and audio: `pages/<hash>.json` and `pages/<hash>.mp3`, the hash being
- * of the text it reads (see `$lib/narration/extract`). The content behind a key never changes, so
- * found narration is cached for good. Audio answers byte ranges, so the player can seek.
+ * A narrated page's manifest, `pages/<key>.json`, keyed by what the page reads (see
+ * `$lib/narration/extract`), and the audio it names, `audio/<hash>.mp3`. A page narrated afresh gets new
+ * audio under a new hash, so audio is cached for good, while a manifest is checked again on every use.
+ * Audio answers byte ranges, so the player can seek.
  */
-const SERVED = /^pages\/[0-9a-f]{64}\.(json|mp3)$/;
+const SERVED = /^(?:pages\/[0-9a-f]{64}\.json|audio\/[0-9a-f]{64}\.mp3)$/;
 
 export const GET: RequestHandler = async ({ params, request, platform }) => {
     if (!SERVED.test(params.key)) error(404, 'No such narration');
@@ -21,9 +22,14 @@ export const GET: RequestHandler = async ({ params, request, platform }) => {
     const headers = new Headers();
     object.writeHttpMetadata(headers);
     headers.set('etag', object.httpEtag);
-    headers.set('cache-control', 'public, max-age=31536000, immutable');
+    const audio = params.key.startsWith('audio/');
+    headers.set('cache-control', audio ? 'public, max-age=31536000, immutable' : 'public, no-cache');
     headers.set('accept-ranges', 'bytes');
-    if (!object.body) return new Response(null, { status: 304, headers });
+    // No body means a precondition failed: unchanged for a conditional GET, otherwise a failed If-Match.
+    if (!object.body) {
+        const revalidating = request.headers.has('if-none-match') || request.headers.has('if-modified-since');
+        return new Response(null, { status: revalidating ? 304 : 412, headers });
+    }
 
     const range = object.range;
     if (!request.headers.has('range') || !range) return new Response(object.body, { headers });

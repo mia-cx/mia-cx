@@ -49,8 +49,20 @@ describe('narrated text', () => {
 
     it('keys a page by exactly what it reads, so an edit changes the key and markup alone does not', () => {
         const original = pageKey(narratedBlocks(region('<p>Hello there.</p>')));
-        expect(pageKey(narratedBlocks(region('<p>Hello <em>there</em>.</p>')))).toBe(original);
+        expect(pageKey(narratedBlocks(region('<p>Hello <em>there.</em></p>')))).toBe(original);
         expect(pageKey(narratedBlocks(region('<p>Hello there!</p>')))).not.toBe(original);
+    });
+
+    it('keys a page by its words and sections too, so timings never land on other words', () => {
+        const original = pageKey(narratedBlocks(region('<p>Hello there.</p><p>Next</p>')));
+        // Same spoken text, but split into another number of words: the stored timings would not fit.
+        expect(pageKey(narratedBlocks(region('<p>Hello there<em>.</em></p><p>Next</p>')))).not.toBe(original);
+        // Same words, but a heading starts a new section, read by its own request.
+        expect(pageKey(narratedBlocks(region('<p>Hello there.</p><h2>Next</h2>')))).not.toBe(original);
+    });
+
+    it('separates words at a line break', () => {
+        expect(read('<p>one<br>two</p>')).toEqual(['one two']);
     });
 
     it('keys a page by the pronunciations it uses, so changing one re-narrates only pages that say it', () => {
