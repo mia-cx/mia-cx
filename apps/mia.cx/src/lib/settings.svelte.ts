@@ -44,14 +44,16 @@ function persisted<const T extends string | number | boolean>(
 }
 
 /**
- * A setting the system answers until the reader picks the other option. Picking what the system
- * prefers drops the stored choice, so the site follows the system again.
+ * A setting the system answers until the reader picks the other option. Unless `sticky`, picking what
+ * the system prefers drops the stored choice, so the site follows the system again; a sticky one
+ * keeps the reader's choice from the first flip on.
  */
 function followed<const T extends string>(
     key: string,
     query: string,
     [matches, otherwise]: readonly [T, T],
     apply: (value: T, chosen: boolean) => void,
+    sticky = false,
 ) {
     const media = browser ? matchMedia(query) : undefined;
     let system = $state(media?.matches ? matches : otherwise);
@@ -66,7 +68,7 @@ function followed<const T extends string>(
             return chosen ?? system;
         },
         set value(next: T) {
-            chosen = next === system ? null : next;
+            chosen = next === system && !sticky ? null : next;
             save(key, chosen);
             apply(next, chosen !== null);
         },
@@ -92,9 +94,13 @@ export const settings = {
         }
     }),
     /** Reduce holds the field still, snaps the highlight, and seeks narration with a plain fade. */
-    motion: followed('motion', '(prefers-reduced-motion: reduce)', ['reduce', 'full'], (motion) => {
-        root().dataset.motion = motion;
-    }),
+    motion: followed(
+        'motion',
+        '(prefers-reduced-motion: reduce)',
+        ['reduce', 'full'],
+        (motion) => (root().dataset.motion = motion),
+        true,
+    ),
     /** Off stops the field rendering, leaving the theme's paper colour. */
     field: persisted('field', [true, false], true, (on) => {
         if (on) delete root().dataset.field;

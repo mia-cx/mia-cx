@@ -152,6 +152,7 @@
             renderer?.setCursorDensityField?.(cursorDensityField.snapshot());
     }
     function pointerMove(event: PointerEvent, depositDensity = true) {
+        if (paused) return;
         const samples = event.getCoalescedEvents?.() ?? [event];
         const rect = canvas.getBoundingClientRect();
         resizeCursorDensity(rect);
@@ -169,11 +170,13 @@
         sendCursor();
     }
     function pointerDown(event: PointerEvent) {
+        if (paused) return;
         pointerMove(event, false);
         cursorState.pointerDown();
         sendCursor();
     }
     function pointerUp() {
+        if (paused) return;
         cursorState.pointerUp();
         sendCursor();
     }
@@ -249,15 +252,15 @@
         let cursorFrame = 0;
         let cursorTime = performance.now();
         const animateCursor = (now: number) => {
-            if (!document.hidden) {
+            if (!document.hidden && calmMask.update(canvas.getBoundingClientRect()))
+                renderer?.setCalmMask(calmMask.canvas);
+            // A still field holds its frame: the cursor's trail neither moves nor fades.
+            if (!document.hidden && !paused) {
                 const dt = Math.max(0, (now - cursorTime) / 1000);
-                if (!paused) {
-                    cursorState.tick(dt);
-                    sendCursor();
-                }
+                cursorState.tick(dt);
+                sendCursor();
                 const rect = canvas.getBoundingClientRect();
                 resizeCursorDensity(rect);
-                if (calmMask.update(rect)) renderer?.setCalmMask(calmMask.canvas);
                 const batch = densityPoints;
                 densityPoints = [];
                 const gpuPath = renderer?.gpuCursorDensity === true;

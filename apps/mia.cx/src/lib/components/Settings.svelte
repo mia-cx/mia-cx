@@ -10,6 +10,14 @@
     let open = $state(false);
 </script>
 
+<!--
+    One option of a choice, as a pressed button rather than a named radio: `<mia-marker>` copies the
+    page, radios and all, and a copy sharing a radio's name would uncheck the real one.
+-->
+{#snippet option<T>(label: string, value: T, current: T, choose: (value: T) => void)}
+    <button type="button" aria-pressed={value === current} onclick={() => choose(value)}>{label}</button>
+{/snippet}
+
 <button
     type="button"
     class="toggle"
@@ -34,8 +42,7 @@
         <legend>Theme</legend>
         <div class="segments">
             {#each [['light', 'Light'], ['dark', 'Dark']] as const as [theme, label] (theme)}
-                <label><input type="radio" name="theme" value={theme} bind:group={settings.theme.value} />{label}</label
-                >
+                {@render option(label, theme, settings.theme.value, (next) => (settings.theme.value = next))}
             {/each}
         </div>
     </fieldset>
@@ -59,9 +66,7 @@
         <legend>Double-click speed</legend>
         <div class="segments">
             {#each Object.entries(DOUBLE_CLICKS) as [label, ms] (ms)}
-                <label>
-                    <input type="radio" name="double-click" value={ms} bind:group={settings.doubleClick.value} />{label}
-                </label>
+                {@render option(label, ms, settings.doubleClick.value, (next) => (settings.doubleClick.value = next))}
             {/each}
         </div>
     </fieldset>
@@ -70,9 +75,12 @@
         <legend>Max wind speed</legend>
         <div class="segments">
             {#each WIND_SPEEDS as speed (speed)}
-                <label>
-                    <input type="radio" name="wind-speed" value={speed} bind:group={settings.windSpeed.value} />{speed}×
-                </label>
+                {@render option(
+                    `${speed}×`,
+                    speed,
+                    settings.windSpeed.value,
+                    (next) => (settings.windSpeed.value = next),
+                )}
             {/each}
         </div>
     </fieldset>
@@ -108,6 +116,9 @@
         position-try-fallbacks: flip-inline;
         inset: auto;
         width: min(340px, 100vw - 32px);
+        /* On a short window the panel scrolls rather than running off the bottom. */
+        max-height: calc(100dvh - var(--header-height) - 16px);
+        overflow: auto;
         margin: 10px 0 0;
         padding: 14px 16px 16px;
         border: 1px solid var(--panel-line);
@@ -146,6 +157,8 @@
         margin: 0;
         padding: 0;
         border: 0;
+    }
+    label.row {
         cursor: pointer;
     }
     /* A legend won't flex; floating it lets it sit in the row beside its options. */
@@ -162,7 +175,7 @@
         display: flex;
         margin-left: auto;
     }
-    .segments label {
+    .segments button {
         position: relative;
         padding: 4px 9px;
         border: 1px solid var(--panel-line);
@@ -172,28 +185,22 @@
         letter-spacing: 0.04em;
         cursor: pointer;
     }
-    .segments label + label {
+    .segments button + button {
         margin-left: -1px;
     }
-    .segments label:has(:checked) {
+    .segments [aria-pressed='true'] {
         z-index: 1;
         border-color: var(--accent);
         color: var(--accent);
     }
-    fieldset:disabled .segments label {
+    .segments button:disabled {
         border-color: var(--panel-line);
         color: inherit;
         cursor: default;
     }
-    .segments label:has(:focus-visible) {
+    .segments button:focus-visible {
         z-index: 2;
-        outline: 2px solid var(--violet);
         outline-offset: 2px;
-    }
-    .segments input {
-        position: absolute;
-        opacity: 0;
-        pointer-events: none;
     }
 
     /* A switch: a square track with a square knob that slides right, accent-filled, when on. */

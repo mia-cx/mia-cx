@@ -122,17 +122,24 @@
 
     /**
      * Funny mode's tape: the narration decoded, since an audio element can't play backwards. Loaded
-     * once funny mode is on and the narration plays; seeks fade as usual until it is ready.
+     * once funny mode can wind and the narration plays; seeks fade as usual until it is ready. A failed
+     * load is reported and tried again on the next play.
      */
     let tape: AudioBuffer | undefined;
     let tapeLoad: Promise<void> | undefined;
     $effect(() => {
-        if (!settings.funny.value || !playing || tapeLoad || !context || !src) return;
+        if (!settings.funny.value || settings.motion.value === 'reduce' || !playing) return;
+        if (tape || tapeLoad || !context || !src) return;
         const decoder = context;
         tapeLoad = fetch(src)
-            .then((response) => response.arrayBuffer())
+            .then((response) => {
+                if (!response.ok) throw new Error(`Narration audio: ${response.status}`);
+                return response.arrayBuffer();
+            })
             .then((data) => decoder.decodeAudioData(data))
-            .then((buffer) => void (tape = buffer));
+            .then((buffer) => void (tape = buffer))
+            .catch((error) => console.error('Funny mode could not load the tape', error))
+            .finally(() => (tapeLoad = undefined));
     });
 
     /** The wind playing now: where on the tape it starts and lands, when it began, and how it lands. */
