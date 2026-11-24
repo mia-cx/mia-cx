@@ -215,13 +215,15 @@ async function eleven<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** The pronunciation dictionary holding exactly PRONUNCIATIONS, named by their hash and made on first use. */
 async function findOrMakeDictionary(): Promise<DictionaryLocator> {
-    const rules = Object.entries(PRONUNCIATIONS).map(([word, alias]) => ({
-        type: 'alias',
-        string_to_replace: word,
-        alias,
-        case_sensitive: false,
-        word_boundaries: true,
-    }));
+    const rules = Object.entries(PRONUNCIATIONS).map(([word, say]) => {
+        const ipa = /^\/(.+)\/$/.exec(say)?.[1];
+        return {
+            ...(ipa ? { type: 'phoneme', phoneme: ipa, alphabet: 'ipa' } : { type: 'alias', alias: say }),
+            string_to_replace: word,
+            case_sensitive: false,
+            word_boundaries: true,
+        };
+    });
     const name = `mia.cx ${sha256(JSON.stringify(rules)).slice(0, 12)}`;
     const { pronunciation_dictionaries } = await eleven<{
         pronunciation_dictionaries: { id: string; latest_version_id: string; name: string }[];

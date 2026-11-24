@@ -126,11 +126,12 @@ export function spokenText(words: NarratedWord[]) {
 export const sha256 = (input: string) => bytesToHex(nobleSha256(utf8ToBytes(input)));
 
 /**
- * How the voice should say words it misreads: each whole word, in any case, is read as its alias. The
- * narration script keeps an ElevenLabs pronunciation dictionary of exactly these.
+ * How the voice should say words it misreads: each whole word, in any case, is read as its alias, or
+ * as its IPA when that is written between slashes. The narration script keeps an ElevenLabs
+ * pronunciation dictionary of exactly these.
  */
 export const PRONUNCIATIONS: Record<string, string> = {
-    caelestis: 'kai lestis',
+    caelestis: '/kaɪˈlɛstɪs/',
     nuphory: 'new phorie',
     wav: 'wave',
     wplace: 'double-u place',
