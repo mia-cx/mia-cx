@@ -11,6 +11,7 @@
     import Footer from '$lib/components/Footer.svelte';
     import { markdownHref } from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
+    import { jsonLd, person, website } from '$lib/content/structured-data';
     import { defineMarker } from '@mia-cx/marker';
     import { onMount } from 'svelte';
 
@@ -57,6 +58,9 @@
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="{site.name}, over a purple and pink field of light" />
     <meta name="twitter:card" content="summary_large_image" />
+    <!-- Who Mia is, for search engines and the agents recruiters search with. -->
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -- built from the site's own content, `<` escaped -->
+    {#if !bare}{@html jsonLd(person, website)}{/if}
 </svelte:head>
 
 <!-- Full strength behind the hero and on the share card; half behind reading pages. -->

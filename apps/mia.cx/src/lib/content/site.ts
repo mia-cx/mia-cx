@@ -9,7 +9,7 @@ export const site = {
     nameLines: ['Mia', 'Riezebos'],
     domain: 'mia.cx',
     url: 'https://mia.cx',
-    role: 'Creative Developer',
+    role: 'Product Engineer',
     /** Stated by Mia on ffm.bio/patch. */
     pronouns: 'she/they/none',
     location: 'Netherlands',
@@ -76,14 +76,18 @@ export const sitemap = [
 
 /** The home hero reads as one sentence: "I'm" → name → `intro`, then a link to the full biography. */
 export const intro =
-    'a designer, creative developer and music producer. I like to understand how things work, from the big picture down to the details, and I love helping people figure out what their ideas need.';
+    'a product engineer, designer, artist and musician. I like to understand how things work, from the big picture down to the details, and I love helping people figure out what their ideas need.';
 
 /** The hero's sentence as plain text: the description for home and /about, and llms.txt's summary. */
 export const summary = `I'm ${site.name}, ${intro}`;
 
+/** The work Mia is open to, shown after her biography on /about and given to agents as JSON-LD `seeks`. */
+export const openToWork =
+    'Mid-level or medior roles in product engineering or UI/UX development and design, full-time or part-time. Freelance and contract work through mia.cx. Remote or in the Netherlands, or relocating within the UK and the EU to an English-speaking team.';
+
 /** Mia's approved full biography as inline Markdown, shown above contact links on /about. */
 export const biography = [
-    "I'm Mia, a designer, creative developer and music producer, and I love helping people figure out what they or their projects and ideas need.",
+    "I'm Mia, a product engineer, designer, artist and musician, and I love helping people figure out what they or their projects and ideas need.",
     'I care deeply about making things easier to understand and better to use. Complexity should be sparse, and should be given the space it needs to be understandable. That goes for complexity in any form.',
     "To me, communication is a very important aspect to simplify. That's why working with me is casual and collaborative. I’m easy to reach, explain my reasoning, and welcome honest disagreement. I want to understand you, your business, your mission and who you're doing it for.",
     "I have experience in deep technical aspects, but I've also handled the people side of projects. For a music collective, I've led multiple collaborative compilation releases, which required quality assurance, catalog management, distribution, artist relations, and revenue splits, all on crazy time crunches. All of that carries through into my work.",

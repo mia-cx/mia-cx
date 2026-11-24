@@ -9,6 +9,7 @@
     import NarrationPlayer from '$lib/components/NarrationPlayer.svelte';
     import { formatDate, type Post, type VaultEntry } from '$lib/content/vault';
     import { site } from '$lib/content/site';
+    import { jsonLd, postData } from '$lib/content/structured-data';
 
     let {
         post,
@@ -28,6 +29,8 @@
     <title>{post.title} — {site.domain}</title>
     <meta property="og:title" content="{post.title} — {site.domain}" />
     <meta name="description" content={post.summary} />
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -- built from the vault, `<` escaped -->
+    {@html jsonLd(postData(post))}
 </svelte:head>
 
 <main class="container">

@@ -3,7 +3,7 @@
     import '$lib/styles/prose.css';
     import Contact from '$lib/components/Contact.svelte';
     import PageMarkdown from '$lib/components/PageMarkdown.svelte';
-    import { biography, site, summary } from '$lib/content/site';
+    import { biography, openToWork, site, summary } from '$lib/content/site';
 </script>
 
 <svelte:head>
@@ -20,6 +20,7 @@
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- the biography is authored in this repo -->
             <p>{@html marked.parseInline(paragraph, { async: false })}</p>
         {/each}
+        <p><strong>Open to work.</strong> {openToWork}</p>
     </div>
     <Contact />
 </main>
