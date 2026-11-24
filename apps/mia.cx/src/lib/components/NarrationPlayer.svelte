@@ -171,13 +171,14 @@
         const by = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
         if (!by) return;
         event.preventDefault();
-        // A seek still in its fade or pre-roll sits just before its block: count from the block it chose.
+        // A seek still in its fade or pre-roll sits just before its word: count from the word it chose.
         const current = held?.word ?? Math.max(0, spokenAt(time));
+        const at = held ? starts[held.word] : time;
         const block = Math.max(
             0,
             blockStarts.findLastIndex((start) => start <= current),
         );
-        const into = held ? 0 : time - starts[blockStarts[block]];
+        const into = at - starts[blockStarts[block]];
         const to = by > 0 ? block + 1 : into > RESTART_WITHIN ? block : block - 1;
         if (to >= 0 && to < blockStarts.length) seekTo(blockStarts[to]);
     }
