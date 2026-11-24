@@ -56,7 +56,16 @@ that an edit re-reads its whole section, not just its paragraph. Sections keep E
 so a change to how text splits into words needs no new audio. A budget guard stops any run over 25,000 characters unless
 it is given a bigger budget. How it works and how to run it locally: `apps/mia.cx/README.md`.
 
-It shipped in 0.4.0, with four posts narrated. The player is one icon button, atop the left gutter on wide screens and
-floating at the bottom left elsewhere; the moving highlight is the progress, so there is no time or progress bar.
-Clicking a word seeks 0.3 s before it, with a fade, and the arrow keys skip between paragraphs. Still open from #66:
-spoken cues for images and code blocks, speed, and the settings popover (#169).
+It shipped in 0.4.0, with four posts narrated. The player is a play button and a speed button (1.0× to 2.5×, pitch
+kept), atop the left gutter on wide screens and floating at the bottom left elsewhere; the moving highlight is the
+progress, so there is no time or progress bar. Clicking a word seeks 0.3 s before it, with a fade, and the arrow keys
+skip between paragraphs. Still open from #66: spoken cues for images and code blocks.
+
+## Settings
+
+The header's Settings popover (#169) holds the reader's theme, reduced motion, the field, pausing narration while
+selecting, double-click speed, and funny mode. Each persists in `localStorage` (`$lib/settings`), and theme, motion and
+field apply before first paint from `app.html`, so `app.css` and the field follow `data-motion`, not the media query.
+Funny mode winds the narration to a seek like a cassette tape, sped up forward and reversed backward with the pitch
+following the speed. Every wind takes 1.2 s; a distance further than the max wind speed covers cuts to where it can wind
+the rest. Reduced motion seeks with the plain fade.

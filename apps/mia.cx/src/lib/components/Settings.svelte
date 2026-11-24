@@ -107,7 +107,7 @@
         position-area: bottom span-left;
         position-try-fallbacks: flip-inline;
         inset: auto;
-        width: min(300px, 100vw - 32px);
+        width: min(340px, 100vw - 32px);
         margin: 10px 0 0;
         padding: 14px 16px 16px;
         border: 1px solid var(--panel-line);

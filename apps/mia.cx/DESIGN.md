@@ -60,7 +60,8 @@ The site touches the field in two ways only:
 
 The field sometimes covers the hero text. That is accepted: a glyph-mask imprint was tried and dropped.
 
-`prefers-reduced-motion` pauses the field, hidden tabs pause rendering, unmount destroys the renderer.
+Reduced motion (the reader's setting, which starts at `prefers-reduced-motion`) holds the field still, the Field
+setting turns it off, hidden tabs pause rendering, unmount destroys the renderer.
 `F` toggles the frame counter. `--atmosphere-bleed` grows the canvas past the viewport's edges, so the
 hero's camera can move it.
 
