@@ -6,20 +6,17 @@
     import '$lib/styles/prose.css';
     import Mentions from '$lib/components/Mentions.svelte';
     import PageMarkdown from '$lib/components/PageMarkdown.svelte';
-    import TableOfContents from '$lib/components/TableOfContents.svelte';
-    import { formatDate, type Heading, type Post, type VaultEntry } from '$lib/content/vault';
+    import { formatDate, type Post, type VaultEntry } from '$lib/content/vault';
     import { site } from '$lib/content/site';
 
     let {
         post,
         html,
-        headings,
         mentions,
         back,
     }: {
         post: Post;
         html: string;
-        headings: Heading[];
         mentions: (VaultEntry & { href: string })[];
         back: { title: string; href: string };
     } = $props();
@@ -48,12 +45,9 @@
             </div>
         </header>
 
-        <div class="body">
-            <TableOfContents {headings} />
-            <!-- Mia's own markdown, from the vault. -->
-            <!-- eslint-disable-next-line svelte/no-at-html-tags -- rendered from the vault, which is authored in this repo -->
-            <div class="prose">{@html html}</div>
-        </div>
+        <!-- Mia's own markdown, from the vault. -->
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -- rendered from the vault, which is authored in this repo -->
+        <div class="prose">{@html html}</div>
 
         {#if post.source}
             <p class="source mono">
@@ -99,11 +93,6 @@
     }
     .meta a {
         color: inherit;
-    }
-
-    /* The table of contents spans the body's height in the gutter beside it. */
-    .body {
-        position: relative;
     }
 
     .source {
