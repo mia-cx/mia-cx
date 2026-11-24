@@ -216,7 +216,8 @@ function createMarker(): new () => MarkerElement {
 
         /** How many ms before a word is spoken to set `word`, so an edge with a negative delay can lead. */
         get lookahead() {
-            return Math.max(0, -this.#setting('leading-delay'), -this.#setting('trailing-delay'));
+            // The applied trailing delay is never shorter than the leading one, so the leading one decides.
+            return Math.max(0, -this.#delays().lead);
         }
 
         // Typed listeners, so `seek` arrives as a `MarkerSeekEvent`.
