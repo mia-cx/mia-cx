@@ -27,8 +27,10 @@ import { mergeLines, sameLine, shapePath, shrinkTarget, wipeOrder, type Edges, t
 
 export const MARKER_TAG = 'mia-marker';
 
+// `isolation` keeps the overlay's z-index inside the marker, so the page's own layers, such as a
+// sticky header outside it, still paint over the highlight.
 const STYLES = `
-${MARKER_TAG} { display: block; position: relative; }
+${MARKER_TAG} { display: block; position: relative; isolation: isolate; }
 ${MARKER_TAG} ::selection { background: transparent; }
 ${MARKER_TAG} :is(input, textarea)::selection { background: Highlight; color: HighlightText; }
 ${MARKER_TAG} > [data-marker-overlay] {
