@@ -9,6 +9,7 @@
     import CV from '$lib/cv/CV.svelte';
     import Header from '$lib/components/Header.svelte';
     import Footer from '$lib/components/Footer.svelte';
+    import MarkerTuning from '$lib/components/MarkerTuning.svelte';
     import { markdownHref } from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
     import { jsonLd, person, website } from '$lib/content/structured-data';
@@ -90,6 +91,8 @@
 
         <Footer />
     </mia-marker>
+    <!-- Outside the marker, so its labels aren't words and its sliders keep their own selection. -->
+    <MarkerTuning />
 {/if}
 
 <!--

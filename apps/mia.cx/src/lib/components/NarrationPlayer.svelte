@@ -185,8 +185,10 @@
 
     $effect(() => {
         if (!marker) return;
-        // What's heard trails the audio's clock by the output's latency, large over Bluetooth.
-        const heard = time - (context ? context.baseLatency + (context.outputLatency || 0) : 0);
+        // What's heard trails the audio's clock by the output's latency, large over Bluetooth. The
+        // marker takes each word `lookahead` early, so an edge tuned to lead the voice can.
+        const latency = context ? context.baseLatency + (context.outputLatency || 0) : 0;
+        const heard = time - latency + marker.lookahead / 1000;
         let i = started ? spokenAt(heard) : -1;
         if (held && (!held.landed || heard < starts[held.word])) i = held.word;
         else held = undefined;

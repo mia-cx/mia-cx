@@ -11,8 +11,12 @@
  * it. Each block hugs one line of text. A block's edges move on their own clocks: an edge moving
  * outward takes `leading` ms, an edge moving inward `trailing` ms.
  *
- * Attributes: `word` (index, -1 for none), `leading`, `trailing`, `stagger`, `double-click` (ms),
- * `padding`, `radius` (px). Colours: `--marker-color` and `--marker-text`.
+ * When `word` changes, each edge starts moving `leading-delay` or `trailing-delay` ms after the
+ * word is spoken, so the trail can lag behind. A negative delay starts the edge early, ahead of
+ * the voice. To allow that, a narration sets `word` `lookahead` ms before the word is spoken.
+ *
+ * Attributes: `word` (index, -1 for none), `leading`, `trailing`, `leading-delay`, `trailing-delay`,
+ * `stagger`, `double-click` (ms), `padding`, `radius` (px). Colours: `--marker-color` and `--marker-text`.
  *
  * Selections come from the mouse or a touch long-press alike. While a word is highlighted, clicking or
  * tapping another word fires `seek`: a tap at once, a click once `double-click` ms pass without a
@@ -81,7 +85,16 @@ function overhang(node: Text) {
     return /italic|oblique/.test(style.fontStyle) ? Number.parseFloat(style.fontSize) * ITALIC_LEAN : 0;
 }
 
-const DEFAULTS = { leading: 200, trailing: 200, stagger: 150, padding: 4, radius: 0, 'double-click': 330 };
+const DEFAULTS = {
+    leading: 200,
+    trailing: 200,
+    'leading-delay': 0,
+    'trailing-delay': 0,
+    stagger: 150,
+    padding: 4,
+    radius: 0,
+    'double-click': 330,
+};
 type Setting = keyof typeof DEFAULTS;
 
 type Edge = keyof Edges;
@@ -95,7 +108,7 @@ interface Tween {
 /** Close to cubic-bezier(.2, .9, .3, 1): fast out, soft landing. */
 const ease = (x: number) => 1 - (1 - x) ** 4;
 const valueOf = ({ from, to, start, dur }: Tween, now: number) =>
-    dur <= 0 || now >= start + dur ? to : from + (to - from) * ease((now - start) / dur);
+    now < start ? from : dur <= 0 || now >= start + dur ? to : from + (to - from) * ease((now - start) / dur);
 
 interface Block {
     /** Where the block is heading; null when hidden. */
@@ -190,6 +203,11 @@ function createMarker(): new () => MarkerElement {
         /** How many words the marker holds: whitespace-separated runs of text, outside `<pre>` and `aria-hidden`. */
         get wordCount() {
             return this.#wordRanges().length;
+        }
+
+        /** How many ms before a word is spoken to set `word`, so an edge with a negative delay can lead. */
+        get lookahead() {
+            return Math.max(0, -this.#setting('leading-delay'), -this.#setting('trailing-delay'));
         }
 
         // Typed listeners, so `seek` arrives as a `MarkerSeekEvent`.
@@ -401,20 +419,24 @@ function createMarker(): new () => MarkerElement {
             const from = head.at;
             const previous = head.ref;
             head.ref = this.#refOf(holder);
-            if (!from || sameLine(from, to) || reducedMotion()) return this.#setEdges(head, to);
+            if (!from || sameLine(from, to) || reducedMotion()) return this.#setEdges(head, to, false, undefined, true);
             const forward = to.t > from.t;
             clearTimeout(this.#wrapTimer);
             Object.assign(this.#tail, { at: from, tweens: head.tweens, ref: previous });
             const edge = forward ? from.r : from.l;
-            this.#setEdges(this.#tail, { ...from, l: edge, r: edge });
-            this.#wrapTimer = setTimeout(() => this.#setEdges(this.#tail, null), this.#setting('trailing'));
+            this.#setEdges(this.#tail, { ...from, l: edge, r: edge }, false, undefined, true);
+            const gone = this.lookahead + this.#setting('trailing-delay') + this.#setting('trailing');
+            this.#wrapTimer = setTimeout(() => this.#setEdges(this.#tail, null), gone);
             const start = forward ? to.l : to.r;
             this.#setEdges(head, { ...to, l: start, r: start }, true);
-            this.#setEdges(head, to);
+            this.#setEdges(head, to, false, undefined, true);
         }
 
-        /** Sends a block toward `to`: an edge moving outward leads, one moving inward trails. */
-        #setEdges(block: Block, to: Edges | null, snap = false, ms?: number) {
+        /**
+         * Sends a block toward `to`: an edge moving outward leads, one moving inward trails. A `spoken`
+         * move is a word's: each edge waits its delay after the word is spoken, `lookahead` from now.
+         */
+        #setEdges(block: Block, to: Edges | null, snap = false, ms?: number, spoken = false) {
             clearTimeout(block.fading);
             block.fading = undefined;
             if (!to) {
@@ -425,21 +447,24 @@ function createMarker(): new () => MarkerElement {
             const now = performance.now();
             const current = block.tweens;
             const instant = snap || !current || reducedMotion();
-            const [leading, trailing] = [this.#setting('leading'), this.#setting('trailing')];
-            const durations: Record<Edge, number> = {
-                l: to.l < (block.at?.l ?? to.l) ? leading : trailing,
-                r: to.r > (block.at?.r ?? to.r) ? leading : trailing,
-                t: trailing,
-                b: trailing,
+            const leads: Record<Edge, boolean> = {
+                l: to.l < (block.at?.l ?? to.l),
+                r: to.r > (block.at?.r ?? to.r),
+                t: false,
+                b: false,
             };
+            const delayed = spoken && !snap && !!current;
+            const wait = (edge: Edge) =>
+                delayed ? this.lookahead + this.#setting(leads[edge] ? 'leading-delay' : 'trailing-delay') : 0;
             block.tweens = Object.fromEntries(
                 EDGES.map((edge) => [
                     edge,
                     {
-                        from: instant || !current ? to[edge] : valueOf(current[edge], now),
+                        // A delayed snap (reduced motion) still waits for its moment, then jumps.
+                        from: (instant && !delayed) || !current ? to[edge] : valueOf(current[edge], now),
                         to: to[edge],
-                        start: now,
-                        dur: instant ? 0 : (ms ?? durations[edge]),
+                        start: now + wait(edge),
+                        dur: instant ? 0 : (ms ?? this.#setting(leads[edge] ? 'leading' : 'trailing')),
                     },
                 ]),
             ) as Record<Edge, Tween>;
@@ -900,6 +925,8 @@ export interface MarkerElement extends HTMLElement {
     word: number;
     /** How many words the marker holds: whitespace-separated runs of text, outside `<pre>` and `aria-hidden`. */
     readonly wordCount: number;
+    /** How many ms before a word is spoken to set `word`, so an edge with a negative delay can lead. */
+    readonly lookahead: number;
     /** The index of the word at a viewport point, such as a click, or -1. */
     wordAt(x: number, y: number): number;
     /** The index of the first word at or after a point in the marker's content, or -1. */
