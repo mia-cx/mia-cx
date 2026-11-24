@@ -127,7 +127,9 @@
 
     $effect(() => {
         if (!marker) return;
-        let i = started ? spokenAt(time) : -1;
+        // What's heard trails the audio's clock by the output's latency, large over Bluetooth.
+        const heard = time - (context ? context.baseLatency + (context.outputLatency || 0) : 0);
+        let i = started ? spokenAt(heard) : -1;
         if (held && (!held.landed || time < starts[held.word])) i = held.word;
         else held = undefined;
         marker.word = i >= 0 ? words[i] : -1;
