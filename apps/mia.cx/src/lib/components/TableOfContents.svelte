@@ -24,14 +24,27 @@
         addEventListener('scroll', update, { passive: true });
         return () => removeEventListener('scroll', update);
     });
+
+    // A list taller than the viewport scrolls itself to keep the current section in sight. Only the
+    // list moves: scrollIntoView would scroll the page too.
+    let list = $state<HTMLOListElement>();
+    $effect(() => {
+        const link = current && list?.querySelector<HTMLElement>('[aria-current]');
+        if (!list || !link) return;
+        const bottom = link.offsetTop + link.offsetHeight - list.clientHeight;
+        list.scrollTop = Math.min(Math.max(list.scrollTop, bottom), link.offsetTop);
+    });
 </script>
 
 {#if sections.length > 1}
-    <nav aria-label="Contents" data-print-hide data-narration-skip>
-        <ol>
-            {#each sections as { id, text, depth } (id)}
+    <nav aria-label="Contents" data-print-hide data-markdown="skip" data-narration-skip>
+        <ol bind:this={list}>
+            {#each sections as { id, label, depth } (id)}
                 <li class:sub={depth === 3}>
-                    <a href="#{id}" aria-current={id === current ? 'location' : undefined}>{text}</a>
+                    <a href="#{id}" aria-current={id === current ? 'location' : undefined}>
+                        <!-- eslint-disable-next-line svelte/no-at-html-tags -- a heading from the vault, tags stripped -->
+                        {@html label}
+                    </a>
                 </li>
             {/each}
         </ol>

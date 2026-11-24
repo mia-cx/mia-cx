@@ -228,11 +228,15 @@ export const countByKind = (kind: Kind | 'all') =>
 export const formatDate = (iso: string, month: 'short' | 'long' = 'short') =>
     new Date(iso).toLocaleDateString('en-GB', { year: 'numeric', month, day: 'numeric', timeZone: 'UTC' });
 
+/** Strips tags to a fixed point, so markup split around another tag can't reassemble. */
+function stripTags(html: string) {
+    while (/<[^>]*>/.test(html)) html = html.replace(/<[^>]*>/g, '');
+    return html;
+}
+
 /** GitHub's heading ids, which Svartz uses for `[[Note#Heading]]` links: "Slope & Tilt" is `slope--tilt`. */
 function headingId(text: string) {
-    // Strip tags to a fixed point before normalising the heading id.
-    while (/<[^>]*>/.test(text)) text = text.replace(/<[^>]*>/g, '');
-    return text
+    return stripTags(text)
         .toLowerCase()
         .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '')
         .replace(/ /g, '-');
@@ -244,10 +248,11 @@ const sitePath = (href: string) => href.replace(/^(\/[^?#]*?)\/+(?=[?#]|$)/, '$1
 /** Where a link to each note's URL leads: its page, an outside link, or nowhere. */
 const destinations = new Map(entries.map((entry) => [entry.path, entry.href]));
 
-/** A heading in a rendered body, for its table of contents. `text` is plain, without markup. */
+/** A heading in a rendered body, for its table of contents. */
 export interface Heading {
     id: string;
-    text: string;
+    /** The heading as it reads, as HTML: tags stripped, entities kept, so `&amp;` still shows "&". */
+    label: string;
     depth: number;
 }
 
@@ -262,8 +267,9 @@ export function render(markdown: string): { html: string; headings: Heading[] } 
         const count = seen.get(base) ?? 0;
         seen.set(base, count + 1);
         const id = count === 0 ? base : `${base}-${count}`;
-        headings.push({ id, depth, text: renderer.parser.parseInline(tokens, new marked.TextRenderer()) });
-        return `<h${depth} id="${id}">${renderer.parser.parseInline(tokens)}</h${depth}>`;
+        const content = renderer.parser.parseInline(tokens);
+        headings.push({ id, depth, label: stripTags(content) });
+        return `<h${depth} id="${id}">${content}</h${depth}>`;
     };
     renderer.link = (token) => {
         const href = sitePath(token.href);

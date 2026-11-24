@@ -137,12 +137,12 @@ describe('heading ids', () => {
         expect(html).toContain('<h1 id="slope--tilt-1"><em>Slope &amp; Tilt</em></h1>');
     });
 
-    it('lists the headings in order, as plain text, under the ids they link to', () => {
-        const { headings } = render('## *Slope* & Tilt\n\ntext\n\n### Low-end\n\n## Slope & Tilt');
+    it('lists the headings in order, without their markup, under the ids they link to', () => {
+        const { headings } = render('## *Slope* & Tilt\n\ntext\n\n### <em>Low</em>-end\n\n## Slope &amp; Tilt');
         expect(headings).toEqual([
-            { id: 'slope--tilt', text: 'Slope & Tilt', depth: 2 },
-            { id: 'low-end', text: 'Low-end', depth: 3 },
-            { id: 'slope--tilt-1', text: 'Slope & Tilt', depth: 2 },
+            { id: 'slope--tilt', label: 'Slope &amp; Tilt', depth: 2 },
+            { id: 'low-end', label: 'Low-end', depth: 3 },
+            { id: 'slope-amp-tilt', label: 'Slope &amp; Tilt', depth: 2 },
         ]);
     });
 
