@@ -63,6 +63,8 @@
     $effect(() => {
         paused = still ?? matchMedia('(prefers-reduced-motion: reduce)').matches;
         renderer?.setPaused(document.hidden || paused);
+        // Going still lets go of the cursor, so the first move after resuming starts a fresh stroke.
+        if (paused) pointerLeave();
     });
 
     /*
