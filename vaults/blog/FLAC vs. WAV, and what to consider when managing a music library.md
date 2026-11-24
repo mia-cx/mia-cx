@@ -6,6 +6,7 @@ description: "Lossless means lossless. What actually differs between the formats
 created_at: "2023-10-27T00:00"
 updated_at: "2023-12-30T00:00"
 source: "https://github.com/mia-riezebos/mia-riezebos/wiki/Blog:-FLAC-vs.-WAV,-and-Considerations-for-your-Music-Library"
+narration: true
 ---
 
 FLAC is an audio format with lossless file compression (not-to-be-confused with [Dynamic Range Compression](https://en.wikipedia.org/wiki/Dynamic_range_compression)). This means that, apart from not supporting floating point bit depth, there is no difference in audio quality between FLAC and WAV. When provided with the same [sample sate](https://en.wikipedia.org/wiki/Sampling_(signal_processing)#Sampling_rate) and [bit depth](https://en.wikipedia.org/wiki/Audio_bit_depth), a FLAC file will decode to the exact same [PCM](https://en.wikipedia.org/wiki/Pulse-code_modulation) stream as a WAV file.
