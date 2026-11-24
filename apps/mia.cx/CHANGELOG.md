@@ -1,5 +1,15 @@
 # @mia-cx/mia.cx
 
+## 0.5.0
+
+### Minor Changes
+
+- d2f492b: Introduce Mia as a product engineer, designer, artist and musician, say on /about what work she is open to, and describe her, her posts and her projects to search engines and AI agents as schema.org JSON-LD.
+
+### Patch Changes
+
+- ab121d1: Mia's biography says formal education isn't a great fit for her.
+
 ## 0.4.0
 
 ### Minor Changes
