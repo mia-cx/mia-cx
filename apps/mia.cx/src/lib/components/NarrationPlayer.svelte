@@ -187,9 +187,9 @@
         if (!marker) return;
         // What's heard trails the audio's clock by the output's latency, large over Bluetooth. The
         // marker takes each word `lookahead` early, so an edge tuned to lead the voice can.
-        const latency = context ? context.baseLatency + (context.outputLatency || 0) : 0;
-        const heard = time - latency + marker.lookahead / 1000;
-        let i = started ? spokenAt(heard) : -1;
+        const heard = time - (context ? context.baseLatency + (context.outputLatency || 0) : 0);
+        let i = started ? spokenAt(heard + marker.lookahead / 1000) : -1;
+        // A sought word holds through the pre-roll until it is heard, however far the marker leads.
         if (held && (!held.landed || heard < starts[held.word])) i = held.word;
         else held = undefined;
         marker.word = i >= 0 ? markerWord(marker, i) : -1;
