@@ -3,8 +3,8 @@
     clicking a word while it plays seeks there, and with the button focused the arrow keys skip between
     paragraphs. The moving highlight is the progress, so the control is one icon button: headphones
     before it starts, then pause or play. A second button beside it cycles the playback speed. The
-    reader's settings (`$lib/settings`) can pause it while text is selected, and in funny mode a seek
-    winds the tape there instead of fading. It finds the audio by a hash of
+    reader's settings (`$lib/settings`) can pause it while text is selected, and funny mode makes it a
+    cassette: seeks wind the tape, pauses and plays stop and start it. It finds the audio by a hash of
     exactly what the page reads (`$lib/narration/extract`), so it appears only once that text has been
     narrated.
 -->
@@ -20,10 +20,18 @@
     const PRE_ROLL = 0.3;
     const FADE_IN = 0.25;
     const FADE_OUT = 0.12;
-    /** Every wind takes this long, however far it goes. */
+    /** Funny mode's tape moves: every wind takes `WIND`, however far it goes; a stop and a start are quicker. */
     const WIND = 1.2;
-    /** The voice cuts out this quickly as a wind takes over: fast, but without a click. */
+    const STOP = 0.6;
+    const START = 0.4;
+    /** Even a short wind bulges this far past the reader's speed, so it is heard as one. */
+    const MIN_BULGE = 1;
+    /** The voice hands over to and from the tape this quickly: fast, but without a click. */
     const CUT = 0.03;
+    /** Points on each speed curve; the browser ramps straight between them. */
+    const STEPS = 64;
+    /** Tape a spin carries past its end, in seconds, to cover the audio starting up again. */
+    const TAIL = 1;
 
     let src = $state<string>();
     let audio = $state<HTMLAudioElement>();
@@ -73,6 +81,7 @@
         gain.gain.linearRampToValueAtTime(to, now + seconds);
     }
 
+    /** Plays with a fade in, or in funny mode as a tape start: from still up to the reader's speed. */
     async function play() {
         if (!audio) return;
         playing = true;
@@ -82,6 +91,13 @@
             context = new AudioContext();
             gain = context.createGain();
             context.createMediaElementSource(audio).connect(gain).connect(context.destination);
+        }
+        if (spin || taped()) {
+            await context.resume();
+            const { at, rate, direction } = tapeNow();
+            const from = direction > 0 ? rate : 0;
+            const speed = settings.speed.value;
+            return turn(at, 1, (k) => from + (speed - from) * Math.sin((Math.PI / 2) * k), START, true);
         }
         gain.gain.value = 0;
         try {
@@ -95,16 +111,16 @@
         fade(1, FADE_IN);
     }
 
+    /** Pauses with a fade out, or in funny mode as a tape stop: the speed and pitch slide down to still. */
     function pause() {
         playing = false;
         pausedBySelection = false;
         clearTimeout(pending);
-        // Mid-wind the voice is already silent: stop the tape where the wind was headed.
-        if (wind) {
-            wind.land();
-            stopWind();
-            audio?.pause();
-            return;
+        if (spin || taped()) {
+            // A wind cut short never reaches its word, so the highlight follows the tape instead.
+            held = undefined;
+            const { at, rate, direction } = tapeNow();
+            return turn(at, direction, (k) => rate * Math.cos((Math.PI / 2) * k), STOP, false);
         }
         fade(0, FADE_OUT);
         pending = setTimeout(() => audio?.pause(), FADE_OUT * 1000);
@@ -121,91 +137,169 @@
     }
 
     /**
-     * Funny mode's tape: the narration decoded, since an audio element can't play backwards. Loaded
-     * once funny mode can wind and the narration plays; seeks fade as usual until it is ready. A failed
-     * load is reported and tried again on the next play.
+     * Funny mode's tape: the narration decoded, since an audio element can't play backwards or let its
+     * pitch follow its speed. Loaded as soon as funny mode can use it, so the first play already
+     * starts like a tape; until it is ready, playing, pausing and seeking fade as usual. A failed load
+     * is reported and tried again when funny mode is next switched on.
      */
-    let tape: AudioBuffer | undefined;
-    let tapeLoad: Promise<void> | undefined;
+    let tape = $state<AudioBuffer>();
     $effect(() => {
-        if (!settings.funny.value || settings.motion.value === 'reduce' || !playing) return;
-        if (tape || tapeLoad || !context || !src) return;
-        const decoder = context;
-        tapeLoad = fetch(src)
+        if (!settings.funny.value || settings.motion.value === 'reduce' || !src || tape) return;
+        let gone = false;
+        fetch(src)
             .then((response) => {
                 if (!response.ok) throw new Error(`Narration audio: ${response.status}`);
                 return response.arrayBuffer();
             })
-            .then((data) => decoder.decodeAudioData(data))
-            .then((buffer) => void (tape = buffer))
-            .catch((error) => console.error('Funny mode could not load the tape', error))
-            .finally(() => (tapeLoad = undefined));
+            // Any context decodes; a source in the live one resamples the buffer if their rates differ.
+            .then((data) => new OfflineAudioContext({ length: 1, sampleRate: 48000 }).decodeAudioData(data))
+            .then((buffer) => void (gone || (tape = buffer)))
+            .catch((error) => console.error('Funny mode could not load the tape', error));
+        return () => (gone = true);
     });
+    const taped = () => tape !== undefined && settings.funny.value && settings.motion.value === 'full';
 
-    /** The wind playing now: where on the tape it starts and lands, when it began, and how it lands. */
-    let wind: { source: AudioBufferSourceNode; from: number; to: number; begun: number; land: () => void } | undefined;
+    /**
+     * The tape moving now: where it started, which way, and its speed over time, as `STEPS + 1` evenly
+     * spaced rates the browser ramps between.
+     */
+    let spin:
+        | {
+              source: AudioBufferSourceNode;
+              from: number;
+              direction: number;
+              rates: Float32Array;
+              seconds: number;
+              begun: number;
+          }
+        | undefined;
 
-    /** Where the tape is mid-wind: the wind's speed follows half a sine, so its distance follows a cosine. */
-    function windAt({ from, to, begun }: NonNullable<typeof wind>, now: number) {
-        const progress = Math.min(1, (now - begun) / WIND);
-        return from + ((to - from) * (1 - Math.cos(Math.PI * progress))) / 2;
+    /** How much tape `rates` over `seconds` move in the first `elapsed` seconds: the area under the ramps. */
+    function travel(rates: Float32Array, seconds: number, elapsed = seconds) {
+        const step = seconds / STEPS;
+        let distance = 0;
+        for (let k = 0; k < STEPS && k * step < elapsed; k++) {
+            const part = Math.min(step, elapsed - k * step);
+            const end = rates[k] + ((rates[k + 1] - rates[k]) * part) / step;
+            distance += ((rates[k] + end) / 2) * part;
+        }
+        return distance;
     }
 
-    function stopWind() {
-        if (!wind) return;
-        wind.source.onended = null;
-        wind.source.stop();
-        wind = undefined;
+    /** Where the tape is, how fast it moves and which way: the spin's if one is playing, else the audio's. */
+    function tapeNow() {
+        if (!spin) return { at: audio!.currentTime, rate: audio!.paused ? 0 : settings.speed.value, direction: 1 };
+        const elapsed = Math.min(spin.seconds, context!.currentTime - spin.begun);
+        const k = Math.min(STEPS - 1, Math.floor((elapsed / spin.seconds) * STEPS));
+        const into = (elapsed / spin.seconds) * STEPS - k;
+        return {
+            at: spin.from + spin.direction * travel(spin.rates, spin.seconds, elapsed),
+            rate: spin.rates[k] + (spin.rates[k + 1] - spin.rates[k]) * into,
+            direction: spin.direction,
+        };
+    }
+
+    /** The moment a spin reaches its end and the audio takes over again. */
+    let landing: ReturnType<typeof setTimeout> | undefined;
+
+    function stopSpin() {
+        clearTimeout(landing);
+        if (!spin) return;
+        spin.source.onended = null;
+        spin.source.stop();
+        spin = undefined;
+        clearTimeout(pending);
+        audio?.pause();
     }
 
     /**
-     * Winds the tape from `from` to `to` like a cassette: forward plays the stretch between sped up,
-     * back plays it reversed, and the pitch follows the speed. The speed rises from still to its peak
-     * and slows into the target over `WIND`, never past the reader's max wind speed. A distance
-     * further than that allows cuts to where the wind can still cover the rest.
+     * Moves the tape like a cassette: plays it from `from`, forward or reversed (`direction` 1 or -1),
+     * its speed following `speed` (from 0 to 1 over `seconds`) with the pitch following along. The voice
+     * hands over to the tape, and the audio waits silent where the tape will stop; then it plays on
+     * from there if `resume`, and `landed` runs.
      */
-    function windTo(tapeBuffer: AudioBuffer, from: number, to: number, land: () => void) {
+    function turn(
+        from: number,
+        direction: number,
+        speed: (k: number) => number,
+        seconds: number,
+        resume: boolean,
+        landed?: () => void,
+    ) {
+        stopSpin();
+        clearTimeout(pending);
         const decoder = context!;
-        const now = decoder.currentTime;
-        // Half a sine over `WIND` peaking at the max wind speed covers this much tape.
-        const reach = (2 * WIND * settings.windSpeed.value) / Math.PI;
-        const forward = to >= from;
-        const start = forward ? Math.max(from, to - reach) : Math.min(from, to + reach);
-        const span = Math.abs(to - start);
-        const rate = tapeBuffer.sampleRate;
-        const first = Math.floor(Math.min(start, to) * rate);
-        const last = Math.ceil(Math.max(start, to) * rate);
-        const stretch = decoder.createBuffer(tapeBuffer.numberOfChannels, Math.max(1, last - first), rate);
-        for (let channel = 0; channel < tapeBuffer.numberOfChannels; channel++) {
-            const samples = tapeBuffer.getChannelData(channel).slice(first, last);
-            if (!forward) samples.reverse();
-            stretch.copyToChannel(samples, channel);
+        const reel = tape!;
+        const onReel = (t: number) => Math.min(reel.duration, Math.max(0, t));
+        from = onReel(from);
+        const rates = Float32Array.from({ length: STEPS + 1 }, (_, k) => Math.max(0, speed(k / STEPS)));
+        const to = onReel(from + direction * travel(rates, seconds));
+        // The stretch the spin crosses, reversed when winding back, then, if the audio resumes after,
+        // `TAIL` of tape onward from `to` to play at the last rate until the audio is heard again.
+        const sample = (t: number) => Math.round(t * reel.sampleRate);
+        const [first, last] = [sample(Math.min(from, to)), sample(Math.max(from, to))];
+        const tail = resume ? sample(onReel(to + TAIL)) - sample(to) : 0;
+        const stretch = decoder.createBuffer(reel.numberOfChannels, Math.max(1, last - first + tail), reel.sampleRate);
+        for (let channel = 0; channel < reel.numberOfChannels; channel++) {
+            const data = reel.getChannelData(channel);
+            const crossed = data.slice(first, last);
+            if (direction < 0) crossed.reverse();
+            stretch.copyToChannel(crossed, channel);
+            stretch.copyToChannel(data.subarray(sample(to), sample(to) + tail), channel, last - first);
         }
         const source = decoder.createBufferSource();
         source.buffer = stretch;
-        const peak = (Math.PI * span) / (2 * WIND);
-        const steps = 64;
-        source.playbackRate.setValueCurveAtTime(
-            Float32Array.from({ length: steps + 1 }, (_, k) => peak * Math.sin((Math.PI * k) / steps)),
-            now,
-            WIND,
-        );
-        source.connect(decoder.destination);
-        source.onended = () => {
-            wind = undefined;
-            land();
-            fade(1, FADE_IN);
-            void audio!.play();
-        };
+        const out = decoder.createGain();
+        source.connect(out).connect(decoder.destination);
+        const now = decoder.currentTime;
+        source.playbackRate.setValueCurveAtTime(rates, now, seconds);
         source.start(now);
-        source.stop(now + WIND);
-        wind = { source, from: start, to, begun: now, land };
-        // The voice cuts out as the tape takes over, and waits at the target, loading, until it lands.
+        const current = { source, from, direction, rates, seconds, begun: now };
+        spin = current;
+        if (!resume) {
+            source.stop(now + seconds);
+            source.onended = () => (spin = undefined);
+        } else {
+            landing = setTimeout(() => {
+                landed?.();
+                void audio!.play().then(() => {
+                    if (spin !== current) return;
+                    // The voice takes back over from the tape, which ran on at the reader's speed until it could.
+                    const at = decoder.currentTime;
+                    out.gain.setValueAtTime(1, at);
+                    out.gain.linearRampToValueAtTime(0, at + CUT);
+                    source.stop(at + CUT);
+                    spin = undefined;
+                    fade(1, CUT);
+                });
+            }, seconds * 1000);
+        }
         fade(0, CUT);
         pending = setTimeout(() => {
             audio!.pause();
             audio!.currentTime = to;
         }, CUT * 1000);
+    }
+
+    /**
+     * Winds the tape to `to`: forward sped up, back reversed, the speed rising from where it is to a
+     * peak and slowing into the reader's speed over `WIND`. The peak stays within the max wind speed
+     * and bulges at least `MIN_BULGE` times the reader's speed past the straight line between, so a
+     * distance outside that range cuts to where a wind can cover the rest.
+     */
+    function windTo(to: number, landed: () => void) {
+        const { at, rate, direction: was } = tapeNow();
+        const direction = to >= at ? 1 : -1;
+        const speed = settings.speed.value;
+        const from = direction === was ? rate : speed;
+        // Speed is a straight line from `from` to `speed` plus half a sine of height `bulge`.
+        const line = ((from + speed) / 2) * WIND;
+        const widest = Math.max(0, settings.windSpeed.value - (from + speed) / 2);
+        const wanted = ((Math.abs(to - at) - line) * Math.PI) / (2 * WIND);
+        const bulge = Math.min(widest, Math.max(MIN_BULGE * speed, wanted));
+        const start = to - direction * (line + (bulge * 2 * WIND) / Math.PI);
+        const curve = (k: number) => from + (speed - from) * k + bulge * Math.sin(Math.PI * k);
+        turn(start, direction, curve, WIND, true, landed);
     }
 
     /**
@@ -221,14 +315,13 @@
             audio!.currentTime = to;
             sought.landed = true;
         };
-        if (!playing) return land();
+        if (!playing) {
+            stopSpin();
+            return land();
+        }
+        // A seek mid-spin winds on from wherever the tape has got to.
+        if (spin || taped()) return windTo(to, () => (sought.landed = true));
         clearTimeout(pending);
-        // A seek mid-wind winds on from wherever the tape has got to.
-        const winding = wind;
-        const from = winding ? windAt(winding, context!.currentTime) : audio.currentTime;
-        stopWind();
-        if (tape && (winding || (settings.funny.value && settings.motion.value === 'full')))
-            return windTo(tape, from, to, land);
         fade(0, FADE_OUT);
         pending = setTimeout(() => {
             land();
@@ -281,7 +374,7 @@
         return () => {
             gone = true;
             clearTimeout(pending);
-            stopWind();
+            stopSpin();
             host.removeEventListener('seek', seek);
             if (marker) marker.word = -1;
             void context?.close();
@@ -336,8 +429,8 @@
 
 {#if src}
     <!--
-        Play and pause from elsewhere, such as the lock screen, keep `playing` honest too. A wind pauses
-        the audio itself while the tape plays on.
+        Play and pause from elsewhere, such as the lock screen, keep `playing` honest too. Funny mode's
+        tape pauses the audio itself while it spins.
     -->
     <audio
         bind:this={audio}
@@ -346,7 +439,7 @@
         bind:currentTime={time}
         bind:paused
         onplay={() => (playing = true)}
-        onpause={() => !wind && (playing = false)}
+        onpause={() => !spin && (playing = false)}
         onended={() => (time = 0)}
     ></audio>
     <div class="controls" data-print-hide data-markdown="skip" data-narration-skip>

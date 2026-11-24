@@ -66,6 +66,7 @@ skip between paragraphs. Still open from #66: spoken cues for images and code bl
 The header's Settings popover (#169) holds the reader's theme, reduced motion, the field, pausing narration while
 selecting, double-click speed, and funny mode. Each persists in `localStorage` (`$lib/settings`), and theme, motion and
 field apply before first paint from `app.html`, so `app.css` and the field follow `data-motion`, not the media query.
-Funny mode winds the narration to a seek like a cassette tape, sped up forward and reversed backward with the pitch
-following the speed. Every wind takes 1.2 s; a distance further than the max wind speed covers cuts to where it can wind
-the rest. Reduced motion seeks with the plain fade.
+Funny mode makes the narration a cassette tape, with the pitch following the speed: a seek winds there (sped up forward,
+reversed back) and slows into the reader's playback speed, a pause is a tape stop and a play a tape start. It plays the
+decoded audio through Web Audio for each move, then hands back to the audio element. Every wind takes 1.2 s; a distance
+outside what the max wind speed covers cuts to where a wind can cover the rest. Reduced motion keeps the plain fades.
