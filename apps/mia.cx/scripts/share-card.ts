@@ -6,11 +6,12 @@
  *   pnpm share-card [base-url] [devtools-url]
  *   pnpm share-card --tab [devtools-url]    capture the /og tab you already have open, as it is now
  *
- * Start that Chromium with --remote-debugging-port=9222. A real browser draws the field with WebGPU
- * at full resolution; automation browsers and headless software renderers do not. The page keeps the
+ * Start that Chromium with --remote-debugging-port=9222 and --disable-backgrounding-occluded-windows,
+ * so a window behind your work keeps drawing. A real browser draws the field with WebGPU at full
+ * resolution; automation browsers and headless software renderers do not. The page keeps the
  * window's real size, since the field is a full-viewport canvas and a shrunken viewport changes how
- * it renders; the card sits centred on it and only the card is captured, at 1200×630. The
- * tab opens in front, since a background tab pauses the field, and closes when done.
+ * it renders; the card sits centred on it and only the card is captured, at 1200×630. The card opens
+ * in its own window behind yours, never taking focus, and closes when done.
  */
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +27,8 @@ const out = fileURLToPath(new URL('../static/og.jpg', import.meta.url));
 const { webSocketDebuggerUrl } = (await (await fetch(`${devtools}/json/version`)).json()) as {
     webSocketDebuggerUrl: string;
 };
-const socket = new WebSocket(webSocketDebuggerUrl);
+// The browser names its own host and port, which differ from ours behind a tunnel; keep ours.
+const socket = new WebSocket(new URL(new URL(webSocketDebuggerUrl).pathname, devtools.replace(/^http/, 'ws')));
 await new Promise((resolve, reject) => {
     socket.onopen = resolve;
     socket.onerror = reject;
@@ -57,12 +59,13 @@ const open = current
 if (current && !open) throw new Error('no open tab on /og');
 const { targetId } = open
     ? { targetId: open.id }
-    : await send<{ targetId: string }>('Target.createTarget', { url: 'about:blank', background: false });
+    : await send<{ targetId: string }>('Target.createTarget', { url: 'about:blank', newWindow: true, background: true });
 try {
     const { sessionId } = await send<{ sessionId: string }>('Target.attachToTarget', { targetId, flatten: true });
     const run = <T = Record<string, unknown>>(method: string, params = {}) => send<T>(method, params, sessionId);
     await run('Page.enable');
-    await run('Page.bringToFront');
+    // The page behaves as focused, so the field animates without the window coming to the front.
+    await run('Emulation.setFocusEmulationEnabled', { enabled: true });
     if (!current) await run('Page.navigate', { url: `${base}/og` });
 
     // Ready once the field has drawn its first frame and the entrance has finished.
