@@ -21,12 +21,13 @@
  *
  * Selections come from the mouse or a touch long-press alike. While a word is highlighted, clicking or
  * tapping another word fires `seek`: a tap at once, a click once `double-click` ms pass without a
- * second click, since a double-click selects the word instead.
+ * second click, since a double-click selects the word instead. Meanwhile `double-click` is also what
+ * makes two clicks a double-click, whatever the system's own speed.
  *
  * The redrawn text is a copy of the marker's children inside it, so style the content with
  * descendant selectors (`.prose p`), not child selectors on the marker. Form fields and forced-colors
- * mode keep the native selection; reduced motion, or `data-motion="reduce"` on `<html>`, makes every
- * change snap.
+ * mode keep the native selection; reduced motion makes every change snap. `data-motion="reduce"` or
+ * `"full"` on `<html>` overrides the system's reduced-motion setting.
  */
 import { mergeLines, sameLine, shapePath, shrinkTarget, wipeOrder, type Edges, type Point } from './geometry';
 
@@ -133,8 +134,16 @@ const newBlock = (): Block => ({ at: null, tweens: null, generation: 0, moved: {
 /** Elements whose lines read as one unit: the gaps between their lines fill once wholly selected. */
 const UNIT = 'p, li, dt, dd, blockquote, pre, figcaption, td, th, h1, h2, h3, h4, h5, h6';
 const headingLevel = (el: Element) => Number(/^H([1-6])$/.exec(el.tagName)?.[1] ?? 0);
-const reducedMotion = () =>
-    matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.motion === 'reduce';
+/** Clicks on these are the control's own, never a seek or a double-click of the marker's. */
+const CONTROLS = 'a, button, input, textarea, select, label, summary, [contenteditable]';
+/** How far apart, in px, two presses can be and still make a double-click; systems allow a few. */
+const DOUBLE_CLICK_SLOP = 6;
+const NO_PRESS = { at: -Infinity, x: 0, y: 0 };
+/** `data-motion` on `<html>`, the reader's own choice of `reduce` or `full`, wins over the system's setting. */
+const reducedMotion = () => {
+    const chosen = document.documentElement.dataset.motion;
+    return chosen ? chosen === 'reduce' : matchMedia('(prefers-reduced-motion: reduce)').matches;
+};
 
 /** Registers `<mia-marker>`. Safe to call more than once, and a no-op on the server. */
 export function defineMarker() {
@@ -711,6 +720,10 @@ function createMarker(): new () => MarkerElement {
         #hadSelection = false;
         /** When the latest first click began; the double-click window runs from here. */
         #firstPress = 0;
+        /** When and where the latest press on the marker's text began. */
+        #lastPress = NO_PRESS;
+        /** Whether the latest press made a double-click (or more) by the marker's window. */
+        #double = false;
         /** The word a click is waiting to seek to, or -1. */
         #seeking = -1;
         #seekTimer: ReturnType<typeof setTimeout> | undefined;
@@ -722,10 +735,43 @@ function createMarker(): new () => MarkerElement {
             this.#deselectAt = this.#selecting ? { x: local.l, y: local.t } : undefined;
         };
 
-        /** Mouse events count clicks: the second press of a double-click drops a waiting seek. */
+        /**
+         * While a word is highlighted, the `double-click` setting decides what a double-click is, since
+         * browsers keep the system's own speed to themselves: a second press inside it selects the word
+         * and drops the waiting seek, and one outside it is a fresh click, whatever the browser counted.
+         * Triple clicks, clicks outside the marker or on its controls, and every click with nothing
+         * highlighted stay the browser's.
+         */
         #onMouseDown = (event: MouseEvent) => {
-            if (event.detail < 2) this.#firstPress = performance.now();
-            else if (this.#seeking >= 0) this.#dropSeek();
+            const now = performance.now();
+            const target = event.target as Element;
+            // Only presses on the marker's own text pair up, and only near the same spot, as the system's do.
+            const text = this.contains(target) && !target.closest(CONTROLS);
+            const last = this.#lastPress;
+            const double =
+                text &&
+                now - last.at < this.#setting('double-click') &&
+                Math.hypot(event.clientX - last.x, event.clientY - last.y) <= DOUBLE_CLICK_SLOP;
+            this.#lastPress = text ? { at: now, x: event.clientX, y: event.clientY } : NO_PRESS;
+            this.#double = double || event.detail > 2;
+            const own = this.#index >= 0 && this.#pointer === 'mouse' && event.button === 0 && event.detail < 3;
+            if (!own || !text) return;
+            if (!double) {
+                this.#firstPress = now;
+                if (event.detail === 2) event.preventDefault();
+                return;
+            }
+            this.#dropSeek();
+            if (event.detail === 2) return;
+            event.preventDefault();
+            const word = this.#wordRanges()[this.wordAt(event.clientX, event.clientY)];
+            if (word)
+                getSelection()?.setBaseAndExtent(
+                    word.startContainer,
+                    word.startOffset,
+                    word.endContainer,
+                    word.endOffset,
+                );
         };
 
         /**
@@ -734,13 +780,8 @@ function createMarker(): new () => MarkerElement {
          * when the double-click window closes, unless a second click makes it a double-click.
          */
         #onClick = (event: MouseEvent) => {
-            if (this.#index < 0 || event.detail !== 1 || event.button !== 0) return;
-            if (
-                (event.target as Element).closest(
-                    'a, button, input, textarea, select, label, summary, [contenteditable]',
-                )
-            )
-                return;
+            if (this.#index < 0 || event.button !== 0 || (event.target as Element).closest(CONTROLS)) return;
+            if (this.#pointer === 'mouse' ? this.#double : event.detail !== 1) return;
             // A click that clears a selection only deselects; one that ends a drag only selects.
             if (this.#hadSelection || !getSelection()?.isCollapsed) return;
             const word = this.wordAt(event.clientX, event.clientY);

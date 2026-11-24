@@ -46,7 +46,9 @@ marker.addEventListener('seek', (event) => (audio.currentTime = startOf(event.de
 
 `seek` fires only while a word is highlighted. A tap fires it at once, since touch selects by long press.
 A click moves the cursor at once and fires it when `double-click` ms have passed since the press, so a
-double-click selects its word instead; meanwhile the cursor holds on the clicked word. Clicks on links and
+double-click selects its word instead; meanwhile the cursor holds on the clicked word. While a word is
+highlighted, `double-click` also decides which two clicks make a double-click, whatever the system's own
+speed, so a reader can match it to how they click. Clicks on links and
 controls, clicks that clear a selection and the end of a drag never seek. `marker.wordAt(x, y)` maps any
 other point to a word.
 
@@ -93,5 +95,6 @@ space is selected.
 Colours come from `--marker-color` and `--marker-text` (system highlight colours by default). The
 redrawn text is a copy of the marker's children inside it, so style its content with descendant
 selectors (`.prose p`), not child selectors on the marker. Form fields and forced-colors mode keep the
-native selection, and reduced motion (or `data-motion="reduce"` on `<html>`) makes every change snap.
+native selection, and reduced motion makes every change snap. `data-motion="reduce"` or `"full"` on
+`<html>` overrides the system's reduced-motion setting.
 Safari on iOS still draws its system selection around the highlight, with its handles.
