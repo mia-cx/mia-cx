@@ -136,6 +136,9 @@ const UNIT = 'p, li, dt, dd, blockquote, pre, figcaption, td, th, h1, h2, h3, h4
 const headingLevel = (el: Element) => Number(/^H([1-6])$/.exec(el.tagName)?.[1] ?? 0);
 /** Clicks on these are the control's own, never a seek or a double-click of the marker's. */
 const CONTROLS = 'a, button, input, textarea, select, label, summary, [contenteditable]';
+/** How far apart, in px, two presses can be and still make a double-click; systems allow a few. */
+const DOUBLE_CLICK_SLOP = 6;
+const NO_PRESS = { at: -Infinity, x: 0, y: 0 };
 /** `data-motion` on `<html>`, the reader's own choice of `reduce` or `full`, wins over the system's setting. */
 const reducedMotion = () => {
     const chosen = document.documentElement.dataset.motion;
@@ -717,8 +720,9 @@ function createMarker(): new () => MarkerElement {
         #hadSelection = false;
         /** When the latest first click began; the double-click window runs from here. */
         #firstPress = 0;
-        /** When the latest press began, and whether it made a double-click (or more) by the marker's window. */
-        #lastPress = -Infinity;
+        /** When and where the latest press on the marker's text began. */
+        #lastPress = NO_PRESS;
+        /** Whether the latest press made a double-click (or more) by the marker's window. */
         #double = false;
         /** The word a click is waiting to seek to, or -1. */
         #seeking = -1;
@@ -735,15 +739,23 @@ function createMarker(): new () => MarkerElement {
          * While a word is highlighted, the `double-click` setting decides what a double-click is, since
          * browsers keep the system's own speed to themselves: a second press inside it selects the word
          * and drops the waiting seek, and one outside it is a fresh click, whatever the browser counted.
-         * Triple clicks, and every click with nothing highlighted, stay the browser's.
+         * Triple clicks, clicks outside the marker or on its controls, and every click with nothing
+         * highlighted stay the browser's.
          */
         #onMouseDown = (event: MouseEvent) => {
             const now = performance.now();
-            const double = now - this.#lastPress < this.#setting('double-click');
-            this.#lastPress = now;
+            const target = event.target as Element;
+            // Only presses on the marker's own text pair up, and only near the same spot, as the system's do.
+            const text = this.contains(target) && !target.closest(CONTROLS);
+            const last = this.#lastPress;
+            const double =
+                text &&
+                now - last.at < this.#setting('double-click') &&
+                Math.hypot(event.clientX - last.x, event.clientY - last.y) <= DOUBLE_CLICK_SLOP;
+            this.#lastPress = text ? { at: now, x: event.clientX, y: event.clientY } : NO_PRESS;
             this.#double = double || event.detail > 2;
             const own = this.#index >= 0 && this.#pointer === 'mouse' && event.button === 0 && event.detail < 3;
-            if (!own || (event.target as Element).closest(CONTROLS)) return;
+            if (!own || !text) return;
             if (!double) {
                 this.#firstPress = now;
                 if (event.detail === 2) event.preventDefault();
