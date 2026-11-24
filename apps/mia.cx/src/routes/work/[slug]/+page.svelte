@@ -3,6 +3,7 @@
     import Mentions from '$lib/components/Mentions.svelte';
     import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import { site } from '$lib/content/site';
+    import { jsonLd, projectData } from '$lib/content/structured-data';
     import { formatDate } from '$lib/content/vault';
 
     let { data } = $props();
@@ -13,6 +14,8 @@
     <title>{note.title} — {site.domain}</title>
     <meta property="og:title" content="{note.title} — {site.domain}" />
     <meta name="description" content={note.summary} />
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -- built from the vault, `<` escaped -->
+    {@html jsonLd(projectData(note))}
 </svelte:head>
 
 <main class="container">

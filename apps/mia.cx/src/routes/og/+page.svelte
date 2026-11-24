@@ -18,7 +18,7 @@
         <div class="words">
             <p class="lead">I'm</p>
             <h1>{site.name}</h1>
-            <p class="role">Designer, creative developer and music producer</p>
+            <p class="role">Product engineer, designer, artist and musician</p>
         </div>
     </main>
 </div>
