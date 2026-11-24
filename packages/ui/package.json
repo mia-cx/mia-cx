@@ -12,10 +12,6 @@
       "default": "./src/index.ts"
     },
     "./tokens.css": "./src/tokens.css",
-    "./marker": {
-      "types": "./src/marker.ts",
-      "default": "./src/marker.ts"
-    },
     "./*.svelte": {
       "types": "./src/*.svelte",
       "svelte": "./src/*.svelte",

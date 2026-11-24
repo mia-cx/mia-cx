@@ -1,0 +1,64 @@
+name: Packages
+
+# Publishes the packages listed below to npm. A package's version only changes when the Changesets
+# release pull request merges, so every push to main publishes whichever listed package has a version
+# npm doesn't have yet, and nothing otherwise. npm trusts this workflow directly (trusted publishing),
+# so no npm token is stored, and each release carries provenance for its commit. Only main publishes:
+# there is no manual trigger, and the npm-publish environment accepts main alone.
+on:
+    push:
+        branches:
+            - main
+
+concurrency:
+    group: packages
+    cancel-in-progress: false
+
+jobs:
+    publish:
+        name: Publish new package versions
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        environment: npm-publish
+        permissions:
+            contents: read
+            id-token: write
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Set up pnpm
+              uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+            - name: Set up Node.js
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version-file: .nvmrc
+                  cache: pnpm
+                  registry-url: https://registry.npmjs.org
+
+            # Installing also builds each package, through its `prepare` script.
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Install npm with trusted publishing
+              run: npm install --global npm@11.17.0
+
+            # Only packages named here publish, each with its own trusted publisher on npm. Others in the
+            # workspace may be marked public but are versioned elsewhere, such as @mia-cx/config.
+            - name: Publish versions npm doesn't have
+              shell: bash
+              env:
+                  PACKAGES: packages/marker
+              run: |
+                  for dir in $PACKAGES; do
+                    manifest="$dir/package.json"
+                    name="$(node -p "require('./$manifest').name")"
+                    version="$(node -p "require('./$manifest').version")"
+                    if npm view "$name@$version" version >/dev/null 2>&1; then
+                      echo "$name@$version is already on npm"
+                      continue
+                    fi
+                    echo "Publishing $name@$version"
+                    (cd "$dir" && npm publish)
+                  done
