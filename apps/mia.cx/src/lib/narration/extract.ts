@@ -53,34 +53,43 @@ const silent = (el: Element) =>
     el.hasAttribute('hidden') ||
     el.hasAttribute('data-narration-skip');
 
+/** A link whose text is its own URL, such as `https://mia.cx`: read as one word, without the scheme. */
+const BARE_URL = /^(https?:\/\/)(\S+)$/;
+
 /** The blocks of words narrated inside a `data-narration` region, in reading order. */
 export function narratedBlocks(region: Element): NarratedBlock[] {
     const blocks: NarratedBlock[] = [];
     let owner: Element | undefined;
     let last: { node: Text; end: number } | undefined;
 
+    const push = (block: Element, node: Text, start: number, end: number, text: string) => {
+        if (owner !== block) {
+            owner = block;
+            last = undefined;
+            blocks.push({ words: [] });
+        }
+        // A word that starts its text node right where the previous one ended, with no space on
+        // either side, is the same written word split by markup.
+        const joined = !!last && last.node !== node && start === 0 && last.end === last.node.data.length;
+        blocks.at(-1)!.words.push({ node, start, end, text, joined });
+        last = { node, end };
+    };
+
     const visit = (node: Node, block: Element) => {
         if (node.nodeType === TEXT_NODE) {
             const text = node as Text;
-            for (const match of text.data.matchAll(/\S+/g)) {
-                if (owner !== block) {
-                    owner = block;
-                    last = undefined;
-                    blocks.push({ words: [] });
-                }
-                // A word that starts its text node right where the previous one ended, with no space on
-                // either side, is the same written word split by markup.
-                const joined = !!last && last.node !== text && match.index === 0 && last.end === last.node.data.length;
-                const end = match.index + match[0].length;
-                blocks.at(-1)!.words.push({ node: text, start: match.index, end, text: match[0], joined });
-                last = { node: text, end };
-            }
+            for (const match of text.data.matchAll(/\S+/g))
+                push(block, text, match.index, match.index + match[0].length, match[0]);
             // Whitespace after the last word separates it from whatever follows.
             if (last?.node === text && last.end < text.data.length) last = { node: text, end: -1 };
             return;
         }
         if (node.nodeType !== ELEMENT_NODE || silent(node as Element)) return;
         const el = node as Element;
+        const only = el.childNodes.length === 1 ? el.firstChild : null;
+        const url =
+            el.tagName.toUpperCase() === 'A' && only?.nodeType === TEXT_NODE && BARE_URL.exec(only.textContent!);
+        if (url) return push(block, only as Text, 0, url[0].length, url[2]);
         const next = BLOCKS.has(el.tagName.toUpperCase()) ? el : block;
         for (const child of el.childNodes) visit(child, next);
     };

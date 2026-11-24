@@ -54,6 +54,14 @@ const CACHE = '.narration';
 const MAX_CHUNK = 2500;
 /** Silence between blocks, in seconds, so a paragraph ends before the next begins. */
 const GAP = 0.45;
+/**
+ * How the voice should say words it misreads: each whole word, in any case, is read as its alias. The
+ * script keeps an ElevenLabs pronunciation dictionary of exactly these, and a chunk's key includes the
+ * ones it says, so changing a rule regenerates only the chunks that use it.
+ */
+const PRONUNCIATIONS: Record<string, string> = {
+    nuphory: 'new phorie',
+};
 
 /** Part of a block, read by one request. */
 interface Chunk {
@@ -116,8 +124,17 @@ async function chunksOf(words: NarratedWord[]): Promise<Chunk[]> {
     return Promise.all(
         groups.map(async (group) => {
             const { text, offsets } = spokenText(group);
+            const said = Object.entries(PRONUNCIATIONS).filter(([word]) => new RegExp(`\\b${word}\\b`, 'i').test(text));
             const key = await sha256(
-                JSON.stringify({ v: NARRATION_VERSION, text, voice: VOICE, model: MODEL, format: FORMAT }),
+                JSON.stringify({
+                    v: NARRATION_VERSION,
+                    text,
+                    voice: VOICE,
+                    model: MODEL,
+                    format: FORMAT,
+                    // Left out when empty, so chunks without any keep the keys they had before rules existed.
+                    say: said.length ? Object.fromEntries(said) : undefined,
+                }),
             );
             return { key, words: group, text, offsets };
         }),
@@ -141,25 +158,64 @@ async function readPages(): Promise<Page[]> {
     return pages;
 }
 
+interface DictionaryLocator {
+    pronunciation_dictionary_id: string;
+    version_id: string;
+}
+
+/** ElevenLabs' JSON API, failing loudly. */
+async function eleven<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await fetch(`https://api.elevenlabs.io/v1/${path}`, {
+        ...init,
+        headers: { 'xi-api-key': KEY!, 'content-type': 'application/json' },
+    });
+    if (!response.ok) throw new Error(`ElevenLabs answered ${response.status} to ${path}: ${await response.text()}`);
+    return response.json() as Promise<T>;
+}
+
+/** The pronunciation dictionary holding exactly PRONUNCIATIONS, named by their hash and made on first use. */
+async function findOrMakeDictionary(): Promise<DictionaryLocator> {
+    const rules = Object.entries(PRONUNCIATIONS).map(([word, alias]) => ({
+        type: 'alias',
+        string_to_replace: word,
+        alias,
+        case_sensitive: false,
+        word_boundaries: true,
+    }));
+    const name = `mia.cx ${(await sha256(JSON.stringify(rules))).slice(0, 12)}`;
+    const { pronunciation_dictionaries } = await eleven<{
+        pronunciation_dictionaries: { id: string; latest_version_id: string; name: string }[];
+    }>('pronunciation-dictionaries?page_size=100');
+    const found = pronunciation_dictionaries.find((d) => d.name === name);
+    if (found) return { pronunciation_dictionary_id: found.id, version_id: found.latest_version_id };
+    const made = await eleven<{ id: string; version_id: string }>('pronunciation-dictionaries/add-from-rules', {
+        method: 'POST',
+        body: JSON.stringify({ name, rules }),
+    });
+    return { pronunciation_dictionary_id: made.id, version_id: made.version_id };
+}
+
+/** Looked up once per run, and only by a run that generates something. */
+let dictionary: Promise<DictionaryLocator> | undefined;
+
 /** Generates one chunk: its audio, and each word's start and end within it. */
 async function generate(chunk: Chunk) {
-    const response = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${VOICE}/with-timestamps?output_format=${FORMAT}`,
-        {
-            method: 'POST',
-            headers: { 'xi-api-key': KEY!, 'content-type': 'application/json' },
-            body: JSON.stringify({ text: chunk.text, model_id: MODEL }),
-        },
-    );
-    if (!response.ok) throw new Error(`ElevenLabs answered ${response.status}: ${await response.text()}`);
-    const { audio_base64, alignment } = (await response.json()) as {
+    dictionary ??= findOrMakeDictionary();
+    const { audio_base64, alignment } = await eleven<{
         audio_base64: string;
         alignment: {
             characters: string[];
             character_start_times_seconds: number[];
             character_end_times_seconds: number[];
         };
-    };
+    }>(`text-to-speech/${VOICE}/with-timestamps?output_format=${FORMAT}`, {
+        method: 'POST',
+        body: JSON.stringify({
+            text: chunk.text,
+            model_id: MODEL,
+            pronunciation_dictionary_locators: [await dictionary],
+        }),
+    });
     // Word timings index into the text as sent; an alignment of anything else would misplace every word.
     if (alignment.characters.join('') !== chunk.text)
         throw new Error(`ElevenLabs aligned different text than it was sent for chunk ${chunk.key}.`);
@@ -286,11 +342,7 @@ async function main() {
             `This run needs ${characters} characters, over its budget of ${BUDGET}. Rerun with --budget ${characters} to allow it.`,
         );
     if (characters) {
-        const subscription = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
-            headers: { 'xi-api-key': KEY },
-        });
-        if (!subscription.ok) throw new Error(`Couldn't read the ElevenLabs balance: ${subscription.status}`);
-        const { character_count, character_limit } = (await subscription.json()) as Record<string, number>;
+        const { character_count, character_limit } = await eleven<Record<string, number>>('user/subscription');
         if (characters > character_limit - character_count)
             throw new Error(
                 `This run needs ${characters} characters; the account has ${character_limit - character_count} left.`,

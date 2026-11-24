@@ -27,6 +27,15 @@ describe('narrated text', () => {
         expect(spokenText(block.words)).toEqual({ text: 'it was anyway, fine now', offsets: [0, 3, 7, 10, 15, 20] });
     });
 
+    it('reads a bare link as one word without its scheme, and a named link as its words', () => {
+        const [block] = narratedBlocks(
+            region('<p>See <a href="https://nuphory.com">https://nuphory.com</a>. Or <a href="/x">my site</a>.</p>'),
+        );
+        expect(spokenText(block.words).text).toBe('See nuphory.com. Or my site.');
+        const link = block.words[1];
+        expect(link.node.data.slice(link.start, link.end)).toBe('https://nuphory.com');
+    });
+
     it('keys a page by exactly what it reads, so an edit changes the key and markup alone does not', async () => {
         const original = await pageKey(narratedBlocks(region('<p>Hello there.</p>')));
         expect(await pageKey(narratedBlocks(region('<p>Hello <em>there</em>.</p>')))).toBe(original);
