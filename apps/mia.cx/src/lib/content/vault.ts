@@ -61,6 +61,8 @@ export interface Post {
     source?: string;
     /** The project a post in a project folder belongs to. */
     project?: { title: string; href: string };
+    /** Whether the post is read aloud, from its `narration` property; posts without it get no audio. */
+    narration: boolean;
     entry: VaultEntry;
 }
 
@@ -185,6 +187,7 @@ function toPost(entry: VaultEntry): Post {
         external,
         source: text(entry.properties.source),
         project: project ? { title: project.title, href: project.entry.path } : undefined,
+        narration: entry.properties.narration === true,
         entry,
     };
 }

@@ -32,8 +32,11 @@
 <main class="container">
     <a class="back mono" href={back.href} data-print-hide>← {back.title}</a>
 
-    <!-- Narrated: the title and body; dates, buttons, the source line and mentions stay silent. -->
-    <article data-narration>
+    <!--
+        Narrated when the post's `narration` property is on: the title and body; dates, buttons, the
+        source line and mentions stay silent.
+    -->
+    <article data-narration={post.narration ? '' : undefined}>
         <header>
             <h1>{post.title}</h1>
             <div class="page-actions" data-narration-skip>

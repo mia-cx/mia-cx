@@ -43,13 +43,13 @@ the field multiplied in like ink. `/cv` and `/cv.pdf` are the only Worker-render
 KV. The print mechanism is the workspace package `@mia-cx/print`, kept free of CV specifics so Svartz can adopt it. All
 of it shipped in 0.1.1 (PRD #86). `/cv.pdf` prints through Cloudflare Browser Rendering on the free plan's daily browser
 time, so each render is cached for the day. Safari prints Articles inside page margins, because it can't repeat padding
-across pages, and there the field stops at those margins. The site's light theme (#90) takes the Print theme's
-palette, but the field stays light floating over the page, as in dark; multiplying it in as ink hid it behind the text.
+across pages, and there the field stops at those margins. The site's light theme (#90) takes the Print theme's palette,
+but the field stays light floating over the page, as in dark; multiplying it in as ink hid it behind the text.
 
 ## Narration
 
-Posts are read aloud in Mia's own cloned voice (ElevenLabs, Eleven v4), with the word being spoken highlighted by
-`<mia-marker>` (#66). Audio is generated in CI, never per request, and stored in one R2 bucket shared by every
-environment under a hash of the exact text it reads, so text and audio can never disagree and edits pay only for the
-paragraphs they change. A budget guard stops any run over 25,000 characters unless it is given a bigger budget. How it
-works and how to run it locally: `apps/mia.cx/README.md`.
+Posts that opt in with `narration: true` are read aloud in Mia's own cloned voice (ElevenLabs, Eleven v4), with the word
+being spoken highlighted by `<mia-marker>` (#66). Audio is generated in CI, never per request, and stored in one R2
+bucket shared by every environment under a hash of the exact text it reads, so text and audio can never disagree and
+edits pay only for the paragraphs they change. A budget guard stops any run over 25,000 characters unless it is given a
+bigger budget. How it works and how to run it locally: `apps/mia.cx/README.md`.

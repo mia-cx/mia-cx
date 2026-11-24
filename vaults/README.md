@@ -41,6 +41,7 @@ All flat, so Obsidian's core Properties view can edit every one of them. Nothing
 | `featured`    | checkbox | work       | Shown on the home page                                         |
 | `listed`      | checkbox | work       | Shown on /work; unlisted notes still get their page            |
 | `external`    | text     | post       | URL. The blog links straight out and no page is generated      |
+| `narration`   | checkbox | post       | Read aloud in Mia's voice. Missing means no audio              |
 
 `description` is required on a note without a body; Svartz takes one from the first sentences of a body otherwise.
 Posts, project posts included, need a `created_at`. A draft is invisible everywhere, so a post can be written in its
