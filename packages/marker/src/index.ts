@@ -23,7 +23,7 @@
  * mode keep the native selection; reduced motion, or `data-motion="reduce"` on `<html>`, makes every
  * change snap.
  */
-import { mergeLines, sameLine, shapePath, shrinkTarget, wipeOrder, type Edges, type Point } from './marker-geometry';
+import { mergeLines, sameLine, shapePath, shrinkTarget, wipeOrder, type Edges, type Point } from './geometry';
 
 export const MARKER_TAG = 'mia-marker';
 
@@ -125,8 +125,8 @@ export function defineMarker() {
 }
 
 /** The element class, built on demand so importing this module never touches the DOM. */
-function createMarker() {
-    return class Marker extends HTMLElement {
+function createMarker(): new () => MarkerElement {
+    return class Marker extends HTMLElement implements MarkerElement {
         static observedAttributes = ['word'];
 
         #overlay = document.createElement('div');
@@ -236,6 +236,15 @@ function createMarker() {
                     word.startOffset <= caret.offset &&
                     caret.offset <= word.endOffset,
             );
+        }
+
+        /**
+         * The index of the first word at or after a point in the marker's content, or -1 when no word
+         * follows it. With one marker around several separately narrated parts, a part's own word `i` is
+         * `marker.wordIndexOf(part) + i`.
+         */
+        wordIndexOf(node: Node, offset = 0) {
+            return this.#wordRanges().findIndex((word) => word.comparePoint(node, offset) <= 0);
         }
 
         connectedCallback() {
@@ -872,8 +881,37 @@ function createMarker() {
     };
 }
 
-/** `<mia-marker>`'s element type, for `querySelector<MarkerElement>`. */
-export type MarkerElement = InstanceType<ReturnType<typeof createMarker>>;
+/** `<mia-marker>`, as pages see it. */
+export interface MarkerElement extends HTMLElement {
+    /** The highlighted word's index among the marker's words, or -1 for none. */
+    word: number;
+    /** How many words the marker holds: whitespace-separated runs of text, outside `<pre>` and `aria-hidden`. */
+    readonly wordCount: number;
+    /** The index of the word at a viewport point, such as a click, or -1. */
+    wordAt(x: number, y: number): number;
+    /** The index of the first word at or after a point in the marker's content, or -1. */
+    wordIndexOf(node: Node, offset?: number): number;
+    addEventListener<K extends keyof MarkerEventMap>(
+        type: K,
+        listener: (this: MarkerElement, event: MarkerEventMap[K]) => unknown,
+        options?: boolean | AddEventListenerOptions,
+    ): void;
+    addEventListener(
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: boolean | AddEventListenerOptions,
+    ): void;
+    removeEventListener<K extends keyof MarkerEventMap>(
+        type: K,
+        listener: (this: MarkerElement, event: MarkerEventMap[K]) => unknown,
+        options?: boolean | EventListenerOptions,
+    ): void;
+    removeEventListener(
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: boolean | EventListenerOptions,
+    ): void;
+}
 
 /** Fired when the reader clicks or taps a word to seek to it. */
 export type MarkerSeekEvent = CustomEvent<{ word: number }>;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeLines, shrinkTarget, wipeOrder } from './marker-geometry';
+import { mergeLines, shrinkTarget, wipeOrder } from './geometry';
 
 const box = (l: number, r: number, t: number, b: number) => ({ l, r, t, b });
 
