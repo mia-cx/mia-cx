@@ -53,7 +53,10 @@
         <div class="body">
             {#if post.narration}
                 <aside class="gutter" data-print-hide data-markdown="skip" data-narration-skip>
-                    <div class="rail"><NarrationPlayer /></div>
+                    <!-- Fresh for each post: navigating between posts reuses this component. -->
+                    <div class="rail">
+                        {#key post.href}<NarrationPlayer />{/key}
+                    </div>
                 </aside>
             {/if}
             <!-- Mia's own markdown, from the vault. -->
