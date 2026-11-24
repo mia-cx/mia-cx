@@ -10,14 +10,12 @@
     font-stretch: 80%;
     line-height: 1.1;
     letter-spacing: -0.01em;
-    scroll-margin-top: 24px;
 }
 .prose h3 {
     margin: 32px 0 10px;
     font-size: 21px;
     font-weight: 580;
     font-stretch: 86%;
-    scroll-margin-top: 24px;
 }
 .prose h4,
 .prose h5 {
@@ -25,7 +23,10 @@
     font-size: 18px;
     font-weight: 580;
     color: var(--ink-dim);
-    scroll-margin-top: 24px;
+}
+/* A link to a heading lands it below the fixed header. */
+.prose :is(h2, h3, h4, h5) {
+    scroll-margin-top: calc(var(--header-height) + 24px);
 }
 .prose p,
 .prose ul,
