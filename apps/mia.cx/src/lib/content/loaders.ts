@@ -10,7 +10,7 @@ export function loadWork(slug: string) {
     const index = workWithPages.indexOf(note);
     return {
         note,
-        html: render(note.entry.markdown),
+        html: render(note.entry.markdown).html,
         // The list under the body needs no post bodies.
         posts: note.posts.map(({ title, summary, date, href, external }) => ({ title, summary, date, href, external })),
         // Its own posts are listed already, whether or not they link back.
@@ -40,7 +40,7 @@ export const projectPostEntries = () =>
 export function loadPost(path: string) {
     const post = postAt(path);
     if (!post) error(404, 'No such post');
-    return { post, html: render(post.entry.markdown), mentions: mentionsOf(post.entry) };
+    return { post, ...render(post.entry.markdown), mentions: mentionsOf(post.entry) };
 }
 
 export { formatDate } from './vault';
