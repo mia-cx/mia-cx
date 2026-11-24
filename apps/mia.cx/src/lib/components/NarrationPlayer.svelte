@@ -91,7 +91,7 @@
         };
         (async () => {
             const blocks = narratedBlocks(region);
-            const key = await pageKey(blocks);
+            const key = pageKey(blocks);
             const response = await fetch(`/narration/pages/${key}.json`);
             if (!response.ok || gone) return;
             const manifest = (await response.json()) as NarrationManifest;
