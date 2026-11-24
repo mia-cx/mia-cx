@@ -1,14 +1,14 @@
 name: Packages
 
-# Publishes the repository's public packages to npm. A package's version only changes when the
-# Changesets release pull request merges, so every push to main publishes whichever public package
-# has a version npm doesn't have yet, and nothing otherwise. npm trusts this workflow directly
-# (trusted publishing), so no npm token is stored, and each release carries provenance for its commit.
+# Publishes the packages listed below to npm. A package's version only changes when the Changesets
+# release pull request merges, so every push to main publishes whichever listed package has a version
+# npm doesn't have yet, and nothing otherwise. npm trusts this workflow directly (trusted publishing),
+# so no npm token is stored, and each release carries provenance for its commit. Only main publishes:
+# there is no manual trigger, and the npm-publish environment accepts main alone.
 on:
     push:
         branches:
             - main
-    workflow_dispatch:
 
 concurrency:
     group: packages
@@ -44,13 +44,15 @@ jobs:
             - name: Install npm with trusted publishing
               run: npm install --global npm@11.17.0
 
+            # Only packages named here publish, each with its own trusted publisher on npm. Others in the
+            # workspace may be marked public but are versioned elsewhere, such as @mia-cx/config.
             - name: Publish versions npm doesn't have
               shell: bash
+              env:
+                  PACKAGES: packages/marker
               run: |
-                  for dir in packages/*/; do
+                  for dir in $PACKAGES; do
                     manifest="$dir/package.json"
-                    [ "$(node -p "require('./$manifest').publishConfig?.access ?? ''")" = public ] || continue
-                    [ "$(node -p "require('./$manifest').private ?? false")" = false ] || continue
                     name="$(node -p "require('./$manifest').name")"
                     version="$(node -p "require('./$manifest').version")"
                     if npm view "$name@$version" version >/dev/null 2>&1; then
