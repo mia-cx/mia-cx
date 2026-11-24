@@ -1,5 +1,11 @@
 # @mia-cx/mia.cx
 
+## 0.5.1
+
+### Patch Changes
+
+- 20aa776: Narration reads "wplace" as "double-u place".
+
 ## 0.5.0
 
 ### Minor Changes
