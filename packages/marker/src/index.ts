@@ -108,7 +108,7 @@ interface Tween {
 /** Close to cubic-bezier(.2, .9, .3, 1): fast out, soft landing. */
 const ease = (x: number) => 1 - (1 - x) ** 4;
 const valueOf = ({ from, to, start, dur }: Tween, now: number) =>
-    now < start ? from : dur <= 0 || now >= start + dur ? to : from + (to - from) * ease((now - start) / dur);
+    dur <= 0 || now >= start + dur ? to : from + (to - from) * ease((now - start) / dur);
 
 interface Block {
     /** Where the block is heading; null when hidden. */
@@ -116,6 +116,8 @@ interface Block {
     tweens: Record<Edge, Tween> | null;
     /** Hides the block once it has shrunk away, or starts a staggered shrink; cleared on reuse. */
     fading?: ReturnType<typeof setTimeout>;
+    /** Shows a hidden word cursor once its first word's leading delay has passed. */
+    showing?: ReturnType<typeof setTimeout>;
     /** The element holding the block's text and where it was, so the block can move when the element does. */
     ref?: { el: Element; x: number; y: number };
 }
@@ -398,7 +400,7 @@ function createMarker(): new () => MarkerElement {
             // A click waiting to seek holds the cursor on its word until the seek lands or is dropped.
             if (this.#selecting || this.#seeking >= 0) return;
             if (next < 0) this.#retire(this.#blocks[0], undefined);
-            else this.#moveTo(next);
+            else this.#moveTo(next, true);
         }
 
         /** While a selection holds the highlight, the current word gets a quieter underline. */
@@ -409,8 +411,11 @@ function createMarker(): new () => MarkerElement {
             else CSS.highlights.delete(`${MARKER_TAG}-word`);
         }
 
-        /** Block 0 to a word. Across a line wrap, the old shape shrinks out as the new one grows in. */
-        #moveTo(index: number) {
+        /**
+         * Block 0 to a word. Across a line wrap, the old shape shrinks out as the new one grows in. A
+         * `spoken` move keeps the edge delays; a click's preview and re-placing the cursor don't.
+         */
+        #moveTo(index: number, spoken = false) {
             const to = this.#wordEdges(index);
             if (!to) return this.#retire(this.#blocks[0], undefined);
             const holder = this.#wordRanges()[index].startContainer.parentElement!;
@@ -419,52 +424,84 @@ function createMarker(): new () => MarkerElement {
             const from = head.at;
             const previous = head.ref;
             head.ref = this.#refOf(holder);
-            if (!from || sameLine(from, to) || reducedMotion()) return this.#setEdges(head, to, false, undefined, true);
+            if (!from || sameLine(from, to) || reducedMotion())
+                return this.#setEdges(head, to, false, undefined, spoken);
             const forward = to.t > from.t;
             clearTimeout(this.#wrapTimer);
             Object.assign(this.#tail, { at: from, tweens: head.tweens, ref: previous });
             const edge = forward ? from.r : from.l;
-            this.#setEdges(this.#tail, { ...from, l: edge, r: edge }, false, undefined, true);
-            const gone = this.lookahead + this.#setting('trailing-delay') + this.#setting('trailing');
-            this.#wrapTimer = setTimeout(() => this.#setEdges(this.#tail, null), gone);
+            this.#setEdges(this.#tail, { ...from, l: edge, r: edge }, false, undefined, spoken);
+            const delay = spoken ? this.lookahead + this.#setting('trailing-delay') : 0;
+            this.#wrapTimer = setTimeout(() => this.#setEdges(this.#tail, null), delay + this.#setting('trailing'));
             const start = forward ? to.l : to.r;
             this.#setEdges(head, { ...to, l: start, r: start }, true);
-            this.#setEdges(head, to, false, undefined, true);
+            this.#setEdges(head, to, false, undefined, spoken);
         }
 
         /**
          * Sends a block toward `to`: an edge moving outward leads, one moving inward trails. A `spoken`
-         * move is a word's: each edge waits its delay after the word is spoken, `lookahead` from now.
+         * move is a word's: each edge sets off its delay after the word is spoken, `lookahead` from now,
+         * while edges still on their way to earlier words carry on, so a lagging edge follows the words
+         * rather than waiting for them to stop.
          */
         #setEdges(block: Block, to: Edges | null, snap = false, ms?: number, spoken = false) {
             clearTimeout(block.fading);
             block.fading = undefined;
+            const current = block.tweens;
+            const leads: Record<Edge, boolean> = {
+                l: !!to && to.l < (block.at?.l ?? to.l),
+                r: !!to && to.r > (block.at?.r ?? to.r),
+                t: false,
+                b: false,
+            };
+            const duration = (edge: Edge) =>
+                reducedMotion() ? 0 : (ms ?? this.#setting(leads[edge] ? 'leading' : 'trailing'));
+            if (to && spoken && !snap) {
+                block.at = to;
+                // A cursor not yet shown appears when its leading edge would set off.
+                if (!current) {
+                    const appear = this.lookahead + this.#setting('leading-delay');
+                    block.showing ??= setTimeout(() => {
+                        block.showing = undefined;
+                        if (block.at) this.#setEdges(block, block.at, true);
+                    }, appear);
+                    return;
+                }
+                const follow = (edge: Edge) => {
+                    const now = performance.now();
+                    current[edge] = {
+                        from: valueOf(current[edge], now),
+                        to: to[edge],
+                        start: now,
+                        dur: duration(edge),
+                    };
+                    this.#kick();
+                };
+                for (const edge of EDGES) {
+                    const wait = this.lookahead + this.#setting(leads[edge] ? 'leading-delay' : 'trailing-delay');
+                    if (wait > 0) setTimeout(() => follow(edge), wait);
+                    else follow(edge);
+                }
+                return;
+            }
+            // Any other move replaces the block's edges outright, leaving earlier words' moves behind.
+            clearTimeout(block.showing);
+            block.showing = undefined;
             if (!to) {
                 block.at = null;
                 block.tweens = null;
                 return this.#kick();
             }
             const now = performance.now();
-            const current = block.tweens;
             const instant = snap || !current || reducedMotion();
-            const leads: Record<Edge, boolean> = {
-                l: to.l < (block.at?.l ?? to.l),
-                r: to.r > (block.at?.r ?? to.r),
-                t: false,
-                b: false,
-            };
-            const delayed = spoken && !snap && !!current;
-            const wait = (edge: Edge) =>
-                delayed ? this.lookahead + this.#setting(leads[edge] ? 'leading-delay' : 'trailing-delay') : 0;
             block.tweens = Object.fromEntries(
                 EDGES.map((edge) => [
                     edge,
                     {
-                        // A delayed snap (reduced motion) still waits for its moment, then jumps.
-                        from: (instant && !delayed) || !current ? to[edge] : valueOf(current[edge], now),
+                        from: instant || !current ? to[edge] : valueOf(current[edge], now),
                         to: to[edge],
-                        start: now + wait(edge),
-                        dur: instant ? 0 : (ms ?? this.#setting(leads[edge] ? 'leading' : 'trailing')),
+                        start: now,
+                        dur: instant ? 0 : duration(edge),
                     },
                 ]),
             ) as Record<Edge, Tween>;
