@@ -24,10 +24,15 @@ export interface NarratedWord {
 
 export interface NarratedBlock {
     words: NarratedWord[];
+    /** Whether it is a heading, which starts a section. */
+    heading: boolean;
 }
 
-/** Bumped whenever the extraction or the audio format changes, so every page is narrated afresh. */
-export const NARRATION_VERSION = 1;
+/**
+ * Bumped whenever the extraction or the audio format changes, so every page is narrated afresh.
+ * 2: one request per section, not per block.
+ */
+export const NARRATION_VERSION = 2;
 
 const SILENT = new Set(['PRE', 'SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'BUTTON', 'NAV', 'TEMPLATE']);
 const BLOCKS = new Set([
@@ -68,7 +73,7 @@ export function narratedBlocks(region: Element): NarratedBlock[] {
         if (owner !== block) {
             owner = block;
             last = undefined;
-            blocks.push({ words: [] });
+            blocks.push({ words: [], heading: /^H[1-6]$/.test(block.tagName.toUpperCase()) });
         }
         // A word that starts its text node right where the previous one ended, with no space on
         // either side, is the same written word split by markup.

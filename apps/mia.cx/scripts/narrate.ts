@@ -30,6 +30,7 @@ import {
     pronunciationsIn,
     sha256,
     spokenText,
+    type NarratedBlock,
     type NarratedWord,
     type NarrationManifest,
 } from '../src/lib/narration/extract';
@@ -52,12 +53,14 @@ const FORMAT = 'mp3_44100_128';
 /** The built site, and where generated audio is kept between runs. */
 const SITE = '.svelte-kit/cloudflare';
 const CACHE = '.narration';
-/** Characters per request at most; a longer block is split at sentence ends. */
+/** Characters per request at most; a longer section is split between blocks, a longer block at sentence ends. */
 const MAX_CHUNK = 2500;
-/** Silence between blocks, in seconds, so a paragraph ends before the next begins. */
+/** Silence between requests, in seconds, so one section ends before the next begins. */
 const GAP = 0.45;
+/** Text that already ends a sentence; any other block gets a full stop when read, so the voice pauses. */
+const SENTENCE_END = /[.!?:;…]["'”’)\]]*$/;
 
-/** Part of a block, read by one request. */
+/** A section of a page, or part of a long one, read by one request: blocks separated by blank lines. */
 interface Chunk {
     key: string;
     words: NarratedWord[];
@@ -67,8 +70,8 @@ interface Chunk {
 interface Page {
     path: string;
     key: string;
-    /** Each block's chunks, in reading order. */
-    blocks: Chunk[][];
+    /** In reading order. */
+    chunks: Chunk[];
 }
 /** What the bucket holds, kept in index.json, so a run knows what to skip without listing it. */
 interface Index {
@@ -100,37 +103,66 @@ async function* htmlFiles(dir: string): AsyncGenerator<string> {
     }
 }
 
-/** A block's words in chunks short enough for one request, split after a sentence ends. */
-function chunksOf(words: NarratedWord[]): Chunk[] {
-    const groups: NarratedWord[][] = [[]];
+/** A block's words in parts short enough for one request, split after a sentence ends. */
+function partsOf(words: NarratedWord[]): NarratedWord[][] {
+    const parts: NarratedWord[][] = [[]];
     let length = 0;
     for (const word of words) {
-        const group = groups.at(-1)!;
-        if (length + word.text.length > MAX_CHUNK && group.length) {
-            // Back up to the last sentence end in this group, if there is one.
-            const cut = group.findLastIndex((w) => /[.!?]["')\]]*$/.test(w.text)) + 1 || group.length;
-            groups.push(group.splice(cut));
-            length = groups.at(-1)!.reduce((sum, w) => sum + w.text.length + 1, 0);
+        const part = parts.at(-1)!;
+        if (length + word.text.length > MAX_CHUNK && part.length) {
+            // Back up to the last sentence end in this part, if there is one.
+            const cut = part.findLastIndex((w) => SENTENCE_END.test(w.text)) + 1 || part.length;
+            parts.push(part.splice(cut));
+            length = parts.at(-1)!.reduce((sum, w) => sum + w.text.length + 1, 0);
         }
-        groups.at(-1)!.push(word);
+        parts.at(-1)!.push(word);
         length += word.text.length + 1;
     }
-    return groups.map((group) => {
-        const { text, offsets } = spokenText(group);
-        const key = sha256(
-            JSON.stringify({
-                v: NARRATION_VERSION,
-                text,
-                voice: VOICE,
-                model: MODEL,
-                format: FORMAT,
-                // The pronunciations it uses, so changing a rule regenerates only the chunks that say it.
-                // Left out when none, so those chunks keep the keys they had before rules existed.
-                say: pronunciationsIn(text),
-            }),
-        );
-        return { key, words: group, text, offsets };
-    });
+    return parts;
+}
+
+/** Blocks read as one text, a blank line between them, and where each word starts in it. */
+function chunkOf(blocks: NarratedWord[][]): Chunk {
+    let text = '';
+    const offsets: number[] = [];
+    for (const words of blocks) {
+        if (text) text += '\n\n';
+        const spoken = spokenText(words);
+        offsets.push(...spoken.offsets.map((offset) => offset + text.length));
+        text += SENTENCE_END.test(spoken.text) ? spoken.text : `${spoken.text}.`;
+    }
+    const key = sha256(
+        JSON.stringify({
+            v: NARRATION_VERSION,
+            text,
+            voice: VOICE,
+            model: MODEL,
+            format: FORMAT,
+            // The pronunciations it uses, so changing a rule regenerates only the chunks that say it.
+            say: pronunciationsIn(text),
+        }),
+    );
+    return { key, words: blocks.flat(), text, offsets };
+}
+
+/**
+ * A page's chunks: one per section, a heading and the blocks under it, so the voice reads whole
+ * passages. A section too long for one request is split between blocks.
+ */
+function chunksOf(blocks: NarratedBlock[]): Chunk[] {
+    const chunks: NarratedWord[][][] = [];
+    let length = 0;
+    for (const block of blocks)
+        for (const [i, part] of partsOf(block.words).entries()) {
+            const size = spokenText(part).text.length + 3;
+            if (!chunks.length || (block.heading && i === 0) || length + size > MAX_CHUNK) {
+                chunks.push([]);
+                length = 0;
+            }
+            chunks.at(-1)!.push(part);
+            length += size;
+        }
+    return chunks.map(chunkOf);
 }
 
 async function readPages(): Promise<Page[]> {
@@ -144,7 +176,7 @@ async function readPages(): Promise<Page[]> {
         pages.push({
             path: '/' + relative(SITE, file).replace(/(index)?\.html$/, ''),
             key: pageKey(blocks),
-            blocks: blocks.map((block) => chunksOf(block.words)),
+            chunks: chunksOf(blocks),
         });
     }
     return pages;
@@ -260,18 +292,16 @@ async function stitch(page: Page): Promise<{ mp3: string; manifest: NarrationMan
     const parts: string[] = [];
     const words: number[] = [];
     let at = 0;
-    for (const [b, block] of page.blocks.entries()) {
-        if (b > 0) {
+    for (const [i, chunk] of page.chunks.entries()) {
+        if (i > 0) {
             parts.push(gap);
             at += GAP;
         }
-        for (const chunk of block) {
-            const timings = await cached(chunk);
-            words.push(...timings.words.map((t) => ms(t + at)));
-            const { wav, duration } = await decoded(join(CACHE, `${chunk.key}.mp3`));
-            parts.push(wav);
-            at += duration;
-        }
+        const timings = await cached(chunk);
+        words.push(...timings.words.map((t) => ms(t + at)));
+        const { wav, duration } = await decoded(join(CACHE, `${chunk.key}.mp3`));
+        parts.push(wav);
+        at += duration;
     }
     const list = join(work, 'parts.txt');
     await writeFile(list, parts.map((part) => `file '${relative(work, part)}'`).join('\n'));
@@ -317,7 +347,7 @@ async function main() {
     const missing = [
         ...new Map(
             pending
-                .flatMap((page) => page.blocks.flat())
+                .flatMap((page) => page.chunks)
                 .filter((chunk) => !index.chunks.includes(chunk.key))
                 .map((chunk) => [chunk.key, chunk]),
         ).values(),
@@ -326,7 +356,7 @@ async function main() {
 
     console.log(`${pages.length} narrated pages; ${pending.length} to narrate:`);
     for (const page of pending) console.log(`  ${page.path}`);
-    console.log(`${missing.length} blocks to generate: ${characters} characters (budget ${BUDGET}).`);
+    console.log(`${missing.length} sections to generate: ${characters} characters (budget ${BUDGET}).`);
     if (dryRun || !pending.length) return;
 
     if (characters > BUDGET)
