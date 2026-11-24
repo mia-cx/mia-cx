@@ -1,0 +1,11 @@
+{
+    "$schema": "https://json.schemastore.org/tsconfig",
+    "extends": "@mia-cx/config/typescript/tsup",
+    "compilerOptions": {
+        "lib": ["es2023", "dom", "dom.iterable"],
+        "types": [],
+        // Written and checked under @mia-cx/ui's settings, which index arrays without the undefined check.
+        "noUncheckedIndexedAccess": false
+    },
+    "include": ["src", "tsup.config.ts"]
+}

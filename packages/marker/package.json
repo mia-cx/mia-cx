@@ -1,0 +1,52 @@
+{
+  "name": "@mia-cx/marker",
+  "version": "0.1.0",
+  "description": "<mia-marker>: a highlight that draws text selections, and a word cursor for narration.",
+  "keywords": [
+    "custom-element",
+    "web-component",
+    "selection",
+    "highlight",
+    "narration",
+    "text-to-speech"
+  ],
+  "license": "MIT",
+  "author": "Mia Riezebos <mia@mia.cx>",
+  "homepage": "https://github.com/mia-cx/mia-cx/tree/main/packages/marker#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mia-cx/mia-cx.git",
+    "directory": "packages/marker"
+  },
+  "bugs": "https://github.com/mia-cx/mia-cx/issues",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "prepare": "tsup",
+    "check": "tsc --noEmit",
+    "format": "prettier --write .",
+    "lint": "prettier --check . && eslint .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@mia-cx/config": "workspace:^",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "tsup": "^8.5.1",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.1"
+  }
+}
