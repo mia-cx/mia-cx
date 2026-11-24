@@ -1,5 +1,12 @@
 # @mia-cx/marker
 
+## 0.1.1
+
+### Patch Changes
+
+- 7f382fc: A `word` set on `<mia-marker>` before `defineMarker()` runs now takes effect, instead of silently disabling the word cursor.
+- f128a92: `<mia-marker>` isolates its own stacking context, so the highlight no longer paints over sticky headers and other layers outside it.
+
 ## 0.1.0
 
 ### Minor Changes

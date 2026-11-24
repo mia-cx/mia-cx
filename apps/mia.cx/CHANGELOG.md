@@ -1,5 +1,19 @@
 # @mia-cx/mia.cx
 
+## 0.4.0
+
+### Minor Changes
+
+- 7f382fc: Narrated posts can be listened to in Mia's voice, with the spoken word highlighted as it plays. Click a word to jump there.
+
+### Patch Changes
+
+- 703cf37: Links to a heading in a post land it below the header instead of behind it, and My Approach to Mastering drops its hand-written table of contents.
+- 64a9617: A post's dates line up with the Markdown buttons beside them.
+- Updated dependencies [7f382fc]
+- Updated dependencies [f128a92]
+  - @mia-cx/marker@0.1.1
+
 ## 0.3.0
 
 ### Minor Changes
