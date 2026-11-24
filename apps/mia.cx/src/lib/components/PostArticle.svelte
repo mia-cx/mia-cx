@@ -88,7 +88,12 @@
         flex-wrap: wrap;
         gap: 8px 20px;
         color: var(--ink-dim);
-        /* Trimmed to cap height and baseline, so the dates centre on the buttons. */
+    }
+    /*
+     * Each item is trimmed to cap height and baseline, so the dates centre on the buttons. The trim
+     * goes on the items: a flex container ignores it.
+     */
+    .meta > * {
         text-box: trim-both cap alphabetic;
     }
     .meta a {
