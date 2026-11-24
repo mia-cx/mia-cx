@@ -1,6 +1,6 @@
 import { parseHTML } from 'linkedom';
 import { describe, expect, it } from 'vitest';
-import { narratedBlocks, pageKey, spokenText } from './extract';
+import { narratedBlocks, pageKey, PRONUNCIATIONS, spokenText } from './extract';
 
 const region = (html: string) =>
     parseHTML(`<!doctype html><body><article data-narration>${html}</article>`).document.querySelector(
@@ -40,5 +40,19 @@ describe('narrated text', () => {
         const original = pageKey(narratedBlocks(region('<p>Hello there.</p>')));
         expect(pageKey(narratedBlocks(region('<p>Hello <em>there</em>.</p>')))).toBe(original);
         expect(pageKey(narratedBlocks(region('<p>Hello there!</p>')))).not.toBe(original);
+    });
+
+    it('keys a page by the pronunciations it uses, so changing one re-narrates only pages that say it', () => {
+        const says = narratedBlocks(region('<p>A WAV file.</p>'));
+        const silent = narratedBlocks(region('<p>An MP3 file.</p>'));
+        const before = [pageKey(says), pageKey(silent)];
+        const alias = PRONUNCIATIONS.wav;
+        PRONUNCIATIONS.wav = 'wahv';
+        try {
+            expect(pageKey(says)).not.toBe(before[0]);
+            expect(pageKey(silent)).toBe(before[1]);
+        } finally {
+            PRONUNCIATIONS.wav = alias;
+        }
     });
 });

@@ -26,6 +26,8 @@ import {
     NARRATION_VERSION,
     narratedBlocks,
     pageKey,
+    PRONUNCIATIONS,
+    pronunciationsIn,
     sha256,
     spokenText,
     type NarratedWord,
@@ -54,14 +56,6 @@ const CACHE = '.narration';
 const MAX_CHUNK = 2500;
 /** Silence between blocks, in seconds, so a paragraph ends before the next begins. */
 const GAP = 0.45;
-/**
- * How the voice should say words it misreads: each whole word, in any case, is read as its alias. The
- * script keeps an ElevenLabs pronunciation dictionary of exactly these, and a chunk's key includes the
- * ones it says, so changing a rule regenerates only the chunks that use it.
- */
-const PRONUNCIATIONS: Record<string, string> = {
-    nuphory: 'new phorie',
-};
 
 /** Part of a block, read by one request. */
 interface Chunk {
@@ -123,7 +117,6 @@ function chunksOf(words: NarratedWord[]): Chunk[] {
     }
     return groups.map((group) => {
         const { text, offsets } = spokenText(group);
-        const said = Object.entries(PRONUNCIATIONS).filter(([word]) => new RegExp(`\\b${word}\\b`, 'i').test(text));
         const key = sha256(
             JSON.stringify({
                 v: NARRATION_VERSION,
@@ -131,8 +124,9 @@ function chunksOf(words: NarratedWord[]): Chunk[] {
                 voice: VOICE,
                 model: MODEL,
                 format: FORMAT,
-                // Left out when empty, so chunks without any keep the keys they had before rules existed.
-                say: said.length ? Object.fromEntries(said) : undefined,
+                // The pronunciations it uses, so changing a rule regenerates only the chunks that say it.
+                // Left out when none, so those chunks keep the keys they had before rules existed.
+                say: pronunciationsIn(text),
             }),
         );
         return { key, words: group, text, offsets };
