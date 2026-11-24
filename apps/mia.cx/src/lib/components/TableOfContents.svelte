@@ -25,16 +25,19 @@
         return () => removeEventListener('scroll', update);
     });
 
-    // A list taller than the viewport scrolls itself to keep the current section in sight. Only the
-    // list moves: scrollIntoView would scroll the page too.
+    // A list taller than the viewport scrolls itself to keep the current section in sight, again
+    // whenever the window resizes. Only the list moves: scrollIntoView would scroll the page too.
     let list = $state<HTMLOListElement>();
+    let viewport = $state(0);
     $effect(() => {
-        const link = current && list?.querySelector<HTMLElement>('[aria-current]');
+        const link = current && viewport && list?.querySelector<HTMLElement>('[aria-current]');
         if (!list || !link) return;
         const bottom = link.offsetTop + link.offsetHeight - list.clientHeight;
         list.scrollTop = Math.min(Math.max(list.scrollTop, bottom), link.offsetTop);
     });
 </script>
+
+<svelte:window bind:innerHeight={viewport} />
 
 {#if sections.length > 1}
     <nav aria-label="Contents" data-print-hide data-markdown="skip" data-narration-skip>

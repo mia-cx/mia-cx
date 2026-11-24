@@ -268,7 +268,9 @@ export function render(markdown: string): { html: string; headings: Heading[] } 
         seen.set(base, count + 1);
         const id = count === 0 ? base : `${base}-${count}`;
         const content = renderer.parser.parseInline(tokens);
-        headings.push({ id, depth, label: stripTags(content) });
+        // An image reads as its alt text, which Marked has already escaped.
+        const label = stripTags(content.replace(/<img\b[^>]*\balt="([^"]*)"[^>]*>/g, '$1'));
+        headings.push({ id, depth, label });
         return `<h${depth} id="${id}">${content}</h${depth}>`;
     };
     renderer.link = (token) => {
