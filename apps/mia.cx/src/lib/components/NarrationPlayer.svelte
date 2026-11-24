@@ -32,6 +32,12 @@
     const STEPS = 64;
     /** Tape a spin carries past its end, in seconds, to cover the audio starting up again. */
     const TAIL = 1;
+    /**
+     * At the handover the audio may trail the tape: by more than `IN_STEP` seconds, it seeks ahead to
+     * catch up, up to `CATCH_UPS` times.
+     */
+    const IN_STEP = 0.02;
+    const CATCH_UPS = 3;
 
     let src = $state<string>();
     let audio = $state<HTMLAudioElement>();
@@ -97,7 +103,13 @@
             const { at, rate, direction } = tapeNow();
             const from = direction > 0 ? rate : 0;
             const speed = settings.speed.value;
-            return turn(at, 1, (k) => from + (speed - from) * Math.sin((Math.PI / 2) * k), START, true);
+            return turn(
+                at,
+                1,
+                curve((k) => from + (speed - from) * Math.sin((Math.PI / 2) * k)),
+                START,
+                true,
+            );
         }
         gain.gain.value = 0;
         try {
@@ -120,7 +132,13 @@
             // A wind cut short never reaches its word, so the highlight follows the tape instead.
             held = undefined;
             const { at, rate, direction } = tapeNow();
-            return turn(at, direction, (k) => rate * Math.cos((Math.PI / 2) * k), STOP, false);
+            return turn(
+                at,
+                direction,
+                curve((k) => rate * Math.cos((Math.PI / 2) * k)),
+                STOP,
+                false,
+            );
         }
         fade(0, FADE_OUT);
         pending = setTimeout(() => audio?.pause(), FADE_OUT * 1000);
@@ -145,34 +163,43 @@
     let tape = $state<AudioBuffer>();
     $effect(() => {
         if (!settings.funny.value || settings.motion.value === 'reduce' || !src || tape) return;
-        let gone = false;
-        fetch(src)
+        const load = new AbortController();
+        fetch(src, { signal: load.signal })
             .then((response) => {
                 if (!response.ok) throw new Error(`Narration audio: ${response.status}`);
                 return response.arrayBuffer();
             })
             // Any context decodes; a source in the live one resamples the buffer if their rates differ.
-            .then((data) => new OfflineAudioContext({ length: 1, sampleRate: 48000 }).decodeAudioData(data))
-            .then((buffer) => void (gone || (tape = buffer)))
-            .catch((error) => console.error('Funny mode could not load the tape', error));
-        return () => (gone = true);
+            .then((data) =>
+                load.signal.aborted
+                    ? undefined
+                    : new OfflineAudioContext({ length: 1, sampleRate: 48000 }).decodeAudioData(data),
+            )
+            .then((buffer) => void (load.signal.aborted || (tape = buffer)))
+            .catch((error) => load.signal.aborted || console.error('Funny mode could not load the tape', error));
+        return () => load.abort();
     });
     const taped = () => tape !== undefined && settings.funny.value && settings.motion.value === 'full';
 
     /**
-     * The tape moving now: where it started, which way, and its speed over time, as `STEPS + 1` evenly
-     * spaced rates the browser ramps between.
+     * The tape moving now: where it starts and ends, which way, and its speed over time, as `STEPS + 1`
+     * evenly spaced rates the browser ramps between.
      */
     let spin:
         | {
               source: AudioBufferSourceNode;
               from: number;
+              to: number;
               direction: number;
               rates: Float32Array;
               seconds: number;
               begun: number;
           }
         | undefined;
+
+    /** A speed curve from `speedAt`, which maps 0 to 1 across the move to a rate. */
+    const curve = (speedAt: (k: number) => number) =>
+        Float32Array.from({ length: STEPS + 1 }, (_, k) => Math.max(0, speedAt(k / STEPS)));
 
     /** How much tape `rates` over `seconds` move in the first `elapsed` seconds: the area under the ramps. */
     function travel(rates: Float32Array, seconds: number, elapsed = seconds) {
@@ -189,7 +216,12 @@
     /** Where the tape is, how fast it moves and which way: the spin's if one is playing, else the audio's. */
     function tapeNow() {
         if (!spin) return { at: audio!.currentTime, rate: audio!.paused ? 0 : settings.speed.value, direction: 1 };
-        const elapsed = Math.min(spin.seconds, context!.currentTime - spin.begun);
+        const elapsed = context!.currentTime - spin.begun;
+        // Past its curve, a spin's tail runs on forward from where it ended, at its last rate.
+        if (elapsed >= spin.seconds) {
+            const rate = spin.rates[STEPS];
+            return { at: spin.to + rate * (elapsed - spin.seconds), rate, direction: 1 };
+        }
         const k = Math.min(STEPS - 1, Math.floor((elapsed / spin.seconds) * STEPS));
         const into = (elapsed / spin.seconds) * STEPS - k;
         return {
@@ -214,14 +246,14 @@
 
     /**
      * Moves the tape like a cassette: plays it from `from`, forward or reversed (`direction` 1 or -1),
-     * its speed following `speed` (from 0 to 1 over `seconds`) with the pitch following along. The voice
-     * hands over to the tape, and the audio waits silent where the tape will stop; then it plays on
-     * from there if `resume`, and `landed` runs.
+     * at `rates` spread over `seconds`, the pitch following the speed. The voice hands over to the
+     * tape, and the audio waits silent where the tape will stop. Then, if `resume`, `landed` runs and
+     * the audio plays on from there.
      */
     function turn(
         from: number,
         direction: number,
-        speed: (k: number) => number,
+        rates: Float32Array,
         seconds: number,
         resume: boolean,
         landed?: () => void,
@@ -232,7 +264,6 @@
         const reel = tape!;
         const onReel = (t: number) => Math.min(reel.duration, Math.max(0, t));
         from = onReel(from);
-        const rates = Float32Array.from({ length: STEPS + 1 }, (_, k) => Math.max(0, speed(k / STEPS)));
         const to = onReel(from + direction * travel(rates, seconds));
         // The stretch the spin crosses, reversed when winding back, then, if the audio resumes after,
         // `TAIL` of tape onward from `to` to play at the last rate until the audio is heard again.
@@ -254,24 +285,41 @@
         const now = decoder.currentTime;
         source.playbackRate.setValueCurveAtTime(rates, now, seconds);
         source.start(now);
-        const current = { source, from, direction, rates, seconds, begun: now };
+        const current = { source, from, to, direction, rates, seconds, begun: now };
         spin = current;
         if (!resume) {
             source.stop(now + seconds);
             source.onended = () => (spin = undefined);
         } else {
-            landing = setTimeout(() => {
+            landing = setTimeout(async () => {
                 landed?.();
-                void audio!.play().then(() => {
-                    if (spin !== current) return;
-                    // The voice takes back over from the tape, which ran on at the reader's speed until it could.
-                    const at = decoder.currentTime;
-                    out.gain.setValueAtTime(1, at);
-                    out.gain.linearRampToValueAtTime(0, at + CUT);
-                    source.stop(at + CUT);
-                    spin = undefined;
-                    fade(1, CUT);
-                });
+                const voice = audio!;
+                try {
+                    await voice.play();
+                } catch (error) {
+                    // Audio that won't start leaves nothing playing: stop the tape, show Play, report it.
+                    if (spin === current) {
+                        stopSpin();
+                        playing = false;
+                    }
+                    throw error;
+                }
+                // The tape ran on while the audio started from where it ended: catch the audio up to it.
+                // A seek within what is buffered usually lands at once; one that stalls is checked again.
+                for (let tries = 0; tries < CATCH_UPS && spin === current; tries++) {
+                    const behind = tapeNow().at - voice.currentTime;
+                    if (behind <= IN_STEP) break;
+                    voice.currentTime += behind;
+                    await new Promise((seeked) => voice.addEventListener('seeked', seeked, { once: true }));
+                }
+                if (spin !== current) return;
+                // The voice takes back over from the tape.
+                const at = decoder.currentTime;
+                out.gain.setValueAtTime(1, at);
+                out.gain.linearRampToValueAtTime(0, at + CUT);
+                source.stop(at + CUT);
+                spin = undefined;
+                fade(1, CUT);
             }, seconds * 1000);
         }
         fade(0, CUT);
@@ -282,24 +330,32 @@
     }
 
     /**
-     * Winds the tape to `to`: forward sped up, back reversed, the speed rising from where it is to a
-     * peak and slowing into the reader's speed over `WIND`. The peak stays within the max wind speed
-     * and bulges at least `MIN_BULGE` times the reader's speed past the straight line between, so a
-     * distance outside that range cuts to where a wind can cover the rest.
+     * Winds the tape to `to`: forward sped up, back reversed, the speed running from where it is to a
+     * peak and slowing into the reader's speed over `WIND`. The speed is a straight line between the
+     * two plus half a sine, whose height sets the distance: at least `MIN_BULGE` times the reader's
+     * speed, so even a short wind is heard, and never past the max wind speed. A distance outside
+     * that range cuts to where a wind can cover the rest; with less tape than that behind the target,
+     * the wind starts at the tape's end and slows to fit.
      */
     function windTo(to: number, landed: () => void) {
         const { at, rate, direction: was } = tapeNow();
         const direction = to >= at ? 1 : -1;
         const speed = settings.speed.value;
         const from = direction === was ? rate : speed;
-        // Speed is a straight line from `from` to `speed` plus half a sine of height `bulge`.
-        const line = ((from + speed) / 2) * WIND;
-        const widest = Math.max(0, settings.windSpeed.value - (from + speed) / 2);
-        const wanted = ((Math.abs(to - at) - line) * Math.PI) / (2 * WIND);
-        const bulge = Math.min(widest, Math.max(MIN_BULGE * speed, wanted));
-        const start = to - direction * (line + (bulge * 2 * WIND) / Math.PI);
-        const curve = (k: number) => from + (speed - from) * k + bulge * Math.sin(Math.PI * k);
-        turn(start, direction, curve, WIND, true, landed);
+        const line = (k: number) => from + (speed - from) * k;
+        const straight = ((from + speed) / 2) * WIND;
+        const perBulge = (2 * WIND) / Math.PI;
+        const highest = Math.max(0, settings.windSpeed.value - Math.max(from, speed));
+        const reach = Math.min(
+            Math.max(Math.abs(to - at), straight + MIN_BULGE * speed * perBulge),
+            straight + highest * perBulge,
+        );
+        const distance = Math.min(reach, direction > 0 ? to : tape!.duration - to);
+        const rates =
+            distance >= straight
+                ? curve((k) => line(k) + ((distance - straight) / perBulge) * Math.sin(Math.PI * k))
+                : curve((k) => (line(k) * distance) / straight);
+        turn(to - direction * travel(rates, WIND), direction, rates, WIND, true, landed);
     }
 
     /**
