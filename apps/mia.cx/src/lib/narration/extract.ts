@@ -132,6 +132,7 @@ export const sha256 = (input: string) => bytesToHex(nobleSha256(utf8ToBytes(inpu
 export const PRONUNCIATIONS: Record<string, string> = {
     nuphory: 'new phorie',
     wav: 'wave',
+    wplace: 'double-u place',
 };
 
 /** The pronunciation rules a text uses, or undefined for none. */
