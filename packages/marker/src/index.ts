@@ -12,7 +12,8 @@
  * outward takes `leading` ms, an edge moving inward `trailing` ms.
  *
  * When `word` changes, each edge starts moving `leading-delay` or `trailing-delay` ms after the
- * word is spoken, so the trail can lag behind. A negative delay starts the edge early, ahead of
+ * word is spoken, so the trail can lag behind; it never sets off before the leading edge, so a
+ * shorter `trailing-delay` acts as equal to `leading-delay`. A negative delay starts the edge early, ahead of
  * the voice. To allow that, a narration sets `word` `lookahead` ms before the word is spoken.
  *
  * Attributes: `word` (index, -1 for none), `leading`, `trailing`, `leading-delay`, `trailing-delay`,
@@ -517,8 +518,11 @@ function createMarker(): new () => MarkerElement {
                 }
                 this.#kick();
             };
+            // A trailing edge never sets off before the leading one: it would pass it and blank the cursor.
+            const lead = this.#setting('leading-delay');
+            const trail = Math.max(lead, this.#setting('trailing-delay'));
             for (const edge of EDGES) {
-                const wait = this.lookahead + this.#setting(leads[edge] ? 'leading-delay' : 'trailing-delay');
+                const wait = this.lookahead + (leads[edge] ? lead : trail);
                 if (wait > 0) setTimeout(() => go(edge), wait);
                 else go(edge);
             }

@@ -51,8 +51,9 @@ controls, clicks that clear a selection and the end of a drag never seek. `marke
 other point to a word.
 
 When the word changes, each edge waits `leading-delay` or `trailing-delay` ms after the word is spoken
-before it moves, so the trail can lag behind the voice. A negative delay makes an edge move before the
-word is spoken. For that, set `word` `marker.lookahead` ms early, which is how far ahead the most
+before it moves, so the trail can lag behind the voice. The trailing edge never sets off before the
+leading one, so a `trailing-delay` shorter than `leading-delay` acts as equal to it. A negative delay makes
+an edge move before the word is spoken. For that, set `word` `marker.lookahead` ms early, which is how far ahead the most
 negative delay reaches (0 when no delay is negative):
 
 ```ts
