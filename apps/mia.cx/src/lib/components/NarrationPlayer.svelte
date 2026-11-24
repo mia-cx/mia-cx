@@ -474,9 +474,11 @@
     $effect(() => {
         if (!marker) return;
         // What's heard trails the audio's clock by the output's latency, large over Bluetooth. The
-        // marker takes each word `lookahead` early, so an edge tuned to lead the voice can.
-        const heard = time - (context ? context.baseLatency + (context.outputLatency || 0) : 0);
-        let i = started ? spokenAt(heard + marker.lookahead / 1000) : -1;
+        // marker takes each word `lookahead` early, so an edge tuned to lead the voice can. Both are
+        // wall-clock time, which covers more of the recording at a faster speed.
+        const speed = settings.speed.value;
+        const heard = time - (context ? context.baseLatency + (context.outputLatency || 0) : 0) * speed;
+        let i = started ? spokenAt(heard + (marker.lookahead / 1000) * speed) : -1;
         // A sought word holds through the pre-roll until it is heard, however far the marker leads.
         if (held && (!held.landed || heard < starts[held.word])) i = held.word;
         else held = undefined;
