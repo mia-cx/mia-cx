@@ -7,8 +7,8 @@ sets must be in the app's Vite config, since the components import `~icons/*`.
 ## Tokens
 
 `@mia-cx/ui/tokens.css` defines the colour, type and control tokens, dark and light. The system
-preference picks the palette; `data-theme="light"` or `"dark"` on `<html>` forces one, and
-`ThemeToggle` sets it. Import it before any site styles. A site that wants a different look keeps the
+preference picks the palette; `data-theme="light"` or `"dark"` on `<html>` forces one, which the
+site's own settings set. Import it before any site styles. A site that wants a different look keeps the
 token names and changes the values; every component follows.
 
 ## Components
@@ -19,8 +19,6 @@ token names and changes the values; every component follows.
   headers that sit over the field.
 - `Socials`: bare icons for the featured networks plus a `+N` button opening the rest. Takes the two
   lists as props. `SocialIcon` maps a `SocialId` to its icon.
-- `ThemeToggle`: one button that flips between light and dark, and drops the stored choice when it
-  matches the system preference. The site restores the choice before paint from `localStorage.theme`.
 
 The site's selection highlight and narration word cursor, `<mia-marker>`, is its own package:
 [`@mia-cx/marker`](../marker/README.md).

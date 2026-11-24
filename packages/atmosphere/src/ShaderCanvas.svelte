@@ -30,6 +30,8 @@
         label = 'Animated coloured noise field',
         /** Called once, when the first frame is up or when graphics fail; the page reveals on it. */
         onsettle,
+        /** Holds the field on its current frame. Unset, it follows `prefers-reduced-motion` at mount. */
+        still,
     }: {
         renderScale?: number;
         dprCap?: number;
@@ -40,6 +42,7 @@
         dims?: boolean;
         label?: string;
         onsettle?: () => void;
+        still?: boolean;
     } = $props();
 
     let canvas: HTMLCanvasElement;
@@ -57,6 +60,10 @@
     const cursorDensityField = new CursorDensityField();
     let densityPoints: { x: number; y: number; timeStamp: number }[] = [];
     let paused = false;
+    $effect(() => {
+        paused = still ?? matchMedia('(prefers-reduced-motion: reduce)').matches;
+        renderer?.setPaused(document.hidden || paused);
+    });
 
     /*
      * Route changes hand the dim between the scroll animation and the base opacity. A browser will
@@ -185,7 +192,6 @@
         let disposed = false;
         const pageSeed = Math.random() * 1000;
         options = { ...BAKED_RENDER_OPTIONS, seed: pageSeed, renderScale, dprCap };
-        paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
         const calmMask = new CalmMask();
         loadBakedRenderOptions()
             .then((loadedOptions) => {

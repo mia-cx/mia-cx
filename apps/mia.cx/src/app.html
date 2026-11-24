@@ -20,9 +20,22 @@
             data-scheme="light"
         />
         <script>
-            // Runs before paint. An explicit choice wins, for the page and the browser chrome;
-            // otherwise the system preference applies via CSS and the media queries. The share card at
-            // /og is always dark, whoever renders it.
+            // Runs before paint, from the keys `$lib/settings` keeps. An explicit theme wins, for the page
+            // and the browser chrome; otherwise the system preference applies via CSS and the media
+            // queries. The share card at /og is always dark, whoever renders it. Motion is always set,
+            // from the reader's choice or the system's, so CSS reads one attribute.
+            let fieldOff = false;
+            try {
+                const motion = localStorage.getItem('motion');
+                document.documentElement.dataset.motion =
+                    motion === 'reduce' || motion === 'full'
+                        ? motion
+                        : matchMedia('(prefers-reduced-motion: reduce)').matches
+                          ? 'reduce'
+                          : 'full';
+                fieldOff = localStorage.getItem('field') === 'false';
+                if (fieldOff) document.documentElement.dataset.field = 'off';
+            } catch {}
             try {
                 const theme =
                     location.pathname === '/og'
@@ -41,7 +54,8 @@
             // other page shows its content at once while the shader fades in behind it. Without
             // JavaScript this never runs and the page shows as normal. A slow GPU or a broken
             // bundle never keeps the page blank for more than 2.5 s: this reveals it regardless.
-            if (location.pathname === '/')
+            // With the field off there is nothing to wait for.
+            if (location.pathname === '/' && !fieldOff)
                 document.documentElement.dataset.boot = 'loading';
             setTimeout(() => {
                 const root = document.documentElement;

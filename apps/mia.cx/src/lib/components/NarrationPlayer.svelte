@@ -2,7 +2,9 @@
     Plays a post's narration, highlighting the word being spoken with the page's `<mia-marker>`;
     clicking a word while it plays seeks there, and with the button focused the arrow keys skip between
     paragraphs. The moving highlight is the progress, so the control is one icon button: headphones
-    before it starts, then pause or play. It finds the audio by a hash of
+    before it starts, then pause or play. A second button beside it cycles the playback speed. The
+    reader's settings (`$lib/settings`) can pause it while text is selected, and in funny mode a seek
+    winds the tape there instead of fading. It finds the audio by a hash of
     exactly what the page reads (`$lib/narration/extract`), so it appears only once that text has been
     narrated.
 -->
@@ -12,11 +14,16 @@
     import Pause from '~icons/lucide/pause';
     import Play from '~icons/lucide/play';
     import { narratedBlocks, pageKey, type NarratedWord, type NarrationManifest } from '$lib/narration/extract';
+    import { SPEEDS, settings } from '$lib/settings.svelte';
 
     /** Seeks land this long before the word, since the timings can run a little late. */
     const PRE_ROLL = 0.3;
     const FADE_IN = 0.25;
     const FADE_OUT = 0.12;
+    /** Every wind takes this long, however far it goes. */
+    const WIND = 1.2;
+    /** The voice cuts out this quickly as a wind takes over: fast, but without a click. */
+    const CUT = 0.03;
 
     let src = $state<string>();
     let audio = $state<HTMLAudioElement>();
@@ -69,6 +76,7 @@
     async function play() {
         if (!audio) return;
         playing = true;
+        pausedBySelection = false;
         clearTimeout(pending);
         if (!context || !gain) {
             context = new AudioContext();
@@ -89,29 +97,149 @@
 
     function pause() {
         playing = false;
-        fade(0, FADE_OUT);
+        pausedBySelection = false;
         clearTimeout(pending);
+        // Mid-wind the voice is already silent: stop the tape where the wind was headed.
+        if (wind) {
+            wind.land();
+            stopWind();
+            audio?.pause();
+            return;
+        }
+        fade(0, FADE_OUT);
         pending = setTimeout(() => audio?.pause(), FADE_OUT * 1000);
+    }
+
+    /** Whether selecting text paused the narration, so clearing the selection resumes it. */
+    let pausedBySelection = false;
+    function followSelection() {
+        const selected = getSelection()?.isCollapsed === false;
+        if (selected && playing && settings.pauseWhileSelecting.value) {
+            pause();
+            pausedBySelection = true;
+        } else if (!selected && pausedBySelection) void play();
+    }
+
+    /**
+     * Funny mode's tape: the narration decoded, since an audio element can't play backwards. Loaded
+     * once funny mode is on and the narration plays; seeks fade as usual until it is ready.
+     */
+    let tape: AudioBuffer | undefined;
+    let tapeLoad: Promise<void> | undefined;
+    $effect(() => {
+        if (!settings.funny.value || !playing || tapeLoad || !context || !src) return;
+        const decoder = context;
+        tapeLoad = fetch(src)
+            .then((response) => response.arrayBuffer())
+            .then((data) => decoder.decodeAudioData(data))
+            .then((buffer) => void (tape = buffer));
+    });
+
+    /** The wind playing now: where on the tape it starts and lands, when it began, and how it lands. */
+    let wind: { source: AudioBufferSourceNode; from: number; to: number; begun: number; land: () => void } | undefined;
+
+    /** Where the tape is mid-wind: the wind's speed follows half a sine, so its distance follows a cosine. */
+    function windAt({ from, to, begun }: NonNullable<typeof wind>, now: number) {
+        const progress = Math.min(1, (now - begun) / WIND);
+        return from + ((to - from) * (1 - Math.cos(Math.PI * progress))) / 2;
+    }
+
+    function stopWind() {
+        if (!wind) return;
+        wind.source.onended = null;
+        wind.source.stop();
+        wind = undefined;
+    }
+
+    /**
+     * Winds the tape from `from` to `to` like a cassette: forward plays the stretch between sped up,
+     * back plays it reversed, and the pitch follows the speed. The speed rises from still to its peak
+     * and slows into the target over `WIND`, never past the reader's max wind speed. A distance
+     * further than that allows cuts to where the wind can still cover the rest.
+     */
+    function windTo(tapeBuffer: AudioBuffer, from: number, to: number, land: () => void) {
+        const decoder = context!;
+        const now = decoder.currentTime;
+        // Half a sine over `WIND` peaking at the max wind speed covers this much tape.
+        const reach = (2 * WIND * settings.windSpeed.value) / Math.PI;
+        const forward = to >= from;
+        const start = forward ? Math.max(from, to - reach) : Math.min(from, to + reach);
+        const span = Math.abs(to - start);
+        const rate = tapeBuffer.sampleRate;
+        const first = Math.floor(Math.min(start, to) * rate);
+        const last = Math.ceil(Math.max(start, to) * rate);
+        const stretch = decoder.createBuffer(tapeBuffer.numberOfChannels, Math.max(1, last - first), rate);
+        for (let channel = 0; channel < tapeBuffer.numberOfChannels; channel++) {
+            const samples = tapeBuffer.getChannelData(channel).slice(first, last);
+            if (!forward) samples.reverse();
+            stretch.copyToChannel(samples, channel);
+        }
+        const source = decoder.createBufferSource();
+        source.buffer = stretch;
+        const peak = (Math.PI * span) / (2 * WIND);
+        const steps = 64;
+        source.playbackRate.setValueCurveAtTime(
+            Float32Array.from({ length: steps + 1 }, (_, k) => peak * Math.sin((Math.PI * k) / steps)),
+            now,
+            WIND,
+        );
+        source.connect(decoder.destination);
+        source.onended = () => {
+            wind = undefined;
+            land();
+            fade(1, FADE_IN);
+            void audio!.play();
+        };
+        source.start(now);
+        source.stop(now + WIND);
+        wind = { source, from: start, to, begun: now, land };
+        // The voice cuts out as the tape takes over, and waits at the target, loading, until it lands.
+        fade(0, CUT);
+        pending = setTimeout(() => {
+            audio!.pause();
+            audio!.currentTime = to;
+        }, CUT * 1000);
     }
 
     /**
      * Jumps to just before a narrated word: straight there when paused or pausing, faded out and in
-     * while playing.
+     * while playing, or wound there in funny mode.
      */
     function seekTo(i: number) {
         if (!audio) return;
+        const to = Math.max(0, starts[i] - PRE_ROLL);
         held = { word: i, landed: false };
+        const sought = held;
         const land = () => {
-            audio!.currentTime = Math.max(0, starts[i] - PRE_ROLL);
-            held!.landed = true;
+            audio!.currentTime = to;
+            sought.landed = true;
         };
         if (!playing) return land();
-        fade(0, FADE_OUT);
         clearTimeout(pending);
+        // A seek mid-wind winds on from wherever the tape has got to.
+        const winding = wind;
+        const from = winding ? windAt(winding, context!.currentTime) : audio.currentTime;
+        stopWind();
+        if (tape && (winding || (settings.funny.value && settings.motion.value === 'full')))
+            return windTo(tape, from, to, land);
+        fade(0, FADE_OUT);
         pending = setTimeout(() => {
             land();
             fade(1, FADE_IN);
         }, FADE_OUT * 1000);
+    }
+
+    /** Pitch stays put at any speed; a new source would reset the rate, so the default follows too. */
+    $effect(() => {
+        if (!audio) return;
+        audio.preservesPitch = true;
+        audio.defaultPlaybackRate = audio.playbackRate = settings.speed.value;
+    });
+    const speedLabel = $derived(
+        `${Number.isInteger(settings.speed.value) ? settings.speed.value.toFixed(1) : settings.speed.value}×`,
+    );
+    function nextSpeed() {
+        settings.speed.value = SPEEDS[(SPEEDS.indexOf(settings.speed.value) + 1) % SPEEDS.length];
     }
 
     onMount(() => {
@@ -146,6 +274,7 @@
         return () => {
             gone = true;
             clearTimeout(pending);
+            stopWind();
             host.removeEventListener('seek', seek);
             if (marker) marker.word = -1;
             void context?.close();
@@ -196,8 +325,13 @@
     });
 </script>
 
+<svelte:document onselectionchange={followSelection} />
+
 {#if src}
-    <!-- Play and pause from elsewhere, such as the lock screen, keep `playing` honest too. -->
+    <!--
+        Play and pause from elsewhere, such as the lock screen, keep `playing` honest too. A wind pauses
+        the audio itself while the tape plays on.
+    -->
     <audio
         bind:this={audio}
         {src}
@@ -205,27 +339,44 @@
         bind:currentTime={time}
         bind:paused
         onplay={() => (playing = true)}
-        onpause={() => (playing = false)}
+        onpause={() => !wind && (playing = false)}
         onended={() => (time = 0)}
     ></audio>
-    <button
-        type="button"
-        class="listen"
-        onclick={() => (playing ? pause() : play())}
-        onkeydown={skip}
-        aria-label={playing ? 'Pause' : started ? 'Resume listening' : 'Listen to this post'}
-        aria-keyshortcuts="ArrowLeft ArrowRight"
-        data-print-hide
-        data-markdown="skip"
-        data-narration-skip
-    >
-        {#if playing}<Pause aria-hidden="true" />{:else if started}<Play aria-hidden="true" />{:else}<Headphones
-                aria-hidden="true"
-            />{/if}
-    </button>
+    <div class="controls" data-print-hide data-markdown="skip" data-narration-skip>
+        <button
+            type="button"
+            class="listen"
+            onclick={() => (playing ? pause() : play())}
+            onkeydown={skip}
+            aria-label={playing ? 'Pause' : started ? 'Resume listening' : 'Listen to this post'}
+            aria-keyshortcuts="ArrowLeft ArrowRight"
+        >
+            {#if playing}<Pause aria-hidden="true" />{:else if started}<Play aria-hidden="true" />{:else}<Headphones
+                    aria-hidden="true"
+                />{/if}
+        </button>
+        <button type="button" class="listen speed mono" onclick={nextSpeed} aria-label="Playback speed {speedLabel}">
+            {speedLabel}
+        </button>
+    </div>
 {/if}
 
 <style>
+    /* Side by side when floating; stacked in the gutter, which is narrower than two buttons and a gap. */
+    .controls {
+        display: flex;
+    }
+    .listen + .listen {
+        margin-left: -1px;
+    }
+    @media (min-width: 1100px) {
+        .controls {
+            flex-direction: column;
+        }
+        .listen + .listen {
+            margin: -1px 0 0;
+        }
+    }
     .listen {
         display: inline-grid;
         place-items: center;
@@ -242,8 +393,13 @@
     }
     .listen:hover,
     .listen:focus-visible {
+        position: relative;
         border-color: var(--accent);
         color: var(--accent);
+    }
+    .speed {
+        letter-spacing: 0;
+        text-transform: none;
     }
     .listen :global(svg) {
         width: 18px;
