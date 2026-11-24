@@ -35,8 +35,12 @@ export const GET: RequestHandler = async ({ params, request, platform }) => {
     headers.set('cache-control', audio ? 'public, max-age=31536000, immutable' : 'public, no-cache');
     headers.set('accept-ranges', 'bytes');
     // No body means a precondition failed. If-Match and If-Unmodified-Since come first and answer 412;
-    // only when they pass did If-None-Match or If-Modified-Since fail, which means unchanged: 304.
-    if (!object.body) return new Response(null, { status: failsMatch(request.headers, object) ? 412 : 304, headers });
+    // only when they pass, and the request asked whether it changed, is the answer unchanged: 304.
+    if (!object.body) {
+        const asked = request.headers.has('if-none-match') || request.headers.has('if-modified-since');
+        const unchanged = asked && !failsMatch(request.headers, object);
+        return new Response(null, { status: unchanged ? 304 : 412, headers });
+    }
 
     const range = object.range;
     if (!request.headers.has('range') || !range) return new Response(object.body, { headers });
