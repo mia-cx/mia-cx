@@ -10,7 +10,7 @@ In August last year, my alliance started a pretty big project: painting every ro
 
 Wplace is a shared pixel canvas laid over a map of the world, and anything bigger than a doodle gets painted from a template (the picture you're working from, laid over the map so you can see which colour goes where). This summer more and more new people started joining my Discord server and the project, and it got kinda convoluted having to point every one of them to a GitHub repository with a folder of images, one for each room.
 
-So I started thinking, and landed on the same answer other devs came to back in the very first r/place: a shared template server. Nobody had built one for Wplace yet, so I figured I'd make my own. And since I was gonna write a userscript for it *anyway*, I figured why not go one step further and just... improve on every existing overlay mod out there. They were slow, and they all looked the same, and both of those bugged me.
+So I started thinking, and landed on the same answer other devs came to back in the very first r/place: a shared template server. Nobody had built one for Wplace yet, so I figured I'd make my own. And since I was gonna write a userscript for it *anyway*, I figured why not go the extra mile and just... improve on every existing overlay mod out there. They were slow, and they all looked the same, and both of those bugged me.
 
 ## Why they're slow
 
