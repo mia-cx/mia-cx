@@ -244,15 +244,25 @@ const sitePath = (href: string) => href.replace(/^(\/[^?#]*?)\/+(?=[?#]|$)/, '$1
 /** Where a link to each note's URL leads: its page, an outside link, or nowhere. */
 const destinations = new Map(entries.map((entry) => [entry.path, entry.href]));
 
-export function render(markdown: string): string {
+/** A heading in a rendered body, for its table of contents. `text` is plain, without markup. */
+export interface Heading {
+    id: string;
+    text: string;
+    depth: number;
+}
+
+/** Renders a body's Markdown with the site's links and heading ids, and lists its headings in order. */
+export function render(markdown: string): { html: string; headings: Heading[] } {
     const renderer = new marked.Renderer();
     const link = renderer.link.bind(renderer);
     const seen = new Map<string, number>();
+    const headings: Heading[] = [];
     renderer.heading = ({ text: plain, tokens, depth }) => {
         const base = headingId(plain);
         const count = seen.get(base) ?? 0;
         seen.set(base, count + 1);
         const id = count === 0 ? base : `${base}-${count}`;
+        headings.push({ id, depth, text: renderer.parser.parseInline(tokens, new marked.TextRenderer()) });
         return `<h${depth} id="${id}">${renderer.parser.parseInline(tokens)}</h${depth}>`;
     };
     renderer.link = (token) => {
@@ -264,5 +274,6 @@ export function render(markdown: string): string {
         if (destination === path) return link({ ...token, href });
         return destination ? link({ ...token, href: destination }) : renderer.parser.parseInline(token.tokens);
     };
-    return marked.parse(markdown, { renderer, async: false, gfm: true }) as string;
+    const html = marked.parse(markdown, { renderer, async: false, gfm: true }) as string;
+    return { html, headings };
 }

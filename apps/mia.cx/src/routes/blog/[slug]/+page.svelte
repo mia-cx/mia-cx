@@ -4,4 +4,4 @@
     let { data } = $props();
 </script>
 
-<PostArticle post={data.post} html={data.html} mentions={data.mentions} back={{ title: 'Blog', href: '/blog' }} />
+<PostArticle {...data} back={{ title: 'Blog', href: '/blog' }} />
