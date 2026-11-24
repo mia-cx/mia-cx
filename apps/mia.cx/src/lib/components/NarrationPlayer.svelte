@@ -72,9 +72,15 @@
             gain = context.createGain();
             context.createMediaElementSource(audio).connect(gain).connect(context.destination);
         }
-        await context.resume();
         gain.gain.value = 0;
-        await audio.play();
+        try {
+            await context.resume();
+            await audio.play();
+        } catch (error) {
+            // Audio that won't load or start leaves nothing playing: show Play again, and still report it.
+            playing = false;
+            throw error;
+        }
         fade(1, FADE_IN);
     }
 
