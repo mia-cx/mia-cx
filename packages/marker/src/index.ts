@@ -122,6 +122,8 @@ interface Block {
     generation: number;
     /** The latest spoken word (see `#speak`) each edge has moved for. */
     moved: Record<Edge, number>;
+    /** The spoken word a hidden block will appear on, and when. */
+    revealing?: { word: number; at: number };
     /** The element holding the block's text and where it was, so the block can move when the element does. */
     ref?: { el: Element; x: number; y: number };
 }
@@ -483,22 +485,32 @@ function createMarker(): new () => MarkerElement {
         #speak(block: Block, to: Edges, holder: Element) {
             clearTimeout(block.fading);
             block.fading = undefined;
+            const word = ++this.#spokenCount;
+            if (!block.at) {
+                const at = performance.now() + this.lookahead + this.#setting('leading-delay');
+                block.revealing = { word, at };
+            }
             const leads = reducedMotion() ? ALL_LEAD : this.#leads(block, to);
             block.at = to;
             const { generation } = block;
-            const word = ++this.#spokenCount;
             const go = (edge: Edge) => {
                 // Replaced since, or this edge already moved for a later word.
                 if (block.generation !== generation || block.moved[edge] >= word) return;
-                // A frame with nothing drawn forgets what is shown, so show the word's text with each move.
-                this.#reveal([holder]);
                 const now = performance.now();
                 if (!block.tweens) {
+                    // Words queued before the cursor appears move it only once it has, on its first word.
+                    const first = block.revealing;
+                    if (first && first.word !== word)
+                        return void setTimeout(() => go(edge), Math.max(0, first.at - now));
+                    block.revealing = undefined;
+                    this.#reveal([holder]);
                     block.tweens = Object.fromEntries(
                         EDGES.map((e) => [e, { from: to[e], to: to[e], start: now, dur: 0 }]),
                     ) as Record<Edge, Tween>;
                     block.moved = { l: word, r: word, t: word, b: word };
                 } else {
+                    // A frame with nothing drawn forgets what is shown, so show the word's text with each move.
+                    this.#reveal([holder]);
                     const dur = reducedMotion() ? 0 : this.#setting(leads[edge] ? 'leading' : 'trailing');
                     block.tweens[edge] = { from: valueOf(block.tweens[edge], now), to: to[edge], start: now, dur };
                     block.moved[edge] = word;
@@ -520,6 +532,7 @@ function createMarker(): new () => MarkerElement {
             clearTimeout(block.fading);
             block.fading = undefined;
             block.generation++;
+            block.revealing = undefined;
             if (!to) {
                 block.at = null;
                 block.tweens = null;
