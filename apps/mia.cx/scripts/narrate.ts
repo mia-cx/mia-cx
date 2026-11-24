@@ -61,6 +61,7 @@ const GAP = 0.45;
  */
 const PRONUNCIATIONS: Record<string, string> = {
     nuphory: 'new phorie',
+    wav: 'wave',
 };
 
 /** Part of a block, read by one request. */
