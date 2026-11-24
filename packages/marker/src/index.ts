@@ -424,27 +424,32 @@ function createMarker(): new () => MarkerElement {
             this.#reveal([holder]);
             const head = this.#blocks[0];
             const from = head.at;
-            const previous = head.ref;
-            head.ref = this.#refOf(holder);
             const move = (block: Block, edges: Edges) =>
                 spoken ? this.#speak(block, edges, holder) : this.#setEdges(block, edges);
-            if (!from || sameLine(from, to) || reducedMotion()) return move(head, to);
+            if (!from || sameLine(from, to) || reducedMotion()) {
+                head.ref = this.#refOf(holder);
+                return move(head, to);
+            }
             const forward = to.t > from.t;
             clearTimeout(this.#wrapTimer);
-            const tail = this.#tail;
-            // The tail takes over the old shape; moves still due for the head's earlier words are dropped.
-            Object.assign(tail, { at: from, tweens: head.tweens, ref: previous, generation: tail.generation + 1 });
+            // The old shape becomes the tail as it is, so its moves still due for earlier words carry on
+            // along the old line, and the tail's block grows on the new one.
+            const fresh = this.#tail;
+            this.#setEdges(fresh, null);
+            fresh.ref = this.#refOf(holder);
+            [this.#tail, this.#blocks[0]] = [head, fresh];
             const edge = forward ? from.r : from.l;
-            move(tail, { ...from, l: edge, r: edge });
+            move(head, { ...from, l: edge, r: edge });
             const delay = spoken ? this.lookahead + this.#setting('trailing-delay') : 0;
-            this.#wrapTimer = setTimeout(() => this.#setEdges(tail, null), delay + this.#setting('trailing'));
+            this.#wrapTimer = setTimeout(() => this.#setEdges(head, null), delay + this.#setting('trailing'));
             const start = forward ? to.l : to.r;
-            this.#setEdges(head, { ...to, l: start, r: start }, true);
-            move(head, to);
+            this.#setEdges(fresh, { ...to, l: start, r: start }, true);
+            move(fresh, to);
         }
 
-        /** Which of a block's edges move outward toward `to`, and so lead. */
+        /** Which of a block's edges move outward toward `to`, and so lead: all of a hidden one's, as it appears. */
         #leads(block: Block, to: Edges): Record<Edge, boolean> {
+            if (!block.tweens) return { l: true, r: true, t: true, b: true };
             return { l: to.l < (block.at?.l ?? to.l), r: to.r > (block.at?.r ?? to.r), t: false, b: false };
         }
 
