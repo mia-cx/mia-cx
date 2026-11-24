@@ -27,6 +27,17 @@ describe('narrated text', () => {
         expect(spokenText(block.words)).toEqual({ text: 'it was anyway, fine now', offsets: [0, 3, 7, 10, 15, 20] });
     });
 
+    it('reads the same however a parser splits text into nodes', () => {
+        const split = region('<p></p>');
+        const p = split.querySelector('p')!;
+        // linkedom splits text at entities, so `music,&quot; &quot;I` arrives as four nodes.
+        for (const piece of ['"I want music,', '"', ' ', '"', 'I want books."'])
+            p.append(p.ownerDocument.createTextNode(piece));
+        const whole = region('<p>"I want music," "I want books."</p>');
+        const read = (el: Element) => narratedBlocks(el).map((block) => spokenText(block.words).text);
+        expect(read(split)).toEqual(read(whole));
+    });
+
     it('reads a bare link as one word without its scheme, and a named link as its words', () => {
         const [block] = narratedBlocks(
             region('<p>See <a href="https://nuphory.com">https://nuphory.com</a>. Or <a href="/x">my site</a>.</p>'),
