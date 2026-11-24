@@ -276,6 +276,13 @@ function createMarker(): new () => MarkerElement {
                 attributes: true,
                 attributeFilter: ['style', 'class'],
             });
+            // A `word` set before the element was defined landed on the element itself and would hide the
+            // setter forever; hand it to the setter instead.
+            if (Object.hasOwn(this, 'word')) {
+                const { word } = this;
+                delete (this as { word?: number }).word;
+                this.word = word;
+            }
         }
 
         disconnectedCallback() {
