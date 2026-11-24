@@ -458,7 +458,7 @@ function createMarker(): new () => MarkerElement {
             [this.#tail, this.#blocks[0]] = [head, fresh];
             const edge = forward ? from.r : from.l;
             move(head, { ...from, l: edge, r: edge });
-            const delay = spoken ? this.lookahead + this.#setting('trailing-delay') : 0;
+            const delay = spoken ? this.lookahead + this.#delays().trail : 0;
             this.#wrapTimer = setTimeout(() => this.#setEdges(head, null), delay + this.#setting('trailing'));
             const start = forward ? to.l : to.r;
             this.#setEdges(fresh, { ...to, l: start, r: start }, true);
@@ -472,6 +472,15 @@ function createMarker(): new () => MarkerElement {
         #leads(block: Block, to: Edges): Record<Edge, boolean> {
             if (!block.at) return ALL_LEAD;
             return { l: to.l < (block.at?.l ?? to.l), r: to.r > (block.at?.r ?? to.r), t: false, b: false };
+        }
+
+        /**
+         * The edge delays as applied. A trailing edge never sets off before the leading one: it would
+         * pass it and blank the cursor.
+         */
+        #delays() {
+            const lead = this.#setting('leading-delay');
+            return { lead, trail: Math.max(lead, this.#setting('trailing-delay')) };
         }
 
         /** Counts spoken words, so each edge only ever moves on to a later word than it last did. */
@@ -518,9 +527,7 @@ function createMarker(): new () => MarkerElement {
                 }
                 this.#kick();
             };
-            // A trailing edge never sets off before the leading one: it would pass it and blank the cursor.
-            const lead = this.#setting('leading-delay');
-            const trail = Math.max(lead, this.#setting('trailing-delay'));
+            const { lead, trail } = this.#delays();
             for (const edge of EDGES) {
                 const wait = this.lookahead + (leads[edge] ? lead : trail);
                 if (wait > 0) setTimeout(() => go(edge), wait);
