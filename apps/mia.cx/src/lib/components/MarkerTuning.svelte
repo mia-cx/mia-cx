@@ -1,16 +1,20 @@
 <!--
-    Mia's tuning panel for the highlight, open on any page with `?debug` in its address. Its values
-    set the attributes of the page's `<mia-marker>` and stay in this browser, applied on every page
-    whether the panel is open or not, until Defaults clears them. Once a feel is right, the values
-    become the marker's own defaults.
+    Sets the page's `<mia-marker>` timings: the site's (`MARKER_TIMINGS`), or this browser's tuning.
+    With `?debug` in the address it shows Mia's tuning panel. Tuned values stay in this browser and
+    apply on every page whether the panel is open or not, until Defaults goes back to the site's.
+    Once a feel is right, the values go into `MARKER_TIMINGS`.
 -->
 <script lang="ts">
     import { onMount } from 'svelte';
     import { browser } from '$app/environment';
+    import { MARKER_TIMINGS } from '$lib/marker';
 
     const KEY = 'marker-tuning';
 
-    /** Each knob is a marker attribute: a slider, plus a number field for exact values past its range. */
+    /**
+     * Each knob is a marker attribute: a slider, plus a number field for exact values past its range.
+     * `start` is the marker's own default; `MARKER_TIMINGS` overrides it.
+     */
     const KNOBS = [
         { name: 'leading', label: 'Leading edge', unit: 'ms', min: 0, max: 400, start: 200 },
         { name: 'trailing', label: 'Trailing edge', unit: 'ms', min: 0, max: 600, start: 200 },
@@ -22,7 +26,8 @@
     ] as const;
     type Knob = (typeof KNOBS)[number]['name'];
 
-    const defaults = () => Object.fromEntries(KNOBS.map((k) => [k.name, k.start])) as Record<Knob, number>;
+    const defaults = () =>
+        ({ ...Object.fromEntries(KNOBS.map((k) => [k.name, k.start])), ...MARKER_TIMINGS }) as Record<Knob, number>;
 
     function saved(): Partial<Record<Knob, number>> {
         try {
@@ -34,7 +39,7 @@
     }
 
     let open = $state(false);
-    /** Only what has been tuned; anything else keeps the marker's own default. */
+    /** Only what has been tuned; anything else keeps the site's default. */
     let tuned = $state(browser ? saved() : {});
     const values = $derived({ ...defaults(), ...tuned });
 
@@ -43,11 +48,7 @@
     $effect(() => {
         const marker = document.querySelector('mia-marker');
         if (!marker) return;
-        for (const { name } of KNOBS) {
-            const value = tuned[name];
-            if (value === undefined) marker.removeAttribute(name);
-            else marker.setAttribute(name, String(value));
-        }
+        for (const { name } of KNOBS) marker.setAttribute(name, String(values[name]));
         try {
             if (Object.keys(tuned).length) localStorage.setItem(KEY, JSON.stringify(tuned));
             else localStorage.removeItem(KEY);

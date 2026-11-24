@@ -81,7 +81,7 @@
 {#if bare}
     {@render children()}
 {:else}
-    <!-- Every selection on the site, and later the narration's word, is drawn by the marker. -->
+    <!-- Every selection on the site, and the narration's word, is drawn by the marker. -->
     <mia-marker>
         <Header {hasHero} />
 
@@ -91,7 +91,10 @@
 
         <Footer />
     </mia-marker>
-    <!-- Outside the marker, so its labels aren't words and its sliders keep their own selection. -->
+    <!--
+        Gives the marker the site's timings, or this browser's tuning. Outside the marker, so the
+        `?debug` panel's labels aren't words and its sliders keep their own selection.
+    -->
     <MarkerTuning />
 {/if}
 
