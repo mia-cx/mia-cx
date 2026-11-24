@@ -14,8 +14,8 @@
     const KNOBS = [
         { name: 'leading', label: 'Leading edge', unit: 'ms', min: 0, max: 400, start: 200 },
         { name: 'trailing', label: 'Trailing edge', unit: 'ms', min: 0, max: 600, start: 200 },
-        { name: 'leading-delay', label: 'Leading delay', unit: 'ms', min: -300, max: 300, start: 0 },
-        { name: 'trailing-delay', label: 'Trailing delay', unit: 'ms', min: -300, max: 300, start: 0 },
+        { name: 'leading-delay', label: 'Leading delay', unit: 'ms', min: -1000, max: 1000, start: 0 },
+        { name: 'trailing-delay', label: 'Trailing delay', unit: 'ms', min: -1000, max: 1000, start: 0 },
         { name: 'stagger', label: 'Deselect stagger', unit: 'ms', min: 0, max: 200, start: 150 },
         { name: 'padding', label: 'Padding', unit: 'px', min: 0, max: 10, start: 4, step: 0.5 },
         { name: 'radius', label: 'Corner radius', unit: 'px', min: 0, max: 14, start: 0 },
