@@ -7,20 +7,17 @@
     import Mentions from '$lib/components/Mentions.svelte';
     import PageMarkdown from '$lib/components/PageMarkdown.svelte';
     import NarrationPlayer from '$lib/components/NarrationPlayer.svelte';
-    import TableOfContents from '$lib/components/TableOfContents.svelte';
-    import { formatDate, type Heading, type Post, type VaultEntry } from '$lib/content/vault';
+    import { formatDate, type Post, type VaultEntry } from '$lib/content/vault';
     import { site } from '$lib/content/site';
 
     let {
         post,
         html,
-        headings,
         mentions,
         back,
     }: {
         post: Post;
         html: string;
-        headings: Heading[];
         mentions: (VaultEntry & { href: string })[];
         back: { title: string; href: string };
     } = $props();
@@ -54,12 +51,11 @@
         </header>
 
         <div class="body">
-            <aside class="gutter" data-print-hide data-markdown="skip" data-narration-skip>
-                <div class="rail">
-                    {#if post.narration}<div class="float"><NarrationPlayer /></div>{/if}
-                    <TableOfContents {headings} />
-                </div>
-            </aside>
+            {#if post.narration}
+                <aside class="gutter" data-print-hide data-markdown="skip" data-narration-skip>
+                    <div class="rail"><NarrationPlayer /></div>
+                </aside>
+            {/if}
             <!-- Mia's own markdown, from the vault. -->
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- rendered from the vault, which is authored in this repo -->
             <div class="prose">{@html html}</div>
@@ -110,43 +106,32 @@
     .meta a {
         color: inherit;
     }
-    .float {
+
+    /*
+     * The player floats at the bottom left of the window. Where the left gutter fits it, it sits there
+     * instead, beside the body and stuck under the header as the post scrolls. The right gutter is kept
+     * for comments and reactions.
+     */
+    .body {
+        position: relative;
+    }
+    .rail {
         position: fixed;
         bottom: max(24px, env(safe-area-inset-bottom));
         left: var(--gutter);
         z-index: 30;
         background: var(--panel);
     }
-    @media (min-width: 1400px) {
-        .float {
-            position: static;
-            background: none;
-        }
-    }
-
-    /*
-     * The left gutter spans the body's height beside it, and its rail of the player and the contents
-     * sticks under the header. The gutter fits from here: the content width, two rails and their gaps.
-     * The right gutter is kept for comments and reactions.
-     */
-    .body {
-        position: relative;
-    }
-    @media (min-width: 1400px) {
+    @media (min-width: 1100px) {
         .gutter {
             position: absolute;
             top: 0;
-            right: calc(100% + 48px);
+            right: calc(100% + 40px);
             bottom: 0;
-            width: 200px;
         }
         .rail {
             position: sticky;
             top: calc(var(--header-height) + 24px);
-            display: flex;
-            flex-direction: column;
-            gap: 28px;
-            max-height: calc(100dvh - var(--header-height) - 48px);
         }
     }
 

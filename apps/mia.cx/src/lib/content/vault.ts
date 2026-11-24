@@ -231,18 +231,11 @@ export const countByKind = (kind: Kind | 'all') =>
 export const formatDate = (iso: string, month: 'short' | 'long' = 'short') =>
     new Date(iso).toLocaleDateString('en-GB', { year: 'numeric', month, day: 'numeric', timeZone: 'UTC' });
 
-/** A tag, including any `>` inside its quoted attribute values. */
-const TAG = /<(?:[^>"']|"[^"]*"|'[^']*')*>/g;
-
-/** Strips tags to a fixed point, so markup split around another tag can't reassemble. */
-function stripTags(html: string) {
-    while (new RegExp(TAG).test(html)) html = html.replace(TAG, '');
-    return html;
-}
-
 /** GitHub's heading ids, which Svartz uses for `[[Note#Heading]]` links: "Slope & Tilt" is `slope--tilt`. */
 function headingId(text: string) {
-    return stripTags(text)
+    // Strip tags to a fixed point before normalising the heading id.
+    while (/<[^>]*>/.test(text)) text = text.replace(/<[^>]*>/g, '');
+    return text
         .toLowerCase()
         .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '')
         .replace(/ /g, '-');
@@ -254,30 +247,16 @@ const sitePath = (href: string) => href.replace(/^(\/[^?#]*?)\/+(?=[?#]|$)/, '$1
 /** Where a link to each note's URL leads: its page, an outside link, or nowhere. */
 const destinations = new Map(entries.map((entry) => [entry.path, entry.href]));
 
-/** A heading in a rendered body, for its table of contents. */
-export interface Heading {
-    id: string;
-    /** The heading as it reads, as HTML: tags stripped, entities kept, so `&amp;` still shows "&". */
-    label: string;
-    depth: number;
-}
-
-/** Renders a body's Markdown with the site's links and heading ids, and lists its headings in order. */
-export function render(markdown: string): { html: string; headings: Heading[] } {
+export function render(markdown: string): string {
     const renderer = new marked.Renderer();
     const link = renderer.link.bind(renderer);
     const seen = new Map<string, number>();
-    const headings: Heading[] = [];
     renderer.heading = ({ text: plain, tokens, depth }) => {
         const base = headingId(plain);
         const count = seen.get(base) ?? 0;
         seen.set(base, count + 1);
         const id = count === 0 ? base : `${base}-${count}`;
-        const content = renderer.parser.parseInline(tokens);
-        // An image reads as its alt text, which Marked has already escaped.
-        const label = stripTags(content.replace(/<img\b[^>]*\balt="([^"]*)"[^>]*>/g, '$1'));
-        headings.push({ id, depth, label });
-        return `<h${depth} id="${id}">${content}</h${depth}>`;
+        return `<h${depth} id="${id}">${renderer.parser.parseInline(tokens)}</h${depth}>`;
     };
     renderer.link = (token) => {
         const href = sitePath(token.href);
@@ -288,6 +267,5 @@ export function render(markdown: string): { html: string; headings: Heading[] } 
         if (destination === path) return link({ ...token, href });
         return destination ? link({ ...token, href: destination }) : renderer.parser.parseInline(token.tokens);
     };
-    const html = marked.parse(markdown, { renderer, async: false, gfm: true }) as string;
-    return { html, headings };
+    return marked.parse(markdown, { renderer, async: false, gfm: true }) as string;
 }

@@ -5,4 +5,9 @@
 </script>
 
 <!-- Every post at this route sits in a project folder, so it always has a project to go back to. -->
-<PostArticle {...data} back={data.post.project ?? { title: 'Work', href: '/work' }} />
+<PostArticle
+    post={data.post}
+    html={data.html}
+    mentions={data.mentions}
+    back={data.post.project ?? { title: 'Work', href: '/work' }}
+/>
