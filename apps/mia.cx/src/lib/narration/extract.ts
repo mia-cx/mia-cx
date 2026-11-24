@@ -87,8 +87,9 @@ export function narratedBlocks(region: Element): NarratedBlock[] {
             const text = node as Text;
             for (const match of text.data.matchAll(/\S+/g))
                 push(block, text, match.index, match.index + match[0].length, match[0]);
-            // Whitespace after the last word separates it from whatever follows.
-            if (last?.node === text && last.end < text.data.length) last = { node: text, end: -1 };
+            // Whitespace at the end separates the last word from whatever follows, also when the node is
+            // nothing but whitespace: parsers differ in where they split text into nodes.
+            if (/\s$/.test(text.data)) last = { node: text, end: -1 };
             return;
         }
         if (node.nodeType !== ELEMENT_NODE || silent(node as Element)) return;
