@@ -130,6 +130,7 @@ export const sha256 = (input: string) => bytesToHex(nobleSha256(utf8ToBytes(inpu
  * narration script keeps an ElevenLabs pronunciation dictionary of exactly these.
  */
 export const PRONUNCIATIONS: Record<string, string> = {
+    caelestis: 'kai lestis',
     nuphory: 'new phorie',
     wav: 'wave',
     wplace: 'double-u place',
