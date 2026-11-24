@@ -99,6 +99,8 @@ type Setting = keyof typeof DEFAULTS;
 
 type Edge = keyof Edges;
 const EDGES: Edge[] = ['l', 'r', 't', 'b'];
+/** Every edge moving as a leading one: a cursor appearing, or one snapping under reduced motion. */
+const ALL_LEAD: Record<Edge, boolean> = { l: true, r: true, t: true, b: true };
 interface Tween {
     from: number;
     to: number;
@@ -449,7 +451,7 @@ function createMarker(): new () => MarkerElement {
 
         /** Which of a block's edges move outward toward `to`, and so lead: all of a hidden one's, as it appears. */
         #leads(block: Block, to: Edges): Record<Edge, boolean> {
-            if (!block.tweens) return { l: true, r: true, t: true, b: true };
+            if (!block.tweens) return ALL_LEAD;
             return { l: to.l < (block.at?.l ?? to.l), r: to.r > (block.at?.r ?? to.r), t: false, b: false };
         }
 
@@ -460,11 +462,12 @@ function createMarker(): new () => MarkerElement {
          * A word's move: each edge sets off its delay after the word is spoken, `lookahead` from now.
          * Edges still on their way to earlier words carry on, so a lagging edge follows the words rather
          * than waiting for them to stop. A hidden cursor appears, whole, at its first word's first move.
+         * With reduced motion the whole cursor snaps to the word on the leading delay.
          */
         #speak(block: Block, to: Edges, holder: Element) {
             clearTimeout(block.fading);
             block.fading = undefined;
-            const leads = this.#leads(block, to);
+            const leads = reducedMotion() ? ALL_LEAD : this.#leads(block, to);
             block.at = to;
             const { generation } = block;
             const word = ++this.#spokenCount;
