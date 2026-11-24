@@ -403,8 +403,20 @@ function createMarker(): new () => MarkerElement {
             if (next < 0) this.#dropSeek();
             // A click waiting to seek holds the cursor on its word until the seek lands or is dropped.
             if (this.#selecting || this.#seeking >= 0) return;
-            if (next < 0) this.#retire(this.#blocks[0], undefined);
-            else this.#moveTo(next, true);
+            if (next >= 0) return this.#moveTo(next, true);
+            this.#quietTail();
+            this.#retire(this.#blocks[0], undefined);
+        }
+
+        /**
+         * Stops an old line still catching up with the voice: a clear or a direct move leaves nothing
+         * behind to light up later. A shown tail shrinks away.
+         */
+        #quietTail() {
+            const tail = this.#tail;
+            tail.generation++;
+            if (tail.tweens) this.#retire(tail, undefined);
+            else this.#setEdges(tail, null);
         }
 
         /** While a selection holds the highlight, the current word gets a quieter underline. */
@@ -420,6 +432,7 @@ function createMarker(): new () => MarkerElement {
          * `spoken` move keeps the edge delays; a click's preview and re-placing the cursor don't.
          */
         #moveTo(index: number, spoken = false) {
+            if (!spoken) this.#quietTail();
             const to = this.#wordEdges(index);
             if (!to) return this.#retire(this.#blocks[0], undefined);
             const holder = this.#wordRanges()[index].startContainer.parentElement!;
@@ -449,9 +462,12 @@ function createMarker(): new () => MarkerElement {
             move(fresh, to);
         }
 
-        /** Which of a block's edges move outward toward `to`, and so lead: all of a hidden one's, as it appears. */
+        /**
+         * Which of a block's edges move outward toward `to`, and so lead: all of them for a block with no
+         * target yet, as it appears. A word queued before the first one shows moves from that one.
+         */
         #leads(block: Block, to: Edges): Record<Edge, boolean> {
-            if (!block.tweens) return ALL_LEAD;
+            if (!block.at) return ALL_LEAD;
             return { l: to.l < (block.at?.l ?? to.l), r: to.r > (block.at?.r ?? to.r), t: false, b: false };
         }
 
