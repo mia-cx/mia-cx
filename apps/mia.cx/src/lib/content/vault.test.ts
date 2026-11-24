@@ -139,7 +139,7 @@ describe('heading ids', () => {
 
     it('lists the headings in order, without their markup, under the ids they link to', () => {
         const { headings } = render(
-            '## *Slope* & Tilt\n\ntext\n\n### <em>Low</em>-end\n\n## Slope &amp; Tilt\n\n### ![Tilt "curve"](/t.png)',
+            '## *Slope* & Tilt\n\ntext\n\n### <span title="1 > 0">Low</span>-end\n\n## Slope &amp; Tilt\n\n### ![Tilt "curve"](/t.png)',
         );
         expect(headings).toEqual([
             { id: 'slope--tilt', label: 'Slope &amp; Tilt', depth: 2 },

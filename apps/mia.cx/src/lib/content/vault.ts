@@ -228,9 +228,12 @@ export const countByKind = (kind: Kind | 'all') =>
 export const formatDate = (iso: string, month: 'short' | 'long' = 'short') =>
     new Date(iso).toLocaleDateString('en-GB', { year: 'numeric', month, day: 'numeric', timeZone: 'UTC' });
 
+/** A tag, including any `>` inside its quoted attribute values. */
+const TAG = /<(?:[^>"']|"[^"]*"|'[^']*')*>/g;
+
 /** Strips tags to a fixed point, so markup split around another tag can't reassemble. */
 function stripTags(html: string) {
-    while (/<[^>]*>/.test(html)) html = html.replace(/<[^>]*>/g, '');
+    while (new RegExp(TAG).test(html)) html = html.replace(TAG, '');
     return html;
 }
 
