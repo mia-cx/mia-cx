@@ -37,10 +37,11 @@ declare global {
     interface NarrationBucket {
         get(key: string, options?: { range?: Headers; onlyIf?: Headers }): Promise<NarrationObject | null>;
     }
-    /** An R2 object; `body` is missing when a conditional request matched (304). */
+    /** An R2 object; `body` is missing when one of the request's preconditions failed. */
     interface NarrationObject {
         size: number;
         httpEtag: string;
+        uploaded: Date;
         range?: { offset?: number; length?: number; suffix?: number };
         body?: ReadableStream;
         writeHttpMetadata(headers: Headers): void;

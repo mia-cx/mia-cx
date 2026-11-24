@@ -12,6 +12,15 @@ export const prerender = false;
  */
 const SERVED = /^(?:pages\/[0-9a-f]{64}\.json|audio\/[0-9a-f]{64}\.mp3)$/;
 
+/** Whether If-Match, or without it If-Unmodified-Since, fails for this object (RFC 9110, section 13.2.2). */
+function failsMatch(headers: Headers, object: NarrationObject) {
+    const match = headers.get('if-match');
+    if (match) return !match.split(',').some((tag) => ['*', object.httpEtag].includes(tag.trim()));
+    const since = Date.parse(headers.get('if-unmodified-since') ?? '');
+    // HTTP dates count whole seconds.
+    return Number.isFinite(since) && Math.floor(object.uploaded.getTime() / 1000) * 1000 > since;
+}
+
 export const GET: RequestHandler = async ({ params, request, platform }) => {
     if (!SERVED.test(params.key)) error(404, 'No such narration');
     const bucket = platform?.env.NARRATION;
@@ -25,11 +34,9 @@ export const GET: RequestHandler = async ({ params, request, platform }) => {
     const audio = params.key.startsWith('audio/');
     headers.set('cache-control', audio ? 'public, max-age=31536000, immutable' : 'public, no-cache');
     headers.set('accept-ranges', 'bytes');
-    // No body means a precondition failed: unchanged for a conditional GET, otherwise a failed If-Match.
-    if (!object.body) {
-        const revalidating = request.headers.has('if-none-match') || request.headers.has('if-modified-since');
-        return new Response(null, { status: revalidating ? 304 : 412, headers });
-    }
+    // No body means a precondition failed. If-Match and If-Unmodified-Since come first and answer 412;
+    // only when they pass did If-None-Match or If-Modified-Since fail, which means unchanged: 304.
+    if (!object.body) return new Response(null, { status: failsMatch(request.headers, object) ? 412 : 304, headers });
 
     const range = object.range;
     if (!request.headers.has('range') || !range) return new Response(object.body, { headers });
