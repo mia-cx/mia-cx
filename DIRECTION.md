@@ -55,3 +55,8 @@ section (a heading and what follows) is read in one request, which gives the voi
 that an edit re-reads its whole section, not just its paragraph. Sections keep ElevenLabs' timing for every character,
 so a change to how text splits into words needs no new audio. A budget guard stops any run over 25,000 characters unless
 it is given a bigger budget. How it works and how to run it locally: `apps/mia.cx/README.md`.
+
+It shipped in 0.4.0, with four posts narrated. The player is one icon button, atop the left gutter on wide screens and
+floating at the bottom left elsewhere; the moving highlight is the progress, so there is no time or progress bar.
+Clicking a word seeks 0.3 s before it, with a fade, and the arrow keys skip between paragraphs. Still open from #66:
+spoken cues for images and code blocks, speed, and the settings popover (#169).
