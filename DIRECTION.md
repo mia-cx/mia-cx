@@ -50,6 +50,8 @@ but the field stays light floating over the page, as in dark; multiplying it in 
 
 Posts that opt in with `narration: true` are read aloud in Mia's own cloned voice (ElevenLabs, Eleven v4), with the word
 being spoken highlighted by `<mia-marker>` (#66). Audio is generated in CI, never per request, and stored in one R2
-bucket shared by every environment under a hash of the exact text it reads, so text and audio can never disagree and
-edits pay only for the paragraphs they change. A budget guard stops any run over 25,000 characters unless it is given a
-bigger budget. How it works and how to run it locally: `apps/mia.cx/README.md`.
+bucket shared by every environment under a hash of the exact text it reads, so text and audio can never disagree. Each
+section (a heading and what follows) is read in one request, which gives the voice whole passages to read; the cost is
+that an edit re-reads its whole section, not just its paragraph. Sections keep ElevenLabs' timing for every character,
+so a change to how text splits into words needs no new audio. A budget guard stops any run over 25,000 characters unless
+it is given a bigger budget. How it works and how to run it locally: `apps/mia.cx/README.md`.

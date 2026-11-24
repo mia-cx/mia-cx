@@ -29,10 +29,10 @@ export interface NarratedBlock {
 }
 
 /**
- * Bumped whenever the extraction or the audio format changes, so every page is narrated afresh.
- * 2: one request per section, not per block.
+ * Bumped whenever the stored format changes, so every page is narrated afresh. Sections keep
+ * ElevenLabs' timing for every character, so a change to how text splits into words needs no new audio.
  */
-export const NARRATION_VERSION = 2;
+export const NARRATION_VERSION = 3;
 
 const SILENT = new Set(['PRE', 'SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'BUTTON', 'NAV', 'TEMPLATE']);
 const BLOCKS = new Set([
@@ -94,6 +94,8 @@ export function narratedBlocks(region: Element): NarratedBlock[] {
         }
         if (node.nodeType !== ELEMENT_NODE || silent(node as Element)) return;
         const el = node as Element;
+        // A line break separates words like a space does.
+        if (el.tagName.toUpperCase() === 'BR') return void (last = undefined);
         const only = el.childNodes.length === 1 ? el.firstChild : null;
         const url =
             el.tagName.toUpperCase() === 'A' && only?.nodeType === TEXT_NODE && BARE_URL.exec(only.textContent!);
@@ -139,23 +141,26 @@ export function pronunciationsIn(text: string) {
 }
 
 /**
- * The key a page's narration is stored under: a hash of exactly what is read aloud, and how. The page
- * and its narration meet only through this, so any edit to the text, or to a pronunciation it uses,
- * means no audio until it is narrated again, never audio that no longer matches. A page using no
- * pronunciation keeps the key it had before there were any.
+ * The key a page's narration is stored under: a hash of exactly what is read aloud and how. That is
+ * the text, where each word starts, which blocks are headings (they start sections), and the
+ * pronunciations it uses. The page and its narration meet only through this. Any edit means no audio
+ * until it is narrated again, never audio whose timings belong to other words, including when the
+ * browser and the build would split the text differently.
  */
 export function pageKey(blocks: NarratedBlock[]) {
-    const texts = blocks.map((block) => spokenText(block.words).text);
-    const said = pronunciationsIn(texts.join('\n'));
-    return sha256([`narration v${NARRATION_VERSION}`, ...texts, ...(said ? [JSON.stringify(said)] : [])].join('\n'));
+    const read = blocks.map((block) => ({ heading: block.heading, ...spokenText(block.words) }));
+    const said = pronunciationsIn(read.map(({ text }) => text).join('\n'));
+    return sha256(JSON.stringify({ v: NARRATION_VERSION, read, said }));
 }
 
 /**
- * A narrated page as stored: the stitched audio, and every narrated word's start and end in seconds, in
- * reading order, flat as `[start0, end0, start1, end1, …]`.
+ * A narrated page as stored at `pages/<key>.json`: its stitched audio, at `audio/<audio>.mp3`, and every
+ * narrated word's start and end in seconds, in reading order, flat as `[start0, end0, start1, end1, …]`.
  */
 export interface NarrationManifest {
     version: number;
+    /** The SHA-256 of the audio, which names it; a page narrated afresh gets new audio, never a changed file. */
+    audio: string;
     duration: number;
     words: number[];
     voice: string;

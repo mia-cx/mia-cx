@@ -17,6 +17,7 @@
  * locally, CLOUDFLARE_API_TOKEN in CI.
  */
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
@@ -42,6 +43,8 @@ const onlyArg = args.indexOf('--only');
 const only = onlyArg >= 0 ? args[onlyArg + 1] : undefined;
 const budgetArg = args.indexOf('--budget');
 const BUDGET = budgetArg >= 0 ? Number(args[budgetArg + 1]) : 25_000;
+if (!Number.isSafeInteger(BUDGET) || BUDGET < 0)
+    throw new Error(`--budget takes a whole number of characters, not "${args[budgetArg + 1]}".`);
 
 const BUCKET = 'mia-cx-narration';
 // The mia.cx Cloudflare account; wrangler's login can see several.
@@ -73,10 +76,18 @@ interface Page {
     /** In reading order. */
     chunks: Chunk[];
 }
-/** What the bucket holds, kept in index.json, so a run knows what to skip without listing it. */
+/**
+ * What the bucket holds, kept in index.json, so a run knows what to skip without listing it: each
+ * page's key and the sections it was stitched from, so new sections, as from a new voice, re-stitch it.
+ */
 interface Index {
-    pages: string[];
+    pages: Record<string, string[]>;
     chunks: string[];
+}
+/** ElevenLabs' timing of every character of a section's text, in seconds, as stored. */
+interface Alignment {
+    starts: number[];
+    ends: number[];
 }
 
 const ms = (seconds: number) => Math.round(seconds * 1000) / 1000;
@@ -84,12 +95,15 @@ const ms = (seconds: number) => Math.round(seconds * 1000) / 1000;
 async function wrangler(...command: string[]) {
     return run('node_modules/.bin/wrangler', [...command, '--remote'], { maxBuffer: 1 << 26 });
 }
+/** Fetches an object, or reports it absent. Any other failure throws, so it never passes for an empty bucket. */
 async function download(key: string, file: string) {
     try {
         await wrangler('r2', 'object', 'get', `${BUCKET}/${key}`, '--file', file);
         return true;
-    } catch {
-        return false;
+    } catch (error) {
+        const { stdout = '', stderr = '' } = error as { stdout?: string; stderr?: string };
+        if (`${stdout}${stderr}`.includes('The specified key does not exist')) return false;
+        throw error;
     }
 }
 const upload = (key: string, file: string, contentType: string) =>
@@ -171,6 +185,8 @@ async function readPages(): Promise<Page[]> {
         const { document } = parseHTML(await readFile(file, 'utf8'));
         const region = document.querySelector('[data-narration]');
         if (!region) continue;
+        // linkedom splits text at entities, so `Don&#39;t` arrives as three nodes; a browser parses one.
+        region.normalize();
         const blocks = narratedBlocks(region);
         if (!blocks.length) continue;
         pages.push({
@@ -222,7 +238,7 @@ async function findOrMakeDictionary(): Promise<DictionaryLocator> {
 /** Looked up once per run, and only by a run that generates something. */
 let dictionary: Promise<DictionaryLocator> | undefined;
 
-/** Generates one chunk: its audio, and each word's start and end within it. */
+/** Generates one chunk: its audio, and the timing of each character of its text. */
 async function generate(chunk: Chunk) {
     dictionary ??= findOrMakeDictionary();
     const { audio_base64, alignment } = await eleven<{
@@ -243,23 +259,38 @@ async function generate(chunk: Chunk) {
     // Word timings index into the text as sent; an alignment of anything else would misplace every word.
     if (alignment.characters.join('') !== chunk.text)
         throw new Error(`ElevenLabs aligned different text than it was sent for chunk ${chunk.key}.`);
-    const words = chunk.words.flatMap((word, i) => {
-        const first = chunk.offsets[i];
-        const last = first + word.text.length - 1;
-        return [ms(alignment.character_start_times_seconds[first]), ms(alignment.character_end_times_seconds[last])];
-    });
+    const timing: Alignment = {
+        starts: alignment.character_start_times_seconds.map(ms),
+        ends: alignment.character_end_times_seconds.map(ms),
+    };
     await writeFile(join(CACHE, `${chunk.key}.mp3`), Buffer.from(audio_base64, 'base64'));
-    await writeFile(join(CACHE, `${chunk.key}.json`), JSON.stringify({ words }));
+    await writeFile(join(CACHE, `${chunk.key}.json`), JSON.stringify(timing));
 }
 
-/** A chunk's files in the local cache, fetched from the bucket when this machine hasn't made them. */
-async function cached(chunk: Chunk) {
+/**
+ * A chunk's words' starts and ends, from its stored character timings, fetched from the bucket when
+ * this machine hasn't made them. Worked out per page, so a change in how text splits into words never
+ * needs new audio.
+ */
+async function wordTimings(chunk: Chunk) {
     for (const ext of ['mp3', 'json']) {
         const file = join(CACHE, `${chunk.key}.${ext}`);
         if (!existsSync(file) && !(await download(`chunks/${chunk.key}.${ext}`, file)))
             throw new Error(`chunks/${chunk.key}.${ext} is in index.json but not in the bucket`);
     }
-    return JSON.parse(await readFile(join(CACHE, `${chunk.key}.json`), 'utf8')) as { words: number[] };
+    const timing = JSON.parse(await readFile(join(CACHE, `${chunk.key}.json`), 'utf8')) as Alignment;
+    // ElevenLabs times code points; offsets count UTF-16 units, two for an emoji. Spread each over its units.
+    const points = Array.from(chunk.text);
+    if (timing.starts.length !== points.length)
+        throw new Error(
+            `chunks/${chunk.key}.json times ${timing.starts.length} characters; its text has ${points.length}.`,
+        );
+    const perUnit = (times: number[]) => points.flatMap((point, i) => Array<number>(point.length).fill(times[i]));
+    const [starts, ends] = [perUnit(timing.starts), perUnit(timing.ends)];
+    return chunk.words.flatMap((word, i) => {
+        const first = chunk.offsets[i];
+        return [starts[first], ends[first + word.text.length - 1]];
+    });
 }
 
 /** Decoded to PCM, an audio file's length is exact; MP3 frame padding would drift the word timings. */
@@ -297,8 +328,7 @@ async function stitch(page: Page): Promise<{ mp3: string; manifest: NarrationMan
             parts.push(gap);
             at += GAP;
         }
-        const timings = await cached(chunk);
-        words.push(...timings.words.map((t) => ms(t + at)));
+        words.push(...(await wordTimings(chunk)).map((t) => ms(t + at)));
         const { wav, duration } = await decoded(join(CACHE, `${chunk.key}.mp3`));
         parts.push(wav);
         at += duration;
@@ -324,7 +354,13 @@ async function stitch(page: Page): Promise<{ mp3: string; manifest: NarrationMan
         '128k',
         mp3,
     ]);
-    return { mp3, manifest: { version: NARRATION_VERSION, duration: ms(at), words, voice: VOICE!, model: MODEL } };
+    const audio = createHash('sha256')
+        .update(await readFile(mp3))
+        .digest('hex');
+    return {
+        mp3,
+        manifest: { version: NARRATION_VERSION, audio, duration: ms(at), words, voice: VOICE!, model: MODEL },
+    };
 }
 
 async function main() {
@@ -337,10 +373,13 @@ async function main() {
     const indexFile = join(CACHE, 'index.json');
     const index: Index = (await download('index.json', indexFile))
         ? JSON.parse(await readFile(indexFile, 'utf8'))
-        : { pages: [], chunks: [] };
+        : { pages: {}, chunks: [] };
+    // Narration v2 listed pages without their sections; those all re-stitch once.
+    if (Array.isArray(index.pages)) index.pages = {};
+    const sectionsOf = (page: Page) => page.chunks.map((chunk) => chunk.key);
     const pending = pages.filter(
         (page, i) =>
-            !index.pages.includes(page.key) &&
+            index.pages[page.key]?.join() !== sectionsOf(page).join() &&
             pages.findIndex((p) => p.key === page.key) === i &&
             (!only || page.path === only),
     );
@@ -380,18 +419,19 @@ async function main() {
         await upload(`chunks/${chunk.key}.mp3`, join(CACHE, `${chunk.key}.mp3`), 'audio/mpeg');
         await upload(`chunks/${chunk.key}.json`, join(CACHE, `${chunk.key}.json`), 'application/json');
         index.chunks.push(chunk.key);
+        // Saved after every section, so a run that fails later never pays for this one again.
+        await saveIndex();
         console.log(`  generated ${i + 1}/${missing.length}`);
-        if ((i + 1) % 10 === 0) await saveIndex();
     }
-    await saveIndex();
 
     for (const page of pending) {
         const { mp3, manifest } = await stitch(page);
         const json = join(CACHE, page.key, 'page.json');
         await writeFile(json, JSON.stringify(manifest));
-        await upload(`pages/${page.key}.mp3`, mp3, 'audio/mpeg');
+        // The audio first: the manifest that names it only goes up once it is there.
+        await upload(`audio/${manifest.audio}.mp3`, mp3, 'audio/mpeg');
         await upload(`pages/${page.key}.json`, json, 'application/json');
-        index.pages.push(page.key);
+        index.pages[page.key] = sectionsOf(page);
         await saveIndex();
         const { size } = await stat(mp3);
         await rm(join(CACHE, page.key), { recursive: true });
