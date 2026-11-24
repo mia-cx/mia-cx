@@ -59,7 +59,11 @@ const open = current
 if (current && !open) throw new Error('no open tab on /og');
 const { targetId } = open
     ? { targetId: open.id }
-    : await send<{ targetId: string }>('Target.createTarget', { url: 'about:blank', newWindow: true, background: true });
+    : await send<{ targetId: string }>('Target.createTarget', {
+          url: 'about:blank',
+          newWindow: true,
+          background: true,
+      });
 try {
     const { sessionId } = await send<{ sessionId: string }>('Target.attachToTarget', { targetId, flatten: true });
     const run = <T = Record<string, unknown>>(method: string, params = {}) => send<T>(method, params, sessionId);
