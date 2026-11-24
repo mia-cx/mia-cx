@@ -6,6 +6,7 @@
     import '$lib/styles/prose.css';
     import Mentions from '$lib/components/Mentions.svelte';
     import PageMarkdown from '$lib/components/PageMarkdown.svelte';
+    import NarrationPlayer from '$lib/components/NarrationPlayer.svelte';
     import { formatDate, type Post, type VaultEntry } from '$lib/content/vault';
     import { site } from '$lib/content/site';
 
@@ -49,9 +50,19 @@
             </div>
         </header>
 
-        <!-- Mia's own markdown, from the vault. -->
-        <!-- eslint-disable-next-line svelte/no-at-html-tags -- rendered from the vault, which is authored in this repo -->
-        <div class="prose">{@html html}</div>
+        <div class="body">
+            {#if post.narration}
+                <aside class="gutter" data-print-hide data-markdown="skip" data-narration-skip>
+                    <!-- Fresh for each post: navigating between posts reuses this component. -->
+                    <div class="rail">
+                        {#key post.href}<NarrationPlayer />{/key}
+                    </div>
+                </aside>
+            {/if}
+            <!-- Mia's own markdown, from the vault. -->
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -- rendered from the vault, which is authored in this repo -->
+            <div class="prose">{@html html}</div>
+        </div>
 
         {#if post.source}
             <p class="source mono" data-narration-skip>
@@ -102,6 +113,34 @@
     }
     .meta a {
         color: inherit;
+    }
+
+    /*
+     * The player floats at the bottom left of the window. Where the left gutter fits it, it sits there
+     * instead, beside the body and stuck under the header as the post scrolls. The right gutter is kept
+     * for comments and reactions.
+     */
+    .body {
+        position: relative;
+    }
+    .rail {
+        position: fixed;
+        bottom: max(24px, env(safe-area-inset-bottom));
+        left: var(--gutter);
+        z-index: 30;
+        background: var(--panel);
+    }
+    @media (min-width: 1100px) {
+        .gutter {
+            position: absolute;
+            top: 0;
+            right: calc(100% + 40px);
+            bottom: 0;
+        }
+        .rail {
+            position: sticky;
+            top: calc(var(--header-height) + 24px);
+        }
     }
 
     .source {
