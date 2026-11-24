@@ -60,8 +60,7 @@ To narrate each paragraph on its own, either:
 - keep one marker around them all. `marker.wordIndexOf(paragraph)` is the index of the paragraph's first
   word, so its own word `i` is `marker.wordIndexOf(paragraph) + i`.
 
-Keep controls such as a play button outside the marker, or mark them `aria-hidden`, so their labels
-aren't counted as words.
+Keep controls such as a play button outside the marker, so their labels aren't counted as words.
 
 ## Attributes
 

@@ -244,7 +244,11 @@ function createMarker(): new () => MarkerElement {
          * `marker.wordIndexOf(part) + i`.
          */
         wordIndexOf(node: Node, offset = 0) {
-            return this.#wordRanges().findIndex((word) => word.comparePoint(node, offset) <= 0);
+            // The first word ending after the point: the word it falls inside, or the next one. A point
+            // right after a word, before the space, already belongs to the next.
+            const at = document.createRange();
+            at.setStart(node, offset);
+            return this.#wordRanges().findIndex((word) => at.comparePoint(word.endContainer, word.endOffset) > 0);
         }
 
         connectedCallback() {
