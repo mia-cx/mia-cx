@@ -5,7 +5,7 @@
  */
 import portrait from '$lib/assets/portrait-800.webp';
 import { cv } from '$lib/cv/content';
-import { contact, otherSocials, primarySocials, site, summary } from './site';
+import { contact, openToWork, otherSocials, primarySocials, site, summary } from './site';
 import type { Post, WorkNote } from './vault';
 
 const PERSON_ID = `${site.url}/#person`;
@@ -35,6 +35,7 @@ export const person = {
         .map(({ company }) => ({ '@type': 'Organization', name: company })),
     knowsAbout: cv.skills.flatMap(({ items }) => items.split(SKILL_SEPARATOR)),
     knowsLanguage: cv.languages.map(({ language }) => language),
+    seeks: { '@type': 'Demand', description: openToWork },
     sameAs: [...primarySocials, ...otherSocials].filter(({ id }) => DEV_PROFILES.has(id)).map(({ href }) => href),
 };
 

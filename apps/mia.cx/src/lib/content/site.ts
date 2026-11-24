@@ -81,6 +81,10 @@ export const intro =
 /** The hero's sentence as plain text: the description for home and /about, and llms.txt's summary. */
 export const summary = `I'm ${site.name}, ${intro}`;
 
+/** The work Mia is open to, shown after her biography on /about and given to agents as JSON-LD `seeks`. */
+export const openToWork =
+    'Mid-level or medior roles in product engineering or UI/UX development and design, full-time or part-time. Freelance and contract work through mia.cx. Remote or in the Netherlands, or relocating within the UK and the EU to an English-speaking team.';
+
 /** Mia's approved full biography as inline Markdown, shown above contact links on /about. */
 export const biography = [
     "I'm Mia, a product engineer, designer, artist and musician, and I love helping people figure out what they or their projects and ideas need.",
