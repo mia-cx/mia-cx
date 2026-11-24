@@ -99,11 +99,13 @@
             await customElements.whenDefined('mia-marker');
             if (gone) return;
             const spoken = blocks.flatMap((block) => block.words);
+            // The key covers the words, so this holds; if it ever didn't, every highlight would be off.
+            if (manifest.words.length !== spoken.length * 2) return;
             starts = spoken.map((_, i) => manifest.words[i * 2]);
             words = spoken.map((word) => host.wordIndexOf(word.node, word.start));
             host.addEventListener('seek', seek);
             marker = host;
-            src = `/narration/pages/${key}.mp3`;
+            src = `/narration/audio/${manifest.audio}.mp3`;
         })();
         return () => {
             gone = true;
