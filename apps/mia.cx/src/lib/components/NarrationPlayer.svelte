@@ -190,6 +190,8 @@
               source: AudioBufferSourceNode;
               from: number;
               to: number;
+              /** Where the tail runs out: past it the tape is silent and goes no further. */
+              end: number;
               direction: number;
               rates: Float32Array;
               seconds: number;
@@ -220,7 +222,7 @@
         // Past its curve, a spin's tail runs on forward from where it ended, at its last rate.
         if (elapsed >= spin.seconds) {
             const rate = spin.rates[STEPS];
-            return { at: spin.to + rate * (elapsed - spin.seconds), rate, direction: 1 };
+            return { at: Math.min(spin.end, spin.to + rate * (elapsed - spin.seconds)), rate, direction: 1 };
         }
         const k = Math.min(STEPS - 1, Math.floor((elapsed / spin.seconds) * STEPS));
         const into = (elapsed / spin.seconds) * STEPS - k;
@@ -285,7 +287,8 @@
         const now = decoder.currentTime;
         source.playbackRate.setValueCurveAtTime(rates, now, seconds);
         source.start(now);
-        const current = { source, from, to, direction, rates, seconds, begun: now };
+        const end = to + tail / reel.sampleRate;
+        const current = { source, from, to, end, direction, rates, seconds, begun: now };
         spin = current;
         if (!resume) {
             source.stop(now + seconds);
