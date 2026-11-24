@@ -50,6 +50,17 @@ double-click selects its word instead; meanwhile the cursor holds on the clicked
 controls, clicks that clear a selection and the end of a drag never seek. `marker.wordAt(x, y)` maps any
 other point to a word.
 
+When the word changes, each edge waits `leading-delay` or `trailing-delay` ms after the word is spoken
+before it moves, so the trail can lag behind the voice. The trailing edge never sets off before the
+leading one, so a `trailing-delay` shorter than `leading-delay` acts as equal to it. A negative delay makes
+an edge move before the word is spoken. For that, set `word` `marker.lookahead` ms early: how far below
+zero the leading delay goes, or 0.
+
+```ts
+const ahead = () => audio.currentTime + marker.lookahead / 1000;
+audio.addEventListener('timeupdate', () => (marker.word = wordIndexAt(ahead())));
+```
+
 ### Narrating parts separately
 
 To narrate each paragraph on its own, either:
@@ -64,13 +75,14 @@ Keep controls such as a play button outside the marker, so their labels aren't c
 
 ## Attributes
 
-| Attribute             | Default  | Meaning                                                           |
-| --------------------- | -------- | ----------------------------------------------------------------- |
-| `word`                | `-1`     | The highlighted word                                              |
-| `leading`, `trailing` | `200`    | Milliseconds for an edge moving outward, and inward               |
-| `stagger`             | `150`    | Milliseconds between the first and last line clearing a selection |
-| `double-click`        | `330`    | Milliseconds a second click still makes a double-click            |
-| `padding`, `radius`   | `4`, `0` | Pixels of padding, and corner rounding (see below)                |
+| Attribute                         | Default  | Meaning                                                                     |
+| --------------------------------- | -------- | --------------------------------------------------------------------------- |
+| `word`                            | `-1`     | The highlighted word                                                        |
+| `leading`, `trailing`             | `200`    | Milliseconds for an edge moving outward, and inward                         |
+| `leading-delay`, `trailing-delay` | `0`      | Milliseconds after a word is spoken that its edges start moving; may be < 0 |
+| `stagger`                         | `150`    | Milliseconds between the first and last line clearing a selection           |
+| `double-click`                    | `330`    | Milliseconds a second click still makes a double-click                      |
+| `padding`, `radius`               | `4`, `0` | Pixels of padding, and corner rounding (see below)                          |
 
 The word cursor takes `padding` on both sides and half of it above and below. Selected lines take only
 the half above and below: each ends exactly where its selected text does, so it shows whether a trailing

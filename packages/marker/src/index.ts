@@ -11,8 +11,13 @@
  * it. Each block hugs one line of text. A block's edges move on their own clocks: an edge moving
  * outward takes `leading` ms, an edge moving inward `trailing` ms.
  *
- * Attributes: `word` (index, -1 for none), `leading`, `trailing`, `stagger`, `double-click` (ms),
- * `padding`, `radius` (px). Colours: `--marker-color` and `--marker-text`.
+ * When `word` changes, each edge starts moving `leading-delay` or `trailing-delay` ms after the
+ * word is spoken, so the trail can lag behind; it never sets off before the leading edge, so a
+ * shorter `trailing-delay` acts as equal to `leading-delay`. A negative delay starts the edge early, ahead of
+ * the voice. To allow that, a narration sets `word` `lookahead` ms before the word is spoken.
+ *
+ * Attributes: `word` (index, -1 for none), `leading`, `trailing`, `leading-delay`, `trailing-delay`,
+ * `stagger`, `double-click` (ms), `padding`, `radius` (px). Colours: `--marker-color` and `--marker-text`.
  *
  * Selections come from the mouse or a touch long-press alike. While a word is highlighted, clicking or
  * tapping another word fires `seek`: a tap at once, a click once `double-click` ms pass without a
@@ -81,11 +86,22 @@ function overhang(node: Text) {
     return /italic|oblique/.test(style.fontStyle) ? Number.parseFloat(style.fontSize) * ITALIC_LEAN : 0;
 }
 
-const DEFAULTS = { leading: 200, trailing: 200, stagger: 150, padding: 4, radius: 0, 'double-click': 330 };
+const DEFAULTS = {
+    leading: 200,
+    trailing: 200,
+    'leading-delay': 0,
+    'trailing-delay': 0,
+    stagger: 150,
+    padding: 4,
+    radius: 0,
+    'double-click': 330,
+};
 type Setting = keyof typeof DEFAULTS;
 
 type Edge = keyof Edges;
 const EDGES: Edge[] = ['l', 'r', 't', 'b'];
+/** Every edge moving as a leading one: a cursor appearing, or one snapping under reduced motion. */
+const ALL_LEAD: Record<Edge, boolean> = { l: true, r: true, t: true, b: true };
 interface Tween {
     from: number;
     to: number;
@@ -103,10 +119,16 @@ interface Block {
     tweens: Record<Edge, Tween> | null;
     /** Hides the block once it has shrunk away, or starts a staggered shrink; cleared on reuse. */
     fading?: ReturnType<typeof setTimeout>;
+    /** Bumped whenever the block's edges are replaced outright, which drops spoken moves still due. */
+    generation: number;
+    /** The latest spoken word (see `#speak`) each edge has moved for. */
+    moved: Record<Edge, number>;
+    /** The spoken word a hidden block will appear on, and when. */
+    revealing?: { word: number; at: number };
     /** The element holding the block's text and where it was, so the block can move when the element does. */
     ref?: { el: Element; x: number; y: number };
 }
-const newBlock = (): Block => ({ at: null, tweens: null });
+const newBlock = (): Block => ({ at: null, tweens: null, generation: 0, moved: { l: 0, r: 0, t: 0, b: 0 } });
 
 /** Elements whose lines read as one unit: the gaps between their lines fill once wholly selected. */
 const UNIT = 'p, li, dt, dd, blockquote, pre, figcaption, td, th, h1, h2, h3, h4, h5, h6';
@@ -190,6 +212,12 @@ function createMarker(): new () => MarkerElement {
         /** How many words the marker holds: whitespace-separated runs of text, outside `<pre>` and `aria-hidden`. */
         get wordCount() {
             return this.#wordRanges().length;
+        }
+
+        /** How many ms before a word is spoken to set `word`, so an edge with a negative delay can lead. */
+        get lookahead() {
+            // The applied trailing delay is never shorter than the leading one, so the leading one decides.
+            return Math.max(0, -this.#delays().lead);
         }
 
         // Typed listeners, so `seek` arrives as a `MarkerSeekEvent`.
@@ -379,8 +407,20 @@ function createMarker(): new () => MarkerElement {
             if (next < 0) this.#dropSeek();
             // A click waiting to seek holds the cursor on its word until the seek lands or is dropped.
             if (this.#selecting || this.#seeking >= 0) return;
-            if (next < 0) this.#retire(this.#blocks[0], undefined);
-            else this.#moveTo(next);
+            if (next >= 0) return this.#moveTo(next, true);
+            this.#quietTail();
+            this.#retire(this.#blocks[0], undefined);
+        }
+
+        /**
+         * Stops an old line still catching up with the voice: a clear or a direct move leaves nothing
+         * behind to light up later. A shown tail shrinks away.
+         */
+        #quietTail() {
+            const tail = this.#tail;
+            tail.generation++;
+            if (tail.tweens) this.#retire(tail, undefined);
+            else this.#setEdges(tail, null);
         }
 
         /** While a selection holds the highlight, the current word gets a quieter underline. */
@@ -391,32 +431,120 @@ function createMarker(): new () => MarkerElement {
             else CSS.highlights.delete(`${MARKER_TAG}-word`);
         }
 
-        /** Block 0 to a word. Across a line wrap, the old shape shrinks out as the new one grows in. */
-        #moveTo(index: number) {
+        /**
+         * Block 0 to a word. Across a line wrap, the old shape shrinks out as the new one grows in. A
+         * `spoken` move keeps the edge delays; a click's preview and re-placing the cursor don't.
+         */
+        #moveTo(index: number, spoken = false) {
+            if (!spoken) this.#quietTail();
             const to = this.#wordEdges(index);
             if (!to) return this.#retire(this.#blocks[0], undefined);
             const holder = this.#wordRanges()[index].startContainer.parentElement!;
             this.#reveal([holder]);
             const head = this.#blocks[0];
             const from = head.at;
-            const previous = head.ref;
-            head.ref = this.#refOf(holder);
-            if (!from || sameLine(from, to) || reducedMotion()) return this.#setEdges(head, to);
+            const move = (block: Block, edges: Edges) =>
+                spoken ? this.#speak(block, edges, holder) : this.#setEdges(block, edges);
+            if (!from || sameLine(from, to) || reducedMotion()) {
+                head.ref = this.#refOf(holder);
+                return move(head, to);
+            }
             const forward = to.t > from.t;
             clearTimeout(this.#wrapTimer);
-            Object.assign(this.#tail, { at: from, tweens: head.tweens, ref: previous });
+            // The old shape becomes the tail as it is, so its moves still due for earlier words carry on
+            // along the old line, and the tail's block grows on the new one.
+            const fresh = this.#tail;
+            this.#setEdges(fresh, null);
+            fresh.ref = this.#refOf(holder);
+            [this.#tail, this.#blocks[0]] = [head, fresh];
             const edge = forward ? from.r : from.l;
-            this.#setEdges(this.#tail, { ...from, l: edge, r: edge });
-            this.#wrapTimer = setTimeout(() => this.#setEdges(this.#tail, null), this.#setting('trailing'));
+            move(head, { ...from, l: edge, r: edge });
+            const delay = spoken ? this.lookahead + this.#delays().trail : 0;
+            this.#wrapTimer = setTimeout(() => this.#setEdges(head, null), delay + this.#setting('trailing'));
             const start = forward ? to.l : to.r;
-            this.#setEdges(head, { ...to, l: start, r: start }, true);
-            this.#setEdges(head, to);
+            this.#setEdges(fresh, { ...to, l: start, r: start }, true);
+            move(fresh, to);
         }
 
-        /** Sends a block toward `to`: an edge moving outward leads, one moving inward trails. */
+        /**
+         * Which of a block's edges move outward toward `to`, and so lead: all of them for a block with no
+         * target yet, as it appears. A word queued before the first one shows moves from that one.
+         */
+        #leads(block: Block, to: Edges): Record<Edge, boolean> {
+            if (!block.at) return ALL_LEAD;
+            return { l: to.l < (block.at?.l ?? to.l), r: to.r > (block.at?.r ?? to.r), t: false, b: false };
+        }
+
+        /**
+         * The edge delays as applied. A trailing edge never sets off before the leading one: it would
+         * pass it and blank the cursor.
+         */
+        #delays() {
+            const lead = this.#setting('leading-delay');
+            return { lead, trail: Math.max(lead, this.#setting('trailing-delay')) };
+        }
+
+        /** Counts spoken words, so each edge only ever moves on to a later word than it last did. */
+        #spokenCount = 0;
+
+        /**
+         * A word's move: each edge sets off its delay after the word is spoken, `lookahead` from now.
+         * Edges still on their way to earlier words carry on, so a lagging edge follows the words rather
+         * than waiting for them to stop. A hidden cursor appears, whole, at its first word's first move.
+         * With reduced motion the whole cursor snaps to the word on the leading delay.
+         */
+        #speak(block: Block, to: Edges, holder: Element) {
+            clearTimeout(block.fading);
+            block.fading = undefined;
+            const word = ++this.#spokenCount;
+            if (!block.at) {
+                const at = performance.now() + this.lookahead + this.#setting('leading-delay');
+                block.revealing = { word, at };
+            }
+            const leads = reducedMotion() ? ALL_LEAD : this.#leads(block, to);
+            block.at = to;
+            const { generation } = block;
+            const go = (edge: Edge) => {
+                // Replaced since, or this edge already moved for a later word.
+                if (block.generation !== generation || block.moved[edge] >= word) return;
+                const now = performance.now();
+                if (!block.tweens) {
+                    // Words queued before the cursor appears move it only once it has, on its first word.
+                    const first = block.revealing;
+                    if (first && first.word !== word)
+                        return void setTimeout(() => go(edge), Math.max(0, first.at - now));
+                    block.revealing = undefined;
+                    this.#reveal([holder]);
+                    block.tweens = Object.fromEntries(
+                        EDGES.map((e) => [e, { from: to[e], to: to[e], start: now, dur: 0 }]),
+                    ) as Record<Edge, Tween>;
+                    block.moved = { l: word, r: word, t: word, b: word };
+                } else {
+                    // A frame with nothing drawn forgets what is shown, so show the word's text with each move.
+                    this.#reveal([holder]);
+                    const dur = reducedMotion() ? 0 : this.#setting(leads[edge] ? 'leading' : 'trailing');
+                    block.tweens[edge] = { from: valueOf(block.tweens[edge], now), to: to[edge], start: now, dur };
+                    block.moved[edge] = word;
+                }
+                this.#kick();
+            };
+            const { lead, trail } = this.#delays();
+            for (const edge of EDGES) {
+                const wait = this.lookahead + (leads[edge] ? lead : trail);
+                if (wait > 0) setTimeout(() => go(edge), wait);
+                else go(edge);
+            }
+        }
+
+        /**
+         * Sends a block toward `to` at once: an edge moving outward leads, one moving inward trails.
+         * It replaces the block's edges outright, so moves still due for spoken words are dropped.
+         */
         #setEdges(block: Block, to: Edges | null, snap = false, ms?: number) {
             clearTimeout(block.fading);
             block.fading = undefined;
+            block.generation++;
+            block.revealing = undefined;
             if (!to) {
                 block.at = null;
                 block.tweens = null;
@@ -425,13 +553,7 @@ function createMarker(): new () => MarkerElement {
             const now = performance.now();
             const current = block.tweens;
             const instant = snap || !current || reducedMotion();
-            const [leading, trailing] = [this.#setting('leading'), this.#setting('trailing')];
-            const durations: Record<Edge, number> = {
-                l: to.l < (block.at?.l ?? to.l) ? leading : trailing,
-                r: to.r > (block.at?.r ?? to.r) ? leading : trailing,
-                t: trailing,
-                b: trailing,
-            };
+            const leads = this.#leads(block, to);
             block.tweens = Object.fromEntries(
                 EDGES.map((edge) => [
                     edge,
@@ -439,7 +561,7 @@ function createMarker(): new () => MarkerElement {
                         from: instant || !current ? to[edge] : valueOf(current[edge], now),
                         to: to[edge],
                         start: now,
-                        dur: instant ? 0 : (ms ?? durations[edge]),
+                        dur: instant ? 0 : (ms ?? this.#setting(leads[edge] ? 'leading' : 'trailing')),
                     },
                 ]),
             ) as Record<Edge, Tween>;
@@ -900,6 +1022,8 @@ export interface MarkerElement extends HTMLElement {
     word: number;
     /** How many words the marker holds: whitespace-separated runs of text, outside `<pre>` and `aria-hidden`. */
     readonly wordCount: number;
+    /** How many ms before a word is spoken to set `word`, so an edge with a negative delay can lead. */
+    readonly lookahead: number;
     /** The index of the word at a viewport point, such as a click, or -1. */
     wordAt(x: number, y: number): number;
     /** The index of the first word at or after a point in the marker's content, or -1. */
