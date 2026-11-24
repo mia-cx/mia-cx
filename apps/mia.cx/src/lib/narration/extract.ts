@@ -9,6 +9,8 @@
  * counts them. Words group into blocks, one per paragraph, heading or list item; each block is narrated
  * by one request.
  */
+import { sha256 as nobleSha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
 /** One narrated word: where it is in the page, and how it reads. */
 export interface NarratedWord {
@@ -109,11 +111,11 @@ export function spokenText(words: NarratedWord[]) {
     return { text, offsets };
 }
 
-/** SHA-256 of a string, as hex. Web Crypto, so the build and the browser hash alike. */
-export async function sha256(input: string) {
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
-    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
+/**
+ * SHA-256 of a string, as hex, alike in the build and the browser. Not Web Crypto: browsers hide it
+ * outside secure contexts, such as the dev server opened over the network.
+ */
+export const sha256 = (input: string) => bytesToHex(nobleSha256(utf8ToBytes(input)));
 
 /**
  * The key a page's narration is stored under: a hash of exactly what is read aloud. The page and its

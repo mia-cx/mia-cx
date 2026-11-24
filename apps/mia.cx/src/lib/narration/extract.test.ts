@@ -36,9 +36,9 @@ describe('narrated text', () => {
         expect(link.node.data.slice(link.start, link.end)).toBe('https://nuphory.com');
     });
 
-    it('keys a page by exactly what it reads, so an edit changes the key and markup alone does not', async () => {
-        const original = await pageKey(narratedBlocks(region('<p>Hello there.</p>')));
-        expect(await pageKey(narratedBlocks(region('<p>Hello <em>there</em>.</p>')))).toBe(original);
-        expect(await pageKey(narratedBlocks(region('<p>Hello there!</p>')))).not.toBe(original);
+    it('keys a page by exactly what it reads, so an edit changes the key and markup alone does not', () => {
+        const original = pageKey(narratedBlocks(region('<p>Hello there.</p>')));
+        expect(pageKey(narratedBlocks(region('<p>Hello <em>there</em>.</p>')))).toBe(original);
+        expect(pageKey(narratedBlocks(region('<p>Hello there!</p>')))).not.toBe(original);
     });
 });

@@ -107,7 +107,7 @@ async function* htmlFiles(dir: string): AsyncGenerator<string> {
 }
 
 /** A block's words in chunks short enough for one request, split after a sentence ends. */
-async function chunksOf(words: NarratedWord[]): Promise<Chunk[]> {
+function chunksOf(words: NarratedWord[]): Chunk[] {
     const groups: NarratedWord[][] = [[]];
     let length = 0;
     for (const word of words) {
@@ -121,24 +121,22 @@ async function chunksOf(words: NarratedWord[]): Promise<Chunk[]> {
         groups.at(-1)!.push(word);
         length += word.text.length + 1;
     }
-    return Promise.all(
-        groups.map(async (group) => {
-            const { text, offsets } = spokenText(group);
-            const said = Object.entries(PRONUNCIATIONS).filter(([word]) => new RegExp(`\\b${word}\\b`, 'i').test(text));
-            const key = await sha256(
-                JSON.stringify({
-                    v: NARRATION_VERSION,
-                    text,
-                    voice: VOICE,
-                    model: MODEL,
-                    format: FORMAT,
-                    // Left out when empty, so chunks without any keep the keys they had before rules existed.
-                    say: said.length ? Object.fromEntries(said) : undefined,
-                }),
-            );
-            return { key, words: group, text, offsets };
-        }),
-    );
+    return groups.map((group) => {
+        const { text, offsets } = spokenText(group);
+        const said = Object.entries(PRONUNCIATIONS).filter(([word]) => new RegExp(`\\b${word}\\b`, 'i').test(text));
+        const key = sha256(
+            JSON.stringify({
+                v: NARRATION_VERSION,
+                text,
+                voice: VOICE,
+                model: MODEL,
+                format: FORMAT,
+                // Left out when empty, so chunks without any keep the keys they had before rules existed.
+                say: said.length ? Object.fromEntries(said) : undefined,
+            }),
+        );
+        return { key, words: group, text, offsets };
+    });
 }
 
 async function readPages(): Promise<Page[]> {
@@ -151,8 +149,8 @@ async function readPages(): Promise<Page[]> {
         if (!blocks.length) continue;
         pages.push({
             path: '/' + relative(SITE, file).replace(/(index)?\.html$/, ''),
-            key: await pageKey(blocks),
-            blocks: await Promise.all(blocks.map((block) => chunksOf(block.words))),
+            key: pageKey(blocks),
+            blocks: blocks.map((block) => chunksOf(block.words)),
         });
     }
     return pages;
@@ -182,7 +180,7 @@ async function findOrMakeDictionary(): Promise<DictionaryLocator> {
         case_sensitive: false,
         word_boundaries: true,
     }));
-    const name = `mia.cx ${(await sha256(JSON.stringify(rules))).slice(0, 12)}`;
+    const name = `mia.cx ${sha256(JSON.stringify(rules)).slice(0, 12)}`;
     const { pronunciation_dictionaries } = await eleven<{
         pronunciation_dictionaries: { id: string; latest_version_id: string; name: string }[];
     }>('pronunciation-dictionaries?page_size=100');
