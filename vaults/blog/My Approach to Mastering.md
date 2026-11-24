@@ -9,23 +9,6 @@ source: "https://github.com/mia-riezebos/mia-riezebos/wiki/Blog:-My-Approach-to-
 
 I usually take a minimal approach to mastering. In this post I go into detail on 4 main concepts: Spectral Conistency, Stereo Imaging, Dynamics, and Loudness.
 
-## Table of Contents
-
-- [Referencing](#referencing)
-	- [Analysis](#analysis)
-	- [Benefits](#benefits)
-- [Spectral Consistency](#spectral-consistency)
-	- [Slope & Tilt](#slope--tilt)
-- [Stereo Imaging](#stereo-imaging)
-	- [Low-end](#low-end)
-	- [Balance](#balance)
-- [Dynamics](#dynamics)
-	- [Temporal Dynamics](#temporal-dynamics)
-	- [Multiband Compression](#multiband-compression)
-- [Loudness](#loudness)
-- [Other Resources](#other-resources)
-- [See Also](#see-also)
-
 ## Referencing
 
 First I'd like to address referencing. Learning how to Mix & Master is done through practice, but just as much through study & analysis. 
