@@ -5,6 +5,8 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
     "name": "mia-cx",
+    // The mia.cx account, so local tools never have to ask which of a login's accounts to use.
+    "account_id": "492214885e7a580ccc1d141dfdb4dc5f",
     "main": "worker.ts",
     "compatibility_date": "2026-09-24",
     // nodejs_compat for @cloudflare/puppeteer, which prints /cv.pdf; it includes AsyncLocalStorage.
@@ -27,6 +29,9 @@
     // Role presets for /cv?role=…, as JSON `{ title, skills? }` per key: `wrangler kv key put --remote
     // --binding CV_PRESETS <role> '<json>'`. Staging reads the same ones.
     "kv_namespaces": [{ "binding": "CV_PRESETS", "id": "d7d079ec11854eb98c655432d1e48b24" }],
+    // Narration audio, served at /narration/…. Remote, so `pnpm dev` plays the real bucket too; every
+    // environment shares it, since each page's audio is stored under a hash of the text it reads.
+    "r2_buckets": [{ "binding": "NARRATION", "bucket_name": "mia-cx-narration", "remote": true }],
     "env": {
         // The `mia-cx-staging` Worker: every push to main lands here before a release reaches mia.cx.
         "staging": {
@@ -34,6 +39,7 @@
             // Bindings don't carry over into an environment.
             "kv_namespaces": [{ "binding": "CV_PRESETS", "id": "d7d079ec11854eb98c655432d1e48b24" }],
             "browser": { "binding": "BROWSER" },
+            "r2_buckets": [{ "binding": "NARRATION", "bucket_name": "mia-cx-narration", "remote": true }],
         },
     },
 }
