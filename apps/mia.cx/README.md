@@ -46,3 +46,21 @@ The site runs as a Cloudflare Worker, configured in `wrangler.jsonc`. GitHub Act
 CI deploys with the organisation's `CLOUDFLARE_ACCOUNT_ID` variable and `CLOUDFLARE_API_TOKEN` secret. To check the built Worker locally, run `npx wrangler dev` after a build.
 
 The deployed entry is `worker.ts`, which wraps the Worker that `adapter-cloudflare` writes. The adapter reads `wrangler.sveltekit.jsonc` instead of `wrangler.jsonc`, because it overwrites whatever file `main` names.
+
+## Narration
+
+Posts are narrated in Mia's cloned ElevenLabs voice. A post's `<article data-narration>` marks what is read aloud: its title and body, minus code, controls and anything marked `data-narration-skip` (`src/lib/narration/extract.ts`). Each page's audio and word timings live in the `mia-cx-narration` R2 bucket under a hash of exactly that text, and `/narration/pages/<hash>.json|.mp3` serves them. Every environment shares the bucket, since a hash only ever names the audio for that text.
+
+The Narration workflow runs on every push to `main`: it builds the site and runs `pnpm narrate`, which generates only blocks it hasn't generated before, stitches each page's audio, and stops without generating anything when a run would spend more than 25,000 characters or more than the account has left. Run the workflow by hand with a bigger budget to allow a larger run, such as after changing the voice.
+
+Locally:
+
+```bash
+cp .env.example .env     # fill in the ElevenLabs key and voice ID
+npx wrangler login       # R2 access, and the dev server's remote bucket
+pnpm build && pnpm narrate --dry-run    # what it would narrate, and what that costs
+pnpm narrate --only /blog/crunch-time   # narrate one page
+pnpm dev                 # plays narration from the real bucket
+```
+
+Only `pnpm dev` binds the bucket remotely; builds and tests use an empty local one and need no login.
