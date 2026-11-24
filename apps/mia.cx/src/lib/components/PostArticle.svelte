@@ -6,6 +6,7 @@
     import '$lib/styles/prose.css';
     import Mentions from '$lib/components/Mentions.svelte';
     import PageMarkdown from '$lib/components/PageMarkdown.svelte';
+    import NarrationPlayer from '$lib/components/NarrationPlayer.svelte';
     import TableOfContents from '$lib/components/TableOfContents.svelte';
     import { formatDate, type Heading, type Post, type VaultEntry } from '$lib/content/vault';
     import { site } from '$lib/content/site';
@@ -53,7 +54,12 @@
         </header>
 
         <div class="body">
-            <TableOfContents {headings} />
+            <aside class="gutter" data-print-hide data-markdown="skip" data-narration-skip>
+                <div class="rail">
+                    {#if post.narration}<div class="float"><NarrationPlayer /></div>{/if}
+                    <TableOfContents {headings} />
+                </div>
+            </aside>
             <!-- Mia's own markdown, from the vault. -->
             <!-- eslint-disable-next-line svelte/no-at-html-tags -- rendered from the vault, which is authored in this repo -->
             <div class="prose">{@html html}</div>
@@ -104,10 +110,44 @@
     .meta a {
         color: inherit;
     }
+    .float {
+        position: fixed;
+        bottom: max(24px, env(safe-area-inset-bottom));
+        left: var(--gutter);
+        z-index: 30;
+        background: var(--panel);
+    }
+    @media (min-width: 1400px) {
+        .float {
+            position: static;
+            background: none;
+        }
+    }
 
-    /* The table of contents spans the body's height in the gutter beside it. */
+    /*
+     * The left gutter spans the body's height beside it, and its rail of the player and the contents
+     * sticks under the header. The gutter fits from here: the content width, two rails and their gaps.
+     * The right gutter is kept for comments and reactions.
+     */
     .body {
         position: relative;
+    }
+    @media (min-width: 1400px) {
+        .gutter {
+            position: absolute;
+            top: 0;
+            right: calc(100% + 48px);
+            bottom: 0;
+            width: 200px;
+        }
+        .rail {
+            position: sticky;
+            top: calc(var(--header-height) + 24px);
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+            max-height: calc(100dvh - var(--header-height) - 48px);
+        }
     }
 
     .source {

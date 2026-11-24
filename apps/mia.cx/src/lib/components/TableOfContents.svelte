@@ -1,8 +1,7 @@
 <!--
-    A post's sections, in the left gutter beside its body: its h2 and h3 headings, with the one being
-    read marked. Place it inside a positioned wrapper around the body; it spans the wrapper's height and
-    its list sticks under the header. Only shown where the gutter fits it, and never printed. The
-    right gutter is kept for comments and reactions.
+    A post's sections, for the left gutter beside its body: its h2 and h3 headings, with the one being
+    read marked. Only shown where the gutter fits it, and never printed. In a column too short for it,
+    the list scrolls.
 -->
 <script lang="ts">
     import type { Heading } from '$lib/content/vault';
@@ -58,21 +57,16 @@
     nav {
         display: none;
     }
-    /* The gutter fits the list from here: the content width, two lists and their gaps. */
+    /* Where the post's gutter shows. */
     @media (min-width: 1400px) {
         nav {
-            position: absolute;
-            top: 0;
-            right: calc(100% + 48px);
-            bottom: 0;
-            display: block;
-            width: 200px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
     }
     ol {
-        position: sticky;
-        top: calc(var(--header-height) + 24px);
-        max-height: calc(100dvh - var(--header-height) - 48px);
+        min-height: 0;
         overflow-y: auto;
         font-size: 14px;
         line-height: 1.35;
