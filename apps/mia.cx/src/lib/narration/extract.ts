@@ -118,12 +118,31 @@ export function spokenText(words: NarratedWord[]) {
 export const sha256 = (input: string) => bytesToHex(nobleSha256(utf8ToBytes(input)));
 
 /**
- * The key a page's narration is stored under: a hash of exactly what is read aloud. The page and its
- * narration meet only through this, so any edit to the text means no audio until it is narrated again,
- * never audio that no longer matches.
+ * How the voice should say words it misreads: each whole word, in any case, is read as its alias. The
+ * narration script keeps an ElevenLabs pronunciation dictionary of exactly these.
  */
-export const pageKey = (blocks: NarratedBlock[]) =>
-    sha256([`narration v${NARRATION_VERSION}`, ...blocks.map((block) => spokenText(block.words).text)].join('\n'));
+export const PRONUNCIATIONS: Record<string, string> = {
+    nuphory: 'new phorie',
+    wav: 'wave',
+};
+
+/** The pronunciation rules a text uses, or undefined for none. */
+export function pronunciationsIn(text: string) {
+    const used = Object.entries(PRONUNCIATIONS).filter(([word]) => new RegExp(`\\b${word}\\b`, 'i').test(text));
+    return used.length ? Object.fromEntries(used) : undefined;
+}
+
+/**
+ * The key a page's narration is stored under: a hash of exactly what is read aloud, and how. The page
+ * and its narration meet only through this, so any edit to the text, or to a pronunciation it uses,
+ * means no audio until it is narrated again, never audio that no longer matches. A page using no
+ * pronunciation keeps the key it had before there were any.
+ */
+export function pageKey(blocks: NarratedBlock[]) {
+    const texts = blocks.map((block) => spokenText(block.words).text);
+    const said = pronunciationsIn(texts.join('\n'));
+    return sha256([`narration v${NARRATION_VERSION}`, ...texts, ...(said ? [JSON.stringify(said)] : [])].join('\n'));
+}
 
 /**
  * A narrated page as stored: the stitched audio, and every narrated word's start and end in seconds, in
