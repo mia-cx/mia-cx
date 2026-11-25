@@ -14,7 +14,7 @@
     import Pause from '~icons/lucide/pause';
     import Play from '~icons/lucide/play';
     import { narratedBlocks, pageKey, type NarratedWord, type NarrationManifest } from '$lib/narration/extract';
-    import { starting, stopping, tapeDeck, timeStretch } from '$lib/narration/tape';
+    import { curve, starting, STEPS, stopping, tapeDeck, timeStretch, travel, winding } from '$lib/narration/tape';
     import { SPEEDS, settings } from '$lib/settings.svelte';
 
     /** Seeks land this long before the word, since the timings can run a little late. */
@@ -29,8 +29,6 @@
     const MIN_BULGE = 1;
     /** The voice hands over to and from the tape this quickly: fast, but without a click. */
     const CUT = 0.03;
-    /** Points on each speed curve; the browser ramps straight between them. */
-    const STEPS = 64;
     /** Tape a spin carries past its end, in seconds, to cover the audio starting up again. */
     const TAIL = 1;
     /**
@@ -204,22 +202,6 @@
           }
         | undefined;
 
-    /** A speed curve from `speedAt`, which maps 0 to 1 across the move to a rate. */
-    const curve = (speedAt: (k: number) => number) =>
-        Float32Array.from({ length: STEPS + 1 }, (_, k) => Math.max(0, speedAt(k / STEPS)));
-
-    /** How much tape `rates` over `seconds` move in the first `elapsed` seconds: the area under the ramps. */
-    function travel(rates: Float32Array, seconds: number, elapsed = seconds) {
-        const step = seconds / STEPS;
-        let distance = 0;
-        for (let k = 0; k < STEPS && k * step < elapsed; k++) {
-            const part = Math.min(step, elapsed - k * step);
-            const end = rates[k] + ((rates[k + 1] - rates[k]) * part) / step;
-            distance += ((rates[k] + end) / 2) * part;
-        }
-        return distance;
-    }
-
     /**
      * Where the tape is, how fast it moves and which way: `of` spin's (by default the one playing), or
      * with none, the audio's. A spin is placed where it is now, or if `heard`, where the reader hears it.
@@ -284,8 +266,6 @@
         resume: boolean,
         landed?: () => void,
     ) {
-        stopSpin();
-        clearTimeout(pending);
         const decoder = context!;
         const reel = tape!;
         const onReel = (t: number) => Math.min(reel.duration, Math.max(0, t));
@@ -314,6 +294,9 @@
         const source = decoder.createBufferSource();
         source.buffer = stretch;
         const out = decoder.createGain();
+        // A tape already moving keeps playing while this one is made, then hands over at once.
+        stopSpin();
+        clearTimeout(pending);
         const now = decoder.currentTime;
         source.playbackRate.setValueCurveAtTime(
             rates.map((rate) => rate / speed),
@@ -375,18 +358,17 @@
 
     /**
      * Winds the tape to `to`: forward sped up, back reversed, the speed running from where it is to a
-     * peak and slowing into the reader's speed over `WIND`. The speed is a straight line between the
-     * two plus half a sine, whose height sets the distance: at least `MIN_BULGE` times the reader's
-     * speed, so even a short wind is heard, and never past the max wind speed. A distance outside
-     * that range cuts to where a wind can cover the rest; with less tape than that behind the target,
-     * the wind starts at the tape's end and slows to fit.
+     * peak and slowing into the reader's speed over `WIND` (`winding`). The peak sets the distance: at
+     * least `MIN_BULGE` times the reader's speed past the straight line between the two, so even a
+     * short wind is heard, and never past the max wind speed. A distance outside that range cuts to
+     * where a wind can cover the rest; with less tape than that behind the target, the wind starts at
+     * the tape's end and sags in the middle to fit.
      */
     function windTo(to: number, landed: () => void) {
         const { at, rate, direction: was } = tapeNow();
         const direction = to >= at ? 1 : -1;
         const speed = settings.speed.value;
         const from = direction === was ? rate : speed;
-        const line = (k: number) => from + (speed - from) * k;
         const straight = ((from + speed) / 2) * WIND;
         const perBulge = (2 * WIND) / Math.PI;
         const highest = Math.max(0, settings.windSpeed.value - Math.max(from, speed));
@@ -395,10 +377,7 @@
             straight + highest * perBulge,
         );
         const distance = Math.min(reach, direction > 0 ? to : tape!.duration - to);
-        const rates =
-            distance >= straight
-                ? curve((k) => line(k) + ((distance - straight) / perBulge) * Math.sin(Math.PI * k))
-                : curve((k) => (line(k) * distance) / straight);
+        const rates = winding(from, speed, distance, WIND);
         turn(to - direction * travel(rates, WIND), direction, rates, WIND, true, landed);
     }
 

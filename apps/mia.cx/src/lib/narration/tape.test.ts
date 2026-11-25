@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { timeStretch } from './tape';
+import { STEPS, timeStretch, travel, winding } from './tape';
 
 const RATE = 48000;
 const tone = (hz: number, seconds: number) =>
@@ -17,5 +17,19 @@ describe('time stretch', () => {
         const [sped] = timeStretch([tone(220, 2)], factor, RATE);
         expect(sped.length).toBe(Math.ceil((2 * RATE) / factor));
         expect(pitch(sped)).toBeCloseTo(220, -1);
+    });
+});
+
+describe('a wind', () => {
+    it.each([
+        ['clipped by the start of the tape', 2, 1.2],
+        ['far past the straight line', 2, 12],
+        ['barely moving', 1, 0.05],
+    ])('%s ends at the reader’s speed and covers its distance', (_, speed, distance) => {
+        const rates = winding(speed, speed, distance, 1.2);
+        expect(rates[0]).toBeCloseTo(speed);
+        expect(rates[STEPS]).toBeCloseTo(speed);
+        expect(Math.min(...rates)).toBeGreaterThanOrEqual(0);
+        expect(travel(rates, 1.2)).toBeCloseTo(distance, 1);
     });
 });

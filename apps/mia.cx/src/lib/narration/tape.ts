@@ -18,6 +18,51 @@ export const stopping = (from: number, k: number) => (from * Math.expm1(STOP_BEN
 export const starting = (from: number, to: number, k: number) =>
     from + ((to - from) * -Math.expm1(-START_BEND * k)) / -Math.expm1(-START_BEND);
 
+/** Points on each speed curve; the browser ramps straight between them. */
+export const STEPS = 64;
+
+/** A speed curve from `speedAt`, which maps 0 to 1 across a move to a rate. */
+export const curve = (speedAt: (k: number) => number) =>
+    Float32Array.from({ length: STEPS + 1 }, (_, k) => Math.max(0, speedAt(k / STEPS)));
+
+/** How much tape `rates` over `seconds` move in the first `elapsed` seconds: the area under the ramps. */
+export function travel(rates: Float32Array, seconds: number, elapsed = seconds) {
+    const step = seconds / STEPS;
+    let distance = 0;
+    for (let k = 0; k < STEPS && k * step < elapsed; k++) {
+        const part = Math.min(step, elapsed - k * step);
+        const end = rates[k] + ((rates[k + 1] - rates[k]) * part) / step;
+        distance += ((rates[k] + end) / 2) * part;
+    }
+    return distance;
+}
+
+/** How deep a wind's sag can go, as a power of `1 - sin`; deeper still barely shortens it. */
+const DEEPEST_SAG = 64;
+
+/**
+ * A wind's speeds over `seconds`, from `from` to the reader's `speed`, covering `distance` of tape. A
+ * long wind is the straight line between the two plus half a sine; a wind shorter than the line sags
+ * in the middle instead. Either way it ends at the reader's speed, so the voice takes over in tune.
+ */
+export function winding(from: number, speed: number, distance: number, seconds: number) {
+    const line = (k: number) => from + (speed - from) * k;
+    const straight = ((from + speed) / 2) * seconds;
+    if (distance >= straight) {
+        const perBulge = (2 * seconds) / Math.PI;
+        return curve((k) => line(k) + ((distance - straight) / perBulge) * Math.sin(Math.PI * k));
+    }
+    // The line times (1 - sin) to a power, which leaves its ends alone: deeper until it fits.
+    const sagged = (power: number) => curve((k) => line(k) * (1 - Math.sin(Math.PI * k)) ** power);
+    let [shallow, deep] = [0, DEEPEST_SAG];
+    for (let halving = 0; halving < 30; halving++) {
+        const power = (shallow + deep) / 2;
+        if (travel(sagged(power), seconds) > distance) shallow = power;
+        else deep = power;
+    }
+    return sagged(deep);
+}
+
 // Each of these takes the tape's speed as a multiple of the reader's playback speed.
 
 /** The treble a tape keeps: slow tape loses its top end, and a fast wind lifts off the head. */
