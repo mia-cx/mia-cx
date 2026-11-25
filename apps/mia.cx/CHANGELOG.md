@@ -1,5 +1,25 @@
 # @mia-cx/mia.cx
 
+## 0.6.0
+
+### Minor Changes
+
+- 29bec1c: The header's theme button opens Settings: theme, reduced motion, the field, pausing narration while you select text,
+  double-click speed, and funny mode, which plays the narration like a cassette tape: seeking winds it, and pausing and
+  playing stop and start it. The narration player gains a speed button, from 1.0× to 2.5×.
+
+### Patch Changes
+
+- 3930e1c: Narration reads "Caelestis" as "kai lestis", from its IPA /kaɪˈlɛstɪs/.
+- f69593c: The narration highlight leads the voice: its front edge starts moving to a word 450 ms before it is spoken, and its back edge starts following 150 ms before, easing out over 500 ms. `?debug` opens a panel that tunes the highlight's edges, delays, padding and radius in this browser.
+- ef64ea9: The narration highlight passes every word as it gets ahead of the voice, so it no longer skips the first word when narration starts or the words just after a seek. On pause it rests on the last word heard, and while funny mode's tape stops, starts or winds it follows the tape.
+- c173abf: Funny mode's tape sounds like a cassette deck. A tape stop slows fastest at first and crawls to a halt, fading and darkening as it goes; a tape start pulls hard and eases into speed. A wind chatters and hisses over the head, and the pitch wobbles while the motor fights for speed.
+- 024fee7: Funny mode's tape keeps the voice's pitch at any playback speed: at 2× a tape stop starts from the voice's own pitch, and a tape start eases back into it, instead of jumping up an octave and snapping back.
+- Updated dependencies [54dd979]
+- Updated dependencies [f69593c]
+- Updated dependencies [3a1c4a1]
+  - @mia-cx/marker@0.2.0
+
 ## 0.5.1
 
 ### Patch Changes
