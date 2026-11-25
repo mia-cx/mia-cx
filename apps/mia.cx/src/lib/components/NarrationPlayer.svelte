@@ -198,6 +198,8 @@
               rates: Float32Array;
               seconds: number;
               begun: number;
+              /** When its sound ends, on the context's clock: the end of a stop, or the handover to the voice. */
+              until: number;
           }
         | undefined;
 
@@ -239,15 +241,14 @@
     }
 
     /**
-     * The spin the highlight follows: the one playing, or a tape stop until its end has been heard.
+     * The spin the highlight follows: the one playing, or one that ended until its end has been heard.
      * Where it is heard is updated every frame in `tapeAt`, unset when no spin is followed.
      */
     let followed: typeof spin;
     let tapeAt = $state<number>();
     let frame = 0;
     function follow() {
-        if (followed && followed !== spin && context!.currentTime - latency() >= followed.begun + followed.seconds)
-            followed = undefined;
+        if (followed && followed !== spin && context!.currentTime - latency() >= followed.until) followed = undefined;
         tapeAt = followed && tapeNow(true, followed).at;
         frame = followed ? requestAnimationFrame(follow) : 0;
     }
@@ -308,7 +309,8 @@
         source.playbackRate.setValueCurveAtTime(rates, now, seconds);
         source.start(now);
         const end = to + tail / reel.sampleRate;
-        const current = { source, from, to, end, direction, rates, seconds, begun: now };
+        const until = resume ? Infinity : now + seconds;
+        const current = { source, from, to, end, direction, rates, seconds, begun: now, until };
         spin = followed = current;
         cancelAnimationFrame(frame);
         follow();
@@ -343,8 +345,9 @@
                 out.gain.setValueAtTime(1, at);
                 out.gain.linearRampToValueAtTime(0, at + CUT);
                 source.stop(at + CUT);
-                // The voice is heard from where the tape is heard, so the highlight follows it on.
-                spin = followed = undefined;
+                // The highlight follows the tape until the handover is heard, then the voice from there.
+                current.until = at + CUT;
+                spin = undefined;
                 fade(1, CUT);
             }, seconds * 1000);
         }
@@ -502,13 +505,20 @@
     /** The narrated word the marker shows, or -1. */
     let shown = -1;
 
-    /** Whether paused audio is still on its way to the ear: for the output's latency after it pauses. */
-    let draining = $state(false);
-    let drained: ReturnType<typeof setTimeout> | undefined;
+    /**
+     * How much of the paused audio is still on its way to the ear, in seconds: the output's latency
+     * when it pauses, falling to nothing as it plays out.
+     */
+    let queued = $state(0);
+    let drains = 0;
     function drain() {
-        draining = true;
-        clearTimeout(drained);
-        drained = setTimeout(() => (draining = false), latency() * 1000);
+        const drain = ++drains;
+        const out = performance.now() + latency() * 1000;
+        (function tick() {
+            if (drain !== drains) return;
+            queued = Math.max(0, (out - performance.now()) / 1000);
+            if (queued > 0) requestAnimationFrame(tick);
+        })();
     }
 
     $effect(() => {
@@ -519,10 +529,9 @@
             host.word = i >= 0 ? markerWord(host, i) : -1;
         };
         const speed = settings.speed.value;
-        // Audio is heard the output's latency after its clock says, so until that long after it
-        // pauses; a moving tape is followed where it is heard.
-        const sounding = (!paused || draining) && tapeAt === undefined;
-        const heard = tapeAt ?? (sounding ? time - latency() * speed : time);
+        // Playing audio is heard the output's latency after its clock, and paused audio once what was
+        // queued plays out; a moving tape is followed where it is heard.
+        const heard = tapeAt ?? time - (paused ? queued : latency()) * speed;
         // A sought word holds through the pre-roll until it is heard, however far the marker leads.
         // A tape winding there is followed until it lands.
         if (held && tapeAt === undefined) {
@@ -536,13 +545,11 @@
         if (!(playing && !paused && tapeAt === undefined)) anchor = heard;
         // The marker takes each word up to `lookahead` early, so an edge tuned to lead the voice can.
         // It is wall-clock time, which covers more of the recording at a faster speed.
-        const full = (marker.lookahead / 1000) * speed;
-        const lead = Math.max(0, Math.min(full, heard - anchor));
+        const lead = Math.max(0, Math.min((marker.lookahead / 1000) * speed, heard - anchor));
         if (!started) return show(-1);
-        // While the lead builds, the marker runs ahead faster than the voice: one word per update, so
-        // it shows every word on the way.
-        const ahead = spokenAt(heard + lead);
-        show(lead < full ? Math.max(spokenAt(heard), Math.min(ahead, shown + 1)) : ahead);
+        // Getting ahead, the marker runs faster than the voice: it steps one word per update until it
+        // catches up, so it shows every word on the way, and never falls behind the heard word.
+        show(Math.max(spokenAt(heard), Math.min(spokenAt(heard + lead), shown + 1)));
     });
 </script>
 
