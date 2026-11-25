@@ -94,7 +94,8 @@ space is selected.
 
 Colours come from `--marker-color` and `--marker-text` (system highlight colours by default). The
 redrawn text is a copy of the marker's children inside it, so style its content with descendant
-selectors (`.prose p`), not child selectors on the marker. Form fields and forced-colors mode keep the
+selectors (`.prose p`), not child selectors on the marker. The copy drops `anchor-name` and
+`view-transition-name`, so anchors and view transitions keep using the page's own elements. Form fields and forced-colors mode keep the
 native selection, and reduced motion makes every change snap. `data-motion="reduce"` or `"full"` on
 `<html>` overrides the system's reduced-motion setting.
 Safari on iOS still draws its system selection around the highlight, with its handles.
