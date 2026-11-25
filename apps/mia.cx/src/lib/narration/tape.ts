@@ -119,3 +119,48 @@ export function tapeDeck(
     source.addEventListener('ended', () => stop());
     return { output: shaper, stop };
 }
+
+/** A grain of sound, and how far either side of its place it may shift to line up with the last, in seconds. */
+const GRAIN = 0.04;
+const SHIFT = 0.01;
+/** Grains are lined up comparing every this many samples: plenty for a voice, a fraction of the work. */
+const COARSE = 8;
+
+/**
+ * Speeds `channels` up by `factor`, keeping their pitch (WSOLA): half-overlapping grains, each taken
+ * from where `factor` puts it, shifted up to `SHIFT` to where it best continues the last one, so the
+ * waves meet in step. The narration player plays the tape from this at the reader's speed, so the tape
+ * sounds like the voice and only its own changes of speed move the pitch.
+ */
+export function timeStretch(channels: Float32Array[], factor: number, sampleRate: number) {
+    const size = Math.round(GRAIN * sampleRate) & ~1;
+    const hop = size / 2;
+    const shift = Math.round(SHIFT * sampleRate);
+    const length = Math.ceil(channels[0].length / factor);
+    // The first channel, with silence around it so a grain can reach past either end.
+    const pad = shift + size;
+    const guide = new Float32Array(channels[0].length + 2 * pad);
+    guide.set(channels[0], pad);
+    // Squared sine grains overlapping by half sum to exactly 1.
+    const window = Float32Array.from({ length: size }, (_, i) => Math.sin((Math.PI * i) / size) ** 2);
+    const out = channels.map(() => new Float32Array(length + size));
+    let last = 0;
+    for (let k = 0; k * hop < length; k++) {
+        const target = Math.round(k * hop * factor);
+        let from = target;
+        // Of the grains near the target, the one most like what would seamlessly follow the last.
+        let best = -Infinity;
+        for (let d = -shift; k > 0 && d <= shift; d += COARSE) {
+            let likeness = 0;
+            for (let i = 0; i < size; i += COARSE)
+                likeness += guide[pad + last + hop + i] * guide[pad + target + d + i];
+            if (likeness > best) [best, from] = [likeness, target + d];
+        }
+        last = from;
+        const [start, end] = [Math.max(0, -from), Math.min(size, channels[0].length - from)];
+        channels.forEach((channel, c) => {
+            for (let i = start; i < end; i++) out[c][k * hop + i] += channel[from + i] * window[i];
+        });
+    }
+    return out.map((channel) => channel.subarray(0, length));
+}

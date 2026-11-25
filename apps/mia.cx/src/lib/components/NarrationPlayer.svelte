@@ -14,7 +14,7 @@
     import Pause from '~icons/lucide/pause';
     import Play from '~icons/lucide/play';
     import { narratedBlocks, pageKey, type NarratedWord, type NarrationManifest } from '$lib/narration/extract';
-    import { starting, stopping, tapeDeck } from '$lib/narration/tape';
+    import { starting, stopping, tapeDeck, timeStretch } from '$lib/narration/tape';
     import { SPEEDS, settings } from '$lib/settings.svelte';
 
     /** Seeks land this long before the word, since the timings can run a little late. */
@@ -296,21 +296,32 @@
         const sample = (t: number) => Math.round(t * reel.sampleRate);
         const [first, last] = [sample(Math.min(from, to)), sample(Math.max(from, to))];
         const tail = resume ? sample(onReel(to + TAIL)) - sample(to) : 0;
-        const stretch = decoder.createBuffer(reel.numberOfChannels, Math.max(1, last - first + tail), reel.sampleRate);
-        for (let channel = 0; channel < reel.numberOfChannels; channel++) {
+        const tracks = Array.from({ length: reel.numberOfChannels }, (_, channel) => {
             const data = reel.getChannelData(channel);
+            const track = new Float32Array(Math.max(1, last - first + tail));
             const crossed = data.slice(first, last);
             if (direction < 0) crossed.reverse();
-            stretch.copyToChannel(crossed, channel);
-            stretch.copyToChannel(data.subarray(sample(to), sample(to) + tail), channel, last - first);
-        }
+            track.set(crossed);
+            track.set(data.subarray(sample(to), sample(to) + tail), last - first);
+            return track;
+        });
+        // The tape plays a copy already sped up to the reader's speed with its pitch kept, so at that
+        // speed it sounds just like the voice; it covers the same tape in the same time.
+        const speed = settings.speed.value;
+        const sped = speed === 1 ? tracks : timeStretch(tracks, speed, reel.sampleRate);
+        const stretch = decoder.createBuffer(reel.numberOfChannels, sped[0].length, reel.sampleRate);
+        sped.forEach((track, channel) => stretch.copyToChannel(track, channel));
         const source = decoder.createBufferSource();
         source.buffer = stretch;
         const out = decoder.createGain();
         const now = decoder.currentTime;
-        source.playbackRate.setValueCurveAtTime(rates, now, seconds);
+        source.playbackRate.setValueCurveAtTime(
+            rates.map((rate) => rate / speed),
+            now,
+            seconds,
+        );
         source.start(now);
-        const deck = tapeDeck(decoder, source, rates, seconds, now, settings.speed.value);
+        const deck = tapeDeck(decoder, source, rates, seconds, now, speed);
         deck.output.connect(out).connect(decoder.destination);
         const end = to + tail / reel.sampleRate;
         const until = resume ? Infinity : now + seconds;
