@@ -14,6 +14,7 @@
     import Pause from '~icons/lucide/pause';
     import Play from '~icons/lucide/play';
     import { narratedBlocks, pageKey, type NarratedWord, type NarrationManifest } from '$lib/narration/extract';
+    import { starting, stopping, tapeDeck } from '$lib/narration/tape';
     import { SPEEDS, settings } from '$lib/settings.svelte';
 
     /** Seeks land this long before the word, since the timings can run a little late. */
@@ -103,11 +104,10 @@
             await context.resume();
             const { at, rate, direction } = tapeNow();
             const from = direction > 0 ? rate : 0;
-            const speed = settings.speed.value;
             return turn(
                 at,
                 1,
-                curve((k) => from + (speed - from) * Math.sin((Math.PI / 2) * k)),
+                curve((k) => starting(from, settings.speed.value, k)),
                 START,
                 true,
             );
@@ -136,7 +136,7 @@
             return turn(
                 at,
                 direction,
-                curve((k) => rate * Math.cos((Math.PI / 2) * k)),
+                curve((k) => stopping(rate, k)),
                 STOP,
                 false,
             );
@@ -189,6 +189,8 @@
     let spin:
         | {
               source: AudioBufferSourceNode;
+              /** Stops the tape and its deck, now or at `when`. */
+              stop: (when?: number) => void;
               from: number;
               to: number;
               /** Where the tail runs out: past it the tape is silent and goes no further. */
@@ -262,7 +264,7 @@
         followed = undefined;
         if (!spin) return;
         spin.source.onended = null;
-        spin.source.stop();
+        spin.stop();
         spin = undefined;
         clearTimeout(pending);
         audio?.pause();
@@ -305,18 +307,19 @@
         const source = decoder.createBufferSource();
         source.buffer = stretch;
         const out = decoder.createGain();
-        source.connect(out).connect(decoder.destination);
         const now = decoder.currentTime;
         source.playbackRate.setValueCurveAtTime(rates, now, seconds);
         source.start(now);
+        const deck = tapeDeck(decoder, source, rates, seconds, now, settings.speed.value);
+        deck.output.connect(out).connect(decoder.destination);
         const end = to + tail / reel.sampleRate;
         const until = resume ? Infinity : now + seconds;
-        const current = { source, from, to, end, direction, rates, seconds, begun: now, until };
+        const current = { source, stop: deck.stop, from, to, end, direction, rates, seconds, begun: now, until };
         spin = followed = current;
         cancelAnimationFrame(frame);
         follow();
         if (!resume) {
-            source.stop(now + seconds);
+            deck.stop(now + seconds);
             source.onended = () => (spin = undefined);
         } else {
             landing = setTimeout(async () => {
@@ -345,7 +348,7 @@
                 const at = decoder.currentTime;
                 out.gain.setValueAtTime(1, at);
                 out.gain.linearRampToValueAtTime(0, at + CUT);
-                source.stop(at + CUT);
+                deck.stop(at + CUT);
                 // The highlight follows the tape until the handover is heard, then the voice from there.
                 current.until = at + CUT;
                 spin = undefined;
