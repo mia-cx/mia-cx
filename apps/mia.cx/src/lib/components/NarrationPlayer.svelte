@@ -45,8 +45,6 @@
     let paused = $state(true);
     /** Whether the reader asked for playback; it leads `paused` through the fade out before a pause. */
     let playing = $state(false);
-    /** Whether narration has begun: the audio has moved or is playing, or funny mode's tape is moving. */
-    const started = $derived(time > 0 || !paused || tapeAt !== undefined);
 
     let marker = $state<HTMLElementTagNameMap['mia-marker']>();
     /** The narrated words, in reading order, and when each starts, in seconds. */
@@ -247,6 +245,8 @@
      */
     let followed: typeof spin;
     let tapeAt = $state<number>();
+    /** Whether narration has begun: the audio has moved or is playing, or funny mode's tape is moving. */
+    const started = $derived(time > 0 || !paused || tapeAt !== undefined);
     let frame = 0;
     function follow() {
         if (followed && followed !== spin && context!.currentTime - latency() >= followed.until) followed = undefined;
