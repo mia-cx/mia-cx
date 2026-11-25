@@ -18,6 +18,52 @@ export const stopping = (from: number, k: number) => (from * Math.expm1(STOP_BEN
 export const starting = (from: number, to: number, k: number) =>
     from + ((to - from) * -Math.expm1(-START_BEND * k)) / -Math.expm1(-START_BEND);
 
+/** Points on each speed curve; the browser ramps straight between them. */
+export const STEPS = 64;
+
+/** A speed curve from `speedAt`, which maps 0 to 1 across a move to a rate. */
+export const curve = (speedAt: (k: number) => number) =>
+    Float32Array.from({ length: STEPS + 1 }, (_, k) => Math.max(0, speedAt(k / STEPS)));
+
+/** How much tape `rates` over `seconds` move in the first `elapsed` seconds: the area under the ramps. */
+export function travel(rates: Float32Array, seconds: number, elapsed = seconds) {
+    const step = seconds / STEPS;
+    let distance = 0;
+    for (let k = 0; k < STEPS && k * step < elapsed; k++) {
+        const part = Math.min(step, elapsed - k * step);
+        const end = rates[k] + ((rates[k + 1] - rates[k]) * part) / step;
+        distance += ((rates[k] + end) / 2) * part;
+    }
+    return distance;
+}
+
+/** How deep a wind's sag can go, as a power of `1 - sin`; deeper still barely shortens it. */
+const DEEPEST_SAG = 64;
+
+/**
+ * A wind's speeds over `seconds`, from `from` to the reader's `speed`, covering `distance` of tape. A
+ * long wind is the straight line between the two plus half a sine; a wind shorter than the line sags
+ * in the middle instead. Either way it ends at the reader's speed, so the voice takes over in tune.
+ * The sag has a limit: within a few hundredths of a second of tape, the wind travels a little further.
+ */
+export function winding(from: number, speed: number, distance: number, seconds: number) {
+    const line = (k: number) => from + (speed - from) * k;
+    const straight = ((from + speed) / 2) * seconds;
+    if (distance >= straight) {
+        const perBulge = (2 * seconds) / Math.PI;
+        return curve((k) => line(k) + ((distance - straight) / perBulge) * Math.sin(Math.PI * k));
+    }
+    // The line times (1 - sin) to a power, which leaves its ends alone: deeper until it fits.
+    const sagged = (power: number) => curve((k) => line(k) * (1 - Math.sin(Math.PI * k)) ** power);
+    let [shallow, deep] = [0, DEEPEST_SAG];
+    for (let halving = 0; halving < 30; halving++) {
+        const power = (shallow + deep) / 2;
+        if (travel(sagged(power), seconds) > distance) shallow = power;
+        else deep = power;
+    }
+    return sagged(deep);
+}
+
 // Each of these takes the tape's speed as a multiple of the reader's playback speed.
 
 /** The treble a tape keeps: slow tape loses its top end, and a fast wind lifts off the head. */
@@ -118,4 +164,49 @@ export function tapeDeck(
     // A tape that runs out of recording before its stop takes the deck with it.
     source.addEventListener('ended', () => stop());
     return { output: shaper, stop };
+}
+
+/** A grain of sound, and how far either side of its place it may shift to line up with the last, in seconds. */
+const GRAIN = 0.04;
+const SHIFT = 0.01;
+/** Grains are lined up comparing every this many samples: plenty for a voice, a fraction of the work. */
+const COARSE = 8;
+
+/**
+ * Speeds `channels` up by `factor`, keeping their pitch (WSOLA): half-overlapping grains, each taken
+ * from where `factor` puts it, shifted up to `SHIFT` to where it best continues the last one, so the
+ * waves meet in step. The narration player plays the tape from this at the reader's speed, so the tape
+ * sounds like the voice and only its own changes of speed move the pitch.
+ */
+export function timeStretch(channels: Float32Array[], factor: number, sampleRate: number) {
+    const size = Math.round(GRAIN * sampleRate) & ~1;
+    const hop = size / 2;
+    const shift = Math.round(SHIFT * sampleRate);
+    const length = Math.ceil(channels[0].length / factor);
+    // The first channel, with silence around it so a grain can reach past either end.
+    const pad = shift + size;
+    const guide = new Float32Array(channels[0].length + 2 * pad);
+    guide.set(channels[0], pad);
+    // Squared sine grains overlapping by half sum to exactly 1.
+    const window = Float32Array.from({ length: size }, (_, i) => Math.sin((Math.PI * i) / size) ** 2);
+    const out = channels.map(() => new Float32Array(length + size));
+    let last = 0;
+    for (let k = 0; k * hop < length; k++) {
+        const target = Math.round(k * hop * factor);
+        let from = target;
+        // Of the grains near the target, the one most like what would seamlessly follow the last.
+        let best = -Infinity;
+        for (let d = -shift; k > 0 && d <= shift; d += COARSE) {
+            let likeness = 0;
+            for (let i = 0; i < size; i += COARSE)
+                likeness += guide[pad + last + hop + i] * guide[pad + target + d + i];
+            if (likeness > best) [best, from] = [likeness, target + d];
+        }
+        last = from;
+        const [start, end] = [Math.max(0, -from), Math.min(size, channels[0].length - from)];
+        channels.forEach((channel, c) => {
+            for (let i = start; i < end; i++) out[c][k * hop + i] += channel[from + i] * window[i];
+        });
+    }
+    return out.map((channel) => channel.subarray(0, length));
 }

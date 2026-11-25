@@ -14,7 +14,7 @@
     import Pause from '~icons/lucide/pause';
     import Play from '~icons/lucide/play';
     import { narratedBlocks, pageKey, type NarratedWord, type NarrationManifest } from '$lib/narration/extract';
-    import { starting, stopping, tapeDeck } from '$lib/narration/tape';
+    import { curve, starting, STEPS, stopping, tapeDeck, timeStretch, travel, winding } from '$lib/narration/tape';
     import { SPEEDS, settings } from '$lib/settings.svelte';
 
     /** Seeks land this long before the word, since the timings can run a little late. */
@@ -29,8 +29,6 @@
     const MIN_BULGE = 1;
     /** The voice hands over to and from the tape this quickly: fast, but without a click. */
     const CUT = 0.03;
-    /** Points on each speed curve; the browser ramps straight between them. */
-    const STEPS = 64;
     /** Tape a spin carries past its end, in seconds, to cover the audio starting up again. */
     const TAIL = 1;
     /**
@@ -204,22 +202,6 @@
           }
         | undefined;
 
-    /** A speed curve from `speedAt`, which maps 0 to 1 across the move to a rate. */
-    const curve = (speedAt: (k: number) => number) =>
-        Float32Array.from({ length: STEPS + 1 }, (_, k) => Math.max(0, speedAt(k / STEPS)));
-
-    /** How much tape `rates` over `seconds` move in the first `elapsed` seconds: the area under the ramps. */
-    function travel(rates: Float32Array, seconds: number, elapsed = seconds) {
-        const step = seconds / STEPS;
-        let distance = 0;
-        for (let k = 0; k < STEPS && k * step < elapsed; k++) {
-            const part = Math.min(step, elapsed - k * step);
-            const end = rates[k] + ((rates[k + 1] - rates[k]) * part) / step;
-            distance += ((rates[k] + end) / 2) * part;
-        }
-        return distance;
-    }
-
     /**
      * Where the tape is, how fast it moves and which way: `of` spin's (by default the one playing), or
      * with none, the audio's. A spin is placed where it is now, or if `heard`, where the reader hears it.
@@ -252,7 +234,8 @@
     let frame = 0;
     function follow() {
         if (followed && followed !== spin && context!.currentTime - latency() >= followed.until) followed = undefined;
-        tapeAt = followed && tapeNow(true, followed).at;
+        // On the leader before the recording, the highlight waits at its start.
+        tapeAt = followed && Math.max(0, tapeNow(true, followed).at);
         frame = followed ? requestAnimationFrame(follow) : 0;
     }
 
@@ -284,33 +267,48 @@
         resume: boolean,
         landed?: () => void,
     ) {
-        stopSpin();
-        clearTimeout(pending);
         const decoder = context!;
         const reel = tape!;
         const onReel = (t: number) => Math.min(reel.duration, Math.max(0, t));
-        from = onReel(from);
+        // Past either end of the recording is blank leader, so a wind too short to fit can start
+        // there and still land exactly; it always lands on the recording.
         const to = onReel(from + direction * travel(rates, seconds));
         // The stretch the spin crosses, reversed when winding back, then, if the audio resumes after,
         // `TAIL` of tape onward from `to` to play at the last rate until the audio is heard again.
         const sample = (t: number) => Math.round(t * reel.sampleRate);
         const [first, last] = [sample(Math.min(from, to)), sample(Math.max(from, to))];
         const tail = resume ? sample(onReel(to + TAIL)) - sample(to) : 0;
-        const stretch = decoder.createBuffer(reel.numberOfChannels, Math.max(1, last - first + tail), reel.sampleRate);
-        for (let channel = 0; channel < reel.numberOfChannels; channel++) {
+        const tracks = Array.from({ length: reel.numberOfChannels }, (_, channel) => {
             const data = reel.getChannelData(channel);
-            const crossed = data.slice(first, last);
+            const track = new Float32Array(Math.max(1, last - first + tail));
+            const crossed = new Float32Array(last - first);
+            const [start, end] = [Math.max(0, first), Math.min(data.length, last)];
+            if (end > start) crossed.set(data.subarray(start, end), start - first);
             if (direction < 0) crossed.reverse();
-            stretch.copyToChannel(crossed, channel);
-            stretch.copyToChannel(data.subarray(sample(to), sample(to) + tail), channel, last - first);
-        }
+            track.set(crossed);
+            track.set(data.subarray(sample(to), sample(to) + tail), last - first);
+            return track;
+        });
+        // The tape plays a copy already sped up to the reader's speed with its pitch kept, so at that
+        // speed it sounds just like the voice; it covers the same tape in the same time.
+        const speed = settings.speed.value;
+        const sped = speed === 1 ? tracks : timeStretch(tracks, speed, reel.sampleRate);
+        const stretch = decoder.createBuffer(reel.numberOfChannels, sped[0].length, reel.sampleRate);
+        sped.forEach((track, channel) => stretch.copyToChannel(track, channel));
         const source = decoder.createBufferSource();
         source.buffer = stretch;
         const out = decoder.createGain();
+        // A tape already moving keeps playing while this one is made, then hands over at once.
+        stopSpin();
+        clearTimeout(pending);
         const now = decoder.currentTime;
-        source.playbackRate.setValueCurveAtTime(rates, now, seconds);
+        source.playbackRate.setValueCurveAtTime(
+            rates.map((rate) => rate / speed),
+            now,
+            seconds,
+        );
         source.start(now);
-        const deck = tapeDeck(decoder, source, rates, seconds, now, settings.speed.value);
+        const deck = tapeDeck(decoder, source, rates, seconds, now, speed);
         deck.output.connect(out).connect(decoder.destination);
         const end = to + tail / reel.sampleRate;
         const until = resume ? Infinity : now + seconds;
@@ -364,18 +362,18 @@
 
     /**
      * Winds the tape to `to`: forward sped up, back reversed, the speed running from where it is to a
-     * peak and slowing into the reader's speed over `WIND`. The speed is a straight line between the
-     * two plus half a sine, whose height sets the distance: at least `MIN_BULGE` times the reader's
-     * speed, so even a short wind is heard, and never past the max wind speed. A distance outside
-     * that range cuts to where a wind can cover the rest; with less tape than that behind the target,
-     * the wind starts at the tape's end and slows to fit.
+     * peak and slowing into the reader's speed over `WIND` (`winding`). The peak sets the distance: at
+     * least `MIN_BULGE` times the reader's speed past the straight line between the two, so even a
+     * short wind is heard, and never past the max wind speed. A distance outside that range cuts to
+     * where a wind can cover the rest; with less tape than that behind the target, the wind starts at
+     * the tape's end and sags in the middle to fit, starting on the blank leader past the end when even
+     * that is too far.
      */
     function windTo(to: number, landed: () => void) {
         const { at, rate, direction: was } = tapeNow();
         const direction = to >= at ? 1 : -1;
         const speed = settings.speed.value;
         const from = direction === was ? rate : speed;
-        const line = (k: number) => from + (speed - from) * k;
         const straight = ((from + speed) / 2) * WIND;
         const perBulge = (2 * WIND) / Math.PI;
         const highest = Math.max(0, settings.windSpeed.value - Math.max(from, speed));
@@ -384,10 +382,7 @@
             straight + highest * perBulge,
         );
         const distance = Math.min(reach, direction > 0 ? to : tape!.duration - to);
-        const rates =
-            distance >= straight
-                ? curve((k) => line(k) + ((distance - straight) / perBulge) * Math.sin(Math.PI * k))
-                : curve((k) => (line(k) * distance) / straight);
+        const rates = winding(from, speed, distance, WIND);
         turn(to - direction * travel(rates, WIND), direction, rates, WIND, true, landed);
     }
 
