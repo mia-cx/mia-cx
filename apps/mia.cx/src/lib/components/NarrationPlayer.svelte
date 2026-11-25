@@ -233,6 +233,14 @@
         };
     }
 
+    /** Where a spinning tape is, updated every frame for the highlight to follow; unset at rest. */
+    let tapeAt = $state<number>();
+    let frame = 0;
+    function follow() {
+        tapeAt = spin && tapeNow().at;
+        frame = spin ? requestAnimationFrame(follow) : 0;
+    }
+
     /** The moment a spin reaches its end and the audio takes over again. */
     let landing: ReturnType<typeof setTimeout> | undefined;
 
@@ -290,6 +298,8 @@
         const end = to + tail / reel.sampleRate;
         const current = { source, from, to, end, direction, rates, seconds, begun: now };
         spin = current;
+        cancelAnimationFrame(frame);
+        follow();
         if (!resume) {
             source.stop(now + seconds);
             source.onended = () => (spin = undefined);
@@ -471,17 +481,32 @@
         if (to >= 0 && to < blockStarts.length) seekTo(blockStarts[to]);
     }
 
+    /**
+     * Where the marker's lead last started to build: it grows from nothing after a start, a seek or a
+     * tape move, so the marker gets ahead by passing every word rather than skipping to one.
+     */
+    let anchor = 0;
+
     $effect(() => {
         if (!marker) return;
-        // What's heard trails the audio's clock by the output's latency, large over Bluetooth. The
-        // marker takes each word `lookahead` early, so an edge tuned to lead the voice can. Both are
-        // wall-clock time, which covers more of the recording at a faster speed.
         const speed = settings.speed.value;
-        const heard = time - (context ? context.baseLatency + (context.outputLatency || 0) : 0) * speed;
-        let i = started ? spokenAt(heard + (marker.lookahead / 1000) * speed) : -1;
+        // While the voice plays, what's heard trails the audio's clock by the output's latency, large
+        // over Bluetooth. A moving tape is heard where it is; at rest, nothing is still on its way out.
+        const voiced = playing && !paused && tapeAt === undefined;
+        const latency = context ? context.baseLatency + (context.outputLatency || 0) : 0;
+        const heard = tapeAt ?? (voiced ? time - latency * speed : time);
         // A sought word holds through the pre-roll until it is heard, however far the marker leads.
-        if (held && (!held.landed || heard < starts[held.word])) i = held.word;
-        else held = undefined;
+        if (held && (!held.landed || heard < starts[held.word])) {
+            anchor = heard;
+            marker.word = markerWord(marker, held.word);
+            return;
+        }
+        held = undefined;
+        if (!voiced) anchor = heard;
+        // The marker takes each word up to `lookahead` early, so an edge tuned to lead the voice can.
+        // It is wall-clock time, which covers more of the recording at a faster speed.
+        const lead = Math.max(0, Math.min((marker.lookahead / 1000) * speed, heard - anchor));
+        const i = started ? spokenAt(heard + lead) : -1;
         marker.word = i >= 0 ? markerWord(marker, i) : -1;
     });
 </script>
