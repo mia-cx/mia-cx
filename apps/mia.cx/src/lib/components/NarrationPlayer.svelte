@@ -14,6 +14,7 @@
     import Pause from '~icons/lucide/pause';
     import Play from '~icons/lucide/play';
     import { narratedBlocks, pageKey, type NarratedWord, type NarrationManifest } from '$lib/narration/extract';
+    import { starting, stopping, tapeDeck } from '$lib/narration/tape';
     import { SPEEDS, settings } from '$lib/settings.svelte';
 
     /** Seeks land this long before the word, since the timings can run a little late. */
@@ -103,11 +104,10 @@
             await context.resume();
             const { at, rate, direction } = tapeNow();
             const from = direction > 0 ? rate : 0;
-            const speed = settings.speed.value;
             return turn(
                 at,
                 1,
-                curve((k) => from + (speed - from) * Math.sin((Math.PI / 2) * k)),
+                curve((k) => starting(from, settings.speed.value, k)),
                 START,
                 true,
             );
@@ -136,7 +136,7 @@
             return turn(
                 at,
                 direction,
-                curve((k) => rate * Math.cos((Math.PI / 2) * k)),
+                curve((k) => stopping(rate, k)),
                 STOP,
                 false,
             );
@@ -305,8 +305,8 @@
         const source = decoder.createBufferSource();
         source.buffer = stretch;
         const out = decoder.createGain();
-        source.connect(out).connect(decoder.destination);
         const now = decoder.currentTime;
+        tapeDeck(decoder, source, rates, seconds, now).connect(out).connect(decoder.destination);
         source.playbackRate.setValueCurveAtTime(rates, now, seconds);
         source.start(now);
         const end = to + tail / reel.sampleRate;
