@@ -234,7 +234,8 @@
     let frame = 0;
     function follow() {
         if (followed && followed !== spin && context!.currentTime - latency() >= followed.until) followed = undefined;
-        tapeAt = followed && tapeNow(true, followed).at;
+        // On the leader before the recording, the highlight waits at its start.
+        tapeAt = followed && Math.max(0, tapeNow(true, followed).at);
         frame = followed ? requestAnimationFrame(follow) : 0;
     }
 
@@ -269,7 +270,8 @@
         const decoder = context!;
         const reel = tape!;
         const onReel = (t: number) => Math.min(reel.duration, Math.max(0, t));
-        from = onReel(from);
+        // Past either end of the recording is blank leader, so a wind too short to fit can start
+        // there and still land exactly; it always lands on the recording.
         const to = onReel(from + direction * travel(rates, seconds));
         // The stretch the spin crosses, reversed when winding back, then, if the audio resumes after,
         // `TAIL` of tape onward from `to` to play at the last rate until the audio is heard again.
@@ -279,7 +281,9 @@
         const tracks = Array.from({ length: reel.numberOfChannels }, (_, channel) => {
             const data = reel.getChannelData(channel);
             const track = new Float32Array(Math.max(1, last - first + tail));
-            const crossed = data.slice(first, last);
+            const crossed = new Float32Array(last - first);
+            const [start, end] = [Math.max(0, first), Math.min(data.length, last)];
+            if (end > start) crossed.set(data.subarray(start, end), start - first);
             if (direction < 0) crossed.reverse();
             track.set(crossed);
             track.set(data.subarray(sample(to), sample(to) + tail), last - first);
@@ -362,7 +366,8 @@
      * least `MIN_BULGE` times the reader's speed past the straight line between the two, so even a
      * short wind is heard, and never past the max wind speed. A distance outside that range cuts to
      * where a wind can cover the rest; with less tape than that behind the target, the wind starts at
-     * the tape's end and sags in the middle to fit.
+     * the tape's end and sags in the middle to fit, starting on the blank leader past the end when even
+     * that is too far.
      */
     function windTo(to: number, landed: () => void) {
         const { at, rate, direction: was } = tapeNow();

@@ -44,6 +44,7 @@ const DEEPEST_SAG = 64;
  * A wind's speeds over `seconds`, from `from` to the reader's `speed`, covering `distance` of tape. A
  * long wind is the straight line between the two plus half a sine; a wind shorter than the line sags
  * in the middle instead. Either way it ends at the reader's speed, so the voice takes over in tune.
+ * The sag has a limit: within a few hundredths of a second of tape, the wind travels a little further.
  */
 export function winding(from: number, speed: number, distance: number, seconds: number) {
     const line = (k: number) => from + (speed - from) * k;
