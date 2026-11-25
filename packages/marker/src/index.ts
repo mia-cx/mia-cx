@@ -34,7 +34,8 @@ import { mergeLines, sameLine, shapePath, shrinkTarget, wipeOrder, type Edges, t
 export const MARKER_TAG = 'mia-marker';
 
 // `isolation` keeps the overlay's z-index inside the marker, so the page's own layers, such as a
-// sticky header outside it, still paint over the highlight.
+// sticky header outside it, still paint over the highlight. The copy drops anchor and view transition
+// names, which must stay unique to the page: a hidden copy of an anchor would hide what it anchors.
 const STYLES = `
 ${MARKER_TAG} { display: block; position: relative; isolation: isolate; }
 ${MARKER_TAG} ::selection { background: transparent; }
@@ -51,6 +52,7 @@ ${MARKER_TAG} > [data-marker-overlay] {
     text-decoration-color: currentColor !important; background: transparent !important;
     border-color: transparent !important; box-shadow: none !important; text-shadow: none !important;
     filter: none !important; backdrop-filter: none !important; mix-blend-mode: normal !important;
+    anchor-name: none !important; view-transition-name: none !important;
 }
 [data-marker-copy] :is(img, video, canvas, picture, iframe) { visibility: hidden !important; }
 ::highlight(${MARKER_TAG}-word) {
