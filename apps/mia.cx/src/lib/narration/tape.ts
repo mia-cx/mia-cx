@@ -55,7 +55,8 @@ const saturation = Float32Array.from({ length: 1025 }, (_, i) => Math.tanh(DRIVE
  * Plays `source` through a cassette deck: from `at`, while its speed runs through `rates` over
  * `seconds`, the deck's treble, level, chatter, hiss and flutter follow along, as heard against the
  * reader's `speed`, and hold their last values after. Returns the deck's output, for the caller to
- * connect, and `stop`, which stops `source` and the deck with it, now or at `when`.
+ * connect, and `stop`, which stops `source` and the deck with it, now or at `when`. The deck also
+ * stops when `source` ends on its own.
  */
 export function tapeDeck(
     context: BaseAudioContext,
@@ -113,5 +114,8 @@ export function tapeDeck(
     flutter.start(at);
     running.push(flutter);
 
-    return { output: shaper, stop: (when?: number) => running.forEach((node) => node.stop(when)) };
+    const stop = (when?: number) => running.forEach((node) => node.stop(when));
+    // A tape that runs out of recording before its stop takes the deck with it.
+    source.addEventListener('ended', () => stop());
+    return { output: shaper, stop };
 }
