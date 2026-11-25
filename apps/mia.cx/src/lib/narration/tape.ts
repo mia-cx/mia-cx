@@ -27,7 +27,7 @@ const level = (rate: number) => (rate <= 1 ? rate ** 0.7 : 1 / (1 + 0.04 * (rate
 /** How unevenly a winding tape touches the head; none at the reader's speed or below. */
 const chatter = (rate: number) => Math.min(0.6, 0.05 * Math.max(0, rate - 1));
 /** The friction hiss of a winding tape over the head; none at the reader's speed or below. */
-const hiss = (rate: number) => Math.min(0.01, 0.001 * Math.max(0, rate - 1));
+const hiss = (rate: number) => Math.min(0.005, 0.0005 * Math.max(0, rate - 1));
 /** The motor's wobble in cents: steady at speed, unsteady while it fights to get there. */
 const wobble = (rate: number) => 4 + 30 * Math.max(0, 1 - rate);
 
