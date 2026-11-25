@@ -218,32 +218,38 @@
     }
 
     /**
-     * Where the tape is, how fast it moves and which way: the spin's if one is playing, else the
-     * audio's. A spin is placed where it is now, or if `heard`, where the reader hears it.
+     * Where the tape is, how fast it moves and which way: `of` spin's (by default the one playing), or
+     * with none, the audio's. A spin is placed where it is now, or if `heard`, where the reader hears it.
      */
-    function tapeNow(heard = false) {
-        if (!spin) return { at: audio!.currentTime, rate: audio!.paused ? 0 : settings.speed.value, direction: 1 };
-        const elapsed = Math.max(0, context!.currentTime - (heard ? latency() : 0) - spin.begun);
+    function tapeNow(heard = false, of = spin) {
+        if (!of) return { at: audio!.currentTime, rate: audio!.paused ? 0 : settings.speed.value, direction: 1 };
+        const elapsed = Math.max(0, context!.currentTime - (heard ? latency() : 0) - of.begun);
         // Past its curve, a spin's tail runs on forward from where it ended, at its last rate.
-        if (elapsed >= spin.seconds) {
-            const rate = spin.rates[STEPS];
-            return { at: Math.min(spin.end, spin.to + rate * (elapsed - spin.seconds)), rate, direction: 1 };
+        if (elapsed >= of.seconds) {
+            const rate = of.rates[STEPS];
+            return { at: Math.min(of.end, of.to + rate * (elapsed - of.seconds)), rate, direction: 1 };
         }
-        const k = Math.min(STEPS - 1, Math.floor((elapsed / spin.seconds) * STEPS));
-        const into = (elapsed / spin.seconds) * STEPS - k;
+        const k = Math.min(STEPS - 1, Math.floor((elapsed / of.seconds) * STEPS));
+        const into = (elapsed / of.seconds) * STEPS - k;
         return {
-            at: spin.from + spin.direction * travel(spin.rates, spin.seconds, elapsed),
-            rate: spin.rates[k] + (spin.rates[k + 1] - spin.rates[k]) * into,
-            direction: spin.direction,
+            at: of.from + of.direction * travel(of.rates, of.seconds, elapsed),
+            rate: of.rates[k] + (of.rates[k + 1] - of.rates[k]) * into,
+            direction: of.direction,
         };
     }
 
-    /** Where a spinning tape is heard, updated every frame for the highlight to follow; unset at rest. */
+    /**
+     * The spin the highlight follows: the one playing, or a tape stop until its end has been heard.
+     * Where it is heard is updated every frame in `tapeAt`, unset when no spin is followed.
+     */
+    let followed: typeof spin;
     let tapeAt = $state<number>();
     let frame = 0;
     function follow() {
-        tapeAt = spin && tapeNow(true).at;
-        frame = spin ? requestAnimationFrame(follow) : 0;
+        if (followed && followed !== spin && context!.currentTime - latency() >= followed.begun + followed.seconds)
+            followed = undefined;
+        tapeAt = followed && tapeNow(true, followed).at;
+        frame = followed ? requestAnimationFrame(follow) : 0;
     }
 
     /** The moment a spin reaches its end and the audio takes over again. */
@@ -251,6 +257,7 @@
 
     function stopSpin() {
         clearTimeout(landing);
+        followed = undefined;
         if (!spin) return;
         spin.source.onended = null;
         spin.source.stop();
@@ -302,7 +309,7 @@
         source.start(now);
         const end = to + tail / reel.sampleRate;
         const current = { source, from, to, end, direction, rates, seconds, begun: now };
-        spin = current;
+        spin = followed = current;
         cancelAnimationFrame(frame);
         follow();
         if (!resume) {
@@ -336,7 +343,8 @@
                 out.gain.setValueAtTime(1, at);
                 out.gain.linearRampToValueAtTime(0, at + CUT);
                 source.stop(at + CUT);
-                spin = undefined;
+                // The voice is heard from where the tape is heard, so the highlight follows it on.
+                spin = followed = undefined;
                 fade(1, CUT);
             }, seconds * 1000);
         }
@@ -491,27 +499,50 @@
      * tape move, so the marker gets ahead by passing every word rather than skipping to one.
      */
     let anchor = 0;
+    /** The narrated word the marker shows, or -1. */
+    let shown = -1;
+
+    /** Whether paused audio is still on its way to the ear: for the output's latency after it pauses. */
+    let draining = $state(false);
+    let drained: ReturnType<typeof setTimeout> | undefined;
+    function drain() {
+        draining = true;
+        clearTimeout(drained);
+        drained = setTimeout(() => (draining = false), latency() * 1000);
+    }
 
     $effect(() => {
         if (!marker) return;
+        const host = marker;
+        const show = (i: number) => {
+            shown = i;
+            host.word = i >= 0 ? markerWord(host, i) : -1;
+        };
         const speed = settings.speed.value;
-        // While the voice plays, what's heard trails the audio's clock by the output's latency. A
-        // moving tape is followed where it is heard; at rest, nothing is still on its way out.
-        const voiced = playing && !paused && tapeAt === undefined;
-        const heard = tapeAt ?? (voiced ? time - latency() * speed : time);
+        // Audio is heard the output's latency after its clock says, so until that long after it
+        // pauses; a moving tape is followed where it is heard.
+        const sounding = (!paused || draining) && tapeAt === undefined;
+        const heard = tapeAt ?? (sounding ? time - latency() * speed : time);
         // A sought word holds through the pre-roll until it is heard, however far the marker leads.
-        if (held && (!held.landed || heard < starts[held.word])) {
-            anchor = heard;
-            marker.word = markerWord(marker, held.word);
-            return;
+        // A tape winding there is followed until it lands.
+        if (held && tapeAt === undefined) {
+            if (!held.landed || heard < starts[held.word]) {
+                anchor = heard;
+                return show(held.word);
+            }
+            held = undefined;
         }
-        held = undefined;
-        if (!voiced) anchor = heard;
+        // Only the voice the reader is playing leads: a pause or a tape move drops the lead at once.
+        if (!(playing && !paused && tapeAt === undefined)) anchor = heard;
         // The marker takes each word up to `lookahead` early, so an edge tuned to lead the voice can.
         // It is wall-clock time, which covers more of the recording at a faster speed.
-        const lead = Math.max(0, Math.min((marker.lookahead / 1000) * speed, heard - anchor));
-        const i = started ? spokenAt(heard + lead) : -1;
-        marker.word = i >= 0 ? markerWord(marker, i) : -1;
+        const full = (marker.lookahead / 1000) * speed;
+        const lead = Math.max(0, Math.min(full, heard - anchor));
+        if (!started) return show(-1);
+        // While the lead builds, the marker runs ahead faster than the voice: one word per update, so
+        // it shows every word on the way.
+        const ahead = spokenAt(heard + lead);
+        show(lead < full ? Math.max(spokenAt(heard), Math.min(ahead, shown + 1)) : ahead);
     });
 </script>
 
@@ -529,7 +560,10 @@
         bind:currentTime={time}
         bind:paused
         onplay={() => (playing = true)}
-        onpause={() => !spin && (playing = false)}
+        onpause={() => {
+            drain();
+            if (!spin) playing = false;
+        }}
         onended={() => (time = 0)}
     ></audio>
     <div class="controls" data-print-hide data-markdown="skip" data-narration-skip>
