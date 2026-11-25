@@ -1,6 +1,6 @@
 {
   "name": "@mia-cx/marker",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "<mia-marker>: a highlight that draws text selections, and a word cursor for narration.",
   "keywords": [
     "custom-element",
