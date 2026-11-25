@@ -78,6 +78,8 @@
     let context: AudioContext | undefined;
     let gain: GainNode | undefined;
     let pending: ReturnType<typeof setTimeout> | undefined;
+    /** How long sound takes from the context's clock to the ear, in seconds: large over Bluetooth. */
+    const latency = () => (context ? context.baseLatency + (context.outputLatency || 0) : 0);
 
     function fade(to: number, seconds: number) {
         if (!gain) return;
@@ -215,10 +217,13 @@
         return distance;
     }
 
-    /** Where the tape is, how fast it moves and which way: the spin's if one is playing, else the audio's. */
-    function tapeNow() {
+    /**
+     * Where the tape is, how fast it moves and which way: the spin's if one is playing, else the
+     * audio's. A spin is placed where it is now, or if `heard`, where the reader hears it.
+     */
+    function tapeNow(heard = false) {
         if (!spin) return { at: audio!.currentTime, rate: audio!.paused ? 0 : settings.speed.value, direction: 1 };
-        const elapsed = context!.currentTime - spin.begun;
+        const elapsed = Math.max(0, context!.currentTime - (heard ? latency() : 0) - spin.begun);
         // Past its curve, a spin's tail runs on forward from where it ended, at its last rate.
         if (elapsed >= spin.seconds) {
             const rate = spin.rates[STEPS];
@@ -233,11 +238,11 @@
         };
     }
 
-    /** Where a spinning tape is, updated every frame for the highlight to follow; unset at rest. */
+    /** Where a spinning tape is heard, updated every frame for the highlight to follow; unset at rest. */
     let tapeAt = $state<number>();
     let frame = 0;
     function follow() {
-        tapeAt = spin && tapeNow().at;
+        tapeAt = spin && tapeNow(true).at;
         frame = spin ? requestAnimationFrame(follow) : 0;
     }
 
@@ -490,11 +495,10 @@
     $effect(() => {
         if (!marker) return;
         const speed = settings.speed.value;
-        // While the voice plays, what's heard trails the audio's clock by the output's latency, large
-        // over Bluetooth. A moving tape is heard where it is; at rest, nothing is still on its way out.
+        // While the voice plays, what's heard trails the audio's clock by the output's latency. A
+        // moving tape is followed where it is heard; at rest, nothing is still on its way out.
         const voiced = playing && !paused && tapeAt === undefined;
-        const latency = context ? context.baseLatency + (context.outputLatency || 0) : 0;
-        const heard = tapeAt ?? (voiced ? time - latency * speed : time);
+        const heard = tapeAt ?? (voiced ? time - latency() * speed : time);
         // A sought word holds through the pre-roll until it is heard, however far the marker leads.
         if (held && (!held.landed || heard < starts[held.word])) {
             anchor = heard;
